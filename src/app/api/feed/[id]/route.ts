@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { withAuth } from '@/lib/middleware/withAuth';
+import { withAuth, getIdFromParams } from '@/lib/middleware/withAuth';
 
-export const GET = withAuth(async (req, { tenantId }) => {
-  const id = req.nextUrl.pathname.split('/').pop();
+export const GET = withAuth(async (req, { tenantId }, routeContext) => {
+  const id = await getIdFromParams(routeContext, req);
   if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
 
   const feed = await db.feedBatch.findFirst({ where: { id, tenantId } });
@@ -12,8 +12,8 @@ export const GET = withAuth(async (req, { tenantId }) => {
   return Response.json(feed);
 });
 
-export const PUT = withAuth(async (req, { tenantId }) => {
-  const id = req.nextUrl.pathname.split('/').pop();
+export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
+  const id = await getIdFromParams(routeContext, req);
   if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
 
   const body = await req.json();
@@ -37,8 +37,8 @@ export const PUT = withAuth(async (req, { tenantId }) => {
   return Response.json(updated);
 });
 
-export const DELETE = withAuth(async (req, { tenantId }) => {
-  const id = req.nextUrl.pathname.split('/').pop();
+export const DELETE = withAuth(async (req, { tenantId }, routeContext) => {
+  const id = await getIdFromParams(routeContext, req);
   if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
 
   await db.feedBatch.deleteMany({ where: { id, tenantId } });
