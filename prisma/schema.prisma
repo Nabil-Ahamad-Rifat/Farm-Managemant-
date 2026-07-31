@@ -12,11 +12,12 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users      User[]
-  employees  Employee[]
-  cows       Cow[]
-  feedBatches FeedBatch[]
-  sales      Sale[]
+  users          User[]
+  employees      Employee[]
+  cows           Cow[]
+  feedBatches    FeedBatch[]
+  sales          Sale[]
+  otherExpenses  OtherExpense[]
 }
 
 model User {
@@ -32,20 +33,37 @@ model User {
 }
 
 model Employee {
-  id        String   @id @default(cuid())
-  name      String
-  role      String
-  email     String?
-  phone     String?
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(cuid())
+  name        String
+  role        String
+  email       String?
+  phone       String?
+  salary      Float     @default(0)
+  joinDate    DateTime?
+  status      String    @default("active")
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  salaryPayments SalaryPayment[]
+}
+
+model SalaryPayment {
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  amount      Float
+  periodMonth Int
+  periodYear  Int
+  note        String?
+  paidAt      DateTime @default(now())
+  createdAt   DateTime @default(now())
 }
 
 model Cow {
   id            String   @id @default(cuid())
-  tagNumber     String   @unique
+  tagNumber     String
   name          String
   breed         String?
   purchasePrice Float?
@@ -55,18 +73,32 @@ model Cow {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   sales         Sale[]
+
+  @@unique([tagNumber, tenantId])
 }
 
 model FeedBatch {
-  id                String   @id @default(cuid())
+  id                String      @id @default(cuid())
   name              String
   quantity          Float
   unitPrice         Float
   remainingQuantity Float
   tenantId          String
-  tenant            Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  tenant            Tenant      @relation(fields: [tenantId], references: [id])
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  usages FeedUsage[]
+}
+
+model FeedUsage {
+  id          String    @id @default(cuid())
+  feedBatchId String
+  feedBatch   FeedBatch @relation(fields: [feedBatchId], references: [id], onDelete: Cascade)
+  quantity    Float
+  usedAt      DateTime  @default(now())
+  note        String?
+  createdAt   DateTime  @default(now())
 }
 
 model Sale {
@@ -74,10 +106,26 @@ model Sale {
   customerName  String
   amount        Float
   status        String   @default("paid")
+  saleType      String   @default("general")
+  quantity      Float?
+  unitPrice     Float?
+  notes         String?
   tenantId      String
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
   cowId         String?
   cow           Cow?     @relation(fields: [cowId], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model OtherExpense {
+  id          String   @id @default(cuid())
+  description String
+  amount      Float
+  category    String   @default("other")
+  expenseDate DateTime @default(now())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

@@ -21,19 +21,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'User already exists' }, { status: 409 });
   }
 
-  const tenant = await db.tenant.create({
-    data: { name: tenantName || `${name.split(' ')[0]}'s Farm` },
-  });
-
   const hashedPassword = await hashPassword(password);
-  const user = await db.user.create({
-    data: {
-      name,
-      email,
-      password: hashedPassword,
-      role: 'owner',
-      tenantId: tenant.id,
-    },
+
+  const { tenant, user } = await db.$transaction(async (tx) => {
+    const tenant = await tx.tenant.create({
+      data: { name: tenantName || `${name.split(' ')[0]}'s Farm` },
+    });
+
+    const user = await tx.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role: 'owner',
+        tenantId: tenant.id,
+      },
+    });
+
+    return { tenant, user };
   });
 
   const token = signToken({

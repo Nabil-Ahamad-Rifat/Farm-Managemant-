@@ -7,7 +7,7 @@ import { ArrowLeft } from 'lucide-react';
 
 export default function NewEmployeePage() {
   const router = useRouter();
-  const [form, setForm] = useState({ name: '', role: '', email: '', phone: '' });
+  const [form, setForm] = useState({ name: '', role: '', email: '', phone: '', salary: '', joinDate: '', status: 'active' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -54,47 +54,85 @@ export default function NewEmployeePage() {
         )}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Full Name</label>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-              placeholder="e.g. John Doe"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              required
-            />
-          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Full Name</label>
+              <input
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                placeholder="e.g. Karim Hossain"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                required
+              />
+            </div>
 
-          <div>
-            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Role / Job Title</label>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-              placeholder="e.g. Farm Supervisor, Veterinarian"
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-              required
-            />
-          </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Role / Job Title</label>
+              <input
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                placeholder="e.g. Farm Supervisor"
+                value={form.role}
+                onChange={(e) => setForm({ ...form, role: e.target.value })}
+                required
+              />
+            </div>
 
-          <div>
-            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Email Address</label>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-              placeholder="e.g. john@farm.com"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
-          </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Monthly Salary (৳)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                placeholder="e.g. 12000"
+                value={form.salary}
+                onChange={(e) => setForm({ ...form, salary: e.target.value })}
+              />
+            </div>
 
-          <div>
-            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Phone Number</label>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-              placeholder="e.g. +1 555-0192"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            />
+            <div>
+              <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Join Date</label>
+              <input
+                type="date"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                value={form.joinDate}
+                onChange={(e) => setForm({ ...form, joinDate: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Status</label>
+              <select
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
+              >
+                <option value="active">Active</option>
+                <option value="on_leave">On Leave</option>
+                <option value="terminated">Terminated</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Phone Number</label>
+              <input
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                placeholder="e.g. 01711-123456"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Email Address (Optional)</label>
+              <input
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                placeholder="e.g. karim@farm.com"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </div>
           </div>
 
           <div className="flex gap-3 pt-4">
