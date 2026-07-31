@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users      User[]
+  employees  Employee[]
+  cows       Cow[]
+  feedBatches FeedBatch[]
+  sales      Sale[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("owner")
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Employee {
+  id        String   @id @default(cuid())
+  name      String
+  role      String
+  email     String?
+  phone     String?
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Cow {
+  id            String   @id @default(cuid())
+  tagNumber     String   @unique
+  name          String
+  breed         String?
+  purchasePrice Float?
+  status        String   @default("active")
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  sales         Sale[]
+}
+
+model FeedBatch {
+  id                String   @id @default(cuid())
+  name              String
+  quantity          Float
+  unitPrice         Float
+  remainingQuantity Float
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Sale {
+  id            String   @id @default(cuid())
+  customerName  String
+  amount        Float
+  status        String   @default("paid")
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  cowId         String?
+  cow           Cow?     @relation(fields: [cowId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
