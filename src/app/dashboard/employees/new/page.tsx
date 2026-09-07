@@ -30,8 +30,8 @@ export default function NewEmployeePage() {
         const data = await response.json();
         setError(data.error || 'Failed to create employee');
       }
-    } catch (err) {
-      setError('An unexpected error occurred.');
+    } catch {
+      setError('Failed to create employee');
     } finally {
       setLoading(false);
     }

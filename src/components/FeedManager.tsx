@@ -15,20 +15,9 @@ interface FeedBatch {
 
 const PRESET_FEED_NAMES = ['Bushi', 'Butta', 'Gom', 'Chaw', 'Khud', 'Soyabin', 'Khoil', 'Dhan', 'Kaher', 'Atta'];
 
-const PERIOD_FILTERS = [
-  { label: 'Today', days: 1 },
-  { label: '4 Days', days: 4 },
-  { label: '8 Days', days: 8 },
-  { label: '15 Days', days: 15 },
-  { label: '30 Days', days: 30 },
-  { label: 'All', days: 0 },
-];
-
 export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] }) {
   const router = useRouter();
-  const [feedList] = useState<FeedBatch[]>(initialFeed);
   const [search, setSearch] = useState('');
-  const [periodDays] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
   const [editingFeed, setEditingFeed] = useState<FeedBatch | null>(null);
@@ -92,8 +81,8 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
 
       setIsModalOpen(false);
       router.refresh();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -119,8 +108,8 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
 
       setIsUsageModalOpen(false);
       router.refresh();
-    } catch (err: any) {
-      setUsageError(err.message);
+    } catch (err) {
+      setUsageError((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -132,7 +121,7 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
     try {
       const res = await fetch(`/api/feed/${id}`, { method: 'DELETE' });
       if (res.ok) router.refresh();
-    } catch (err) {
+    } catch {
       alert('Failed to delete feed batch.');
     }
   }

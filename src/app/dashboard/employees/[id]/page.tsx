@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
-import { ArrowLeft, UserCheck, Banknote, Calendar, Phone, Mail } from 'lucide-react';
+import { ArrowLeft, Banknote, Calendar, Phone, Mail } from 'lucide-react';
 
 export default async function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();

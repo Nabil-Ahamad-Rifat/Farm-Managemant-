@@ -30,7 +30,7 @@ export default function LoginPage() {
         const data = await response.json();
         setError(data.error || 'Invalid credentials');
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
@@ -92,7 +92,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-xs text-slate-400">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/register" className="font-semibold text-emerald-400 hover:underline">
             Create farm account
           </Link>

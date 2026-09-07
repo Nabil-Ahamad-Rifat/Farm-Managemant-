@@ -12,8 +12,8 @@ export const GET = withAuth(async (req, { tenantId }, routeContext) => {
     if (!employee) return Response.json({ error: 'Employee not found' }, { status: 404 });
 
     return Response.json(employee);
-  } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return Response.json({ error: (err as Error).message }, { status: 500 });
   }
 });
 
@@ -48,8 +48,8 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
 
     const updated = await db.employee.findFirst({ where: { id, tenantId } });
     return Response.json(updated);
-  } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return Response.json({ error: (err as Error).message }, { status: 500 });
   }
 });
 
@@ -60,8 +60,8 @@ export const DELETE = withAuth(async (req, { tenantId }, routeContext) => {
 
     await db.employee.deleteMany({ where: { id, tenantId } });
     return Response.json({ success: true });
-  } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return Response.json({ error: (err as Error).message }, { status: 500 });
   }
 });
 

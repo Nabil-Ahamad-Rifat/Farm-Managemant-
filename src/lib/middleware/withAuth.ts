@@ -9,7 +9,7 @@ export interface AuthContext {
   name: string;
 }
 
-export function withAuth<T = any>(
+export function withAuth<T = unknown>(
   handler: (req: NextRequest, ctx: AuthContext, routeContext: T) => Promise<Response>
 ) {
   return async (req: NextRequest, routeContext: T) => {
@@ -29,9 +29,9 @@ export function withAuth<T = any>(
   };
 }
 
-export async function getIdFromParams(routeContext: any, req: NextRequest): Promise<string | null> {
-  if (routeContext?.params) {
-    const resolved = await routeContext.params;
+export async function getIdFromParams(routeContext: unknown, req: NextRequest): Promise<string | null> {
+  if (routeContext && typeof routeContext === 'object' && 'params' in routeContext) {
+    const resolved = await (routeContext as { params?: Promise<{ id?: string }> }).params;
     if (resolved?.id) return resolved.id;
   }
 

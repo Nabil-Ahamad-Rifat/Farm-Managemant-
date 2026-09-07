@@ -22,7 +22,7 @@ export const POST = withAuth(async (req, { tenantId }) => {
       description,
       amount: parseFloat(amount),
       category: category || 'other',
-      expenseDate: expenseDate ? new Date(expenseDate) : new Date(),
+      expenseDate: expenseDate ? new Date(expenseDate + 'T12:00:00Z') : new Date(),
       tenantId,
     },
   });

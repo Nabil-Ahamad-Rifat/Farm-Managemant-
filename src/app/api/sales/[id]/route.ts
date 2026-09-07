@@ -1,11 +1,13 @@
-import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { withAuth, getIdFromParams } from '@/lib/middleware/withAuth';
 
-function parseNullableFloat(val: any): number | null {
+function parseNullableFloat(val: unknown): number | null {
   if (val === null || val === undefined || val === '') return null;
-  const parsed = parseFloat(val);
-  return isNaN(parsed) ? null : parsed;
+  if (typeof val === 'string' || typeof val === 'number') {
+    const parsed = typeof val === 'string' ? parseFloat(val) : val;
+    return isNaN(parsed) ? null : parsed;
+  }
+  return null;
 }
 
 export const GET = withAuth(async (req, { tenantId }, routeContext) => {
@@ -20,8 +22,8 @@ export const GET = withAuth(async (req, { tenantId }, routeContext) => {
     if (!sale) return Response.json({ error: 'Sale not found' }, { status: 404 });
 
     return Response.json(sale);
-  } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return Response.json({ error: (err as Error).message }, { status: 500 });
   }
 });
 
@@ -31,7 +33,7 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
     if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
 
     const body = await req.json();
-    const { customerName, amount, status, cowId, saleType, quantity, unitPrice, notes } = body;
+    const { customerName, amount, status, cowId, saleType, quantity, unitPrice, notes, saleDate } = body;
 
     const parsedAmount = parseNullableFloat(amount);
     if (parsedAmount === null) {
@@ -57,13 +59,14 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
     const notesVal = notes || null;
     const customerNameVal = customerName || '';
     const now = new Date();
+    const saleDateTime = saleDate ? new Date(saleDate + 'T12:00:00Z') : existingSale.createdAt;
 
     // Raw SQL update — bypasses Turbopack DMMF caching that rejects cowId/saleType
     await db.$executeRaw`
       UPDATE "Sale"
       SET "customerName"=${customerNameVal},"amount"=${parsedAmount},"status"=${statusVal},
           "cowId"=${cowIdVal},"saleType"=${saleTypeVal},"quantity"=${quantityVal},
-          "unitPrice"=${unitPriceVal},"notes"=${notesVal},"updatedAt"=${now}
+          "unitPrice"=${unitPriceVal},"notes"=${notesVal},"createdAt"=${saleDateTime},"updatedAt"=${now}
       WHERE "id"=${id} AND "tenantId"=${tenantId}
     `;
 
@@ -77,8 +80,8 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
 
     const updated = await db.sale.findFirst({ where: { id, tenantId } });
     return Response.json(updated);
-  } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return Response.json({ error: (err as Error).message }, { status: 500 });
   }
 });
 
@@ -98,7 +101,7 @@ export const DELETE = withAuth(async (req, { tenantId }, routeContext) => {
 
     await db.sale.deleteMany({ where: { id, tenantId } });
     return Response.json({ success: true });
-  } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return Response.json({ error: (err as Error).message }, { status: 500 });
   }
 });
