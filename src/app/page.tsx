@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Sprout, Users, BadgeCheck, Wheat, DollarSign, ArrowRight, ShieldCheck, Layers } from 'lucide-react';
+import { Sprout, Users, BadgeCheck, Wheat, DollarSign, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export default function HomePage() {
   return (

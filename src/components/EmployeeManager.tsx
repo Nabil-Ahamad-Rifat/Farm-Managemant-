@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Trash2, Edit3, UserCheck, X, Banknote, Calendar, CheckCircle2, AlertCircle, Clock3 } from 'lucide-react';
+import { Plus, Search, Trash2, Edit3, Calendar, Banknote, CheckCircle2, AlertCircle, Clock3, X } from 'lucide-react';
 
 interface SalaryPayment {
   id: string;
@@ -30,7 +30,6 @@ const now = new Date();
 
 export default function EmployeeManager({ initialEmployees }: { initialEmployees: Employee[] }) {
   const router = useRouter();
-  const [employees, setEmployees] = useState<Employee[]>(initialEmployees);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -104,8 +103,8 @@ export default function EmployeeManager({ initialEmployees }: { initialEmployees
 
       setIsModalOpen(false);
       router.refresh();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -131,8 +130,8 @@ export default function EmployeeManager({ initialEmployees }: { initialEmployees
 
       setIsSalaryModalOpen(false);
       router.refresh();
-    } catch (err: any) {
-      setSalaryError(err.message);
+    } catch (err) {
+      setSalaryError((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -144,10 +143,9 @@ export default function EmployeeManager({ initialEmployees }: { initialEmployees
     try {
       const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
       if (res.ok) {
-        setEmployees((prev) => prev.filter((e) => e.id !== id));
         router.refresh();
       }
-    } catch (err) {
+    } catch {
       alert('Failed to delete employee.');
     }
   }

@@ -29,7 +29,9 @@ export default async function DashboardPage() {
     recentCows,
     monthlySalaryData,
     monthlyExpenses,
+    monthlyOtherIncome,
     dailySalesData,
+    dailyOtherIncomeData,
   ] = await Promise.all([
     db.employee.findMany({ where: { tenantId } }),
     db.cow.count({ where: { tenantId } }),
@@ -51,16 +53,23 @@ export default async function DashboardPage() {
       take: 5,
     }),
     // Monthly salary payments
-    (db as any).salaryPayment
-      ? (db as any).salaryPayment.findMany({
+    db.salaryPayment
+      ? db.salaryPayment.findMany({
           where: { employee: { tenantId }, paidAt: { gte: startOfMonth } },
           select: { amount: true },
         })
       : Promise.resolve([]),
     // Monthly other expenses
-    (db as any).otherExpense
-      ? (db as any).otherExpense.aggregate({
+    db.otherExpense
+      ? db.otherExpense.aggregate({
           where: { tenantId, expenseDate: { gte: startOfMonth } },
+          _sum: { amount: true },
+        })
+      : Promise.resolve({ _sum: { amount: 0 } }),
+    // Monthly other income
+    db.otherIncome
+      ? db.otherIncome.aggregate({
+          where: { tenantId, incomeDate: { gte: startOfMonth } },
           _sum: { amount: true },
         })
       : Promise.resolve({ _sum: { amount: 0 } }),
@@ -70,16 +79,24 @@ export default async function DashboardPage() {
       select: { amount: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     }),
+    // Daily other income for 30-day mini chart
+    db.otherIncome.findMany({
+      where: { tenantId, incomeDate: { gte: thirtyDaysAgo } },
+      select: { amount: true, incomeDate: true },
+      orderBy: { incomeDate: 'asc' },
+    }),
   ]);
 
   const employeeCount = allEmployees.length;
-  const activeEmployeeCount = allEmployees.filter(e => (e as any).status !== 'terminated').length;
+  const activeEmployeeCount = allEmployees.filter(e => e.status !== 'terminated').length;
 
   const totalRemainingFeed = feedBatches.reduce((acc, f) => acc + f.remainingQuantity, 0);
   const totalFeedValue = feedBatches.reduce((acc, f) => acc + f.remainingQuantity * f.unitPrice, 0);
   const totalSalesRevenue = salesData._sum.amount ?? 0;
+  const totalOtherIncome = monthlyOtherIncome._sum.amount ?? 0;
+  const totalRevenue = totalSalesRevenue + totalOtherIncome;
   const totalSalesCount = salesData._count.id;
-  const monthlySalaryCost = (monthlySalaryData as any[]).reduce((sum: number, p: any) => sum + p.amount, 0);
+  const monthlySalaryCost = monthlySalaryData.reduce((sum: number, p: { amount: number }) => sum + p.amount, 0);
   const monthlyOtherCost = monthlyExpenses._sum.amount ?? 0;
   const monthlyFeedCost = feedBatches.reduce((acc, f) => acc + (f.quantity - f.remainingQuantity) * f.unitPrice, 0);
 
@@ -89,10 +106,13 @@ export default async function DashboardPage() {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().slice(0, 10);
-    const dayRevenue = dailySalesData
+    const daySalesRevenue = dailySalesData
       .filter(s => new Date(s.createdAt).toISOString().slice(0, 10) === dateStr)
       .reduce((sum, s) => sum + s.amount, 0);
-    chartDays.push({ date: dateStr, revenue: dayRevenue });
+    const dayOtherIncomeRevenue = dailyOtherIncomeData
+      .filter(s => new Date(s.incomeDate).toISOString().slice(0, 10) === dateStr)
+      .reduce((sum, s) => sum + s.amount, 0);
+    chartDays.push({ date: dateStr, revenue: daySalesRevenue + dayOtherIncomeRevenue });
   }
   const maxRevenue = Math.max(...chartDays.map(d => d.revenue), 1);
 
@@ -123,9 +143,9 @@ export default async function DashboardPage() {
     },
     {
       label: 'Total Revenue',
-      value: `৳${totalSalesRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
-      subtext: `${totalSalesCount} completed sales`,
-      href: '/dashboard/sales',
+      value: `৳${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+      subtext: `${totalSalesCount} sales + other income`,
+      href: '/dashboard/revenue',
       icon: DollarSign,
       color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
     },

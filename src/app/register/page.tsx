@@ -30,7 +30,7 @@ export default function RegisterPage() {
         const data = await response.json();
         setError(data.error || 'Failed to create farm account');
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);

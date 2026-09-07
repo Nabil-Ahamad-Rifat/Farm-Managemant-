@@ -18,6 +18,7 @@ model Tenant {
   feedBatches    FeedBatch[]
   sales          Sale[]
   otherExpenses  OtherExpense[]
+  otherIncomes   OtherIncome[]
 }
 
 model User {
@@ -124,6 +125,18 @@ model OtherExpense {
   amount      Float
   category    String   @default("other")
   expenseDate DateTime @default(now())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model OtherIncome {
+  id          String   @id @default(cuid())
+  description String
+  amount      Float
+  category    String   @default("other")
+  incomeDate  DateTime @default(now())
   tenantId    String
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   createdAt   DateTime @default(now())

@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { signToken } from '@/lib/auth/jwt';
 import { withAuth } from '@/lib/middleware/withAuth';
 
-export const POST = withAuth(async (req: NextRequest, { userId, role, email, name }) => {
+export const POST = withAuth(async (req: NextRequest, { userId }) => {
   const body = await req.json();
   const ranchName = typeof body?.ranchName === 'string' ? body.ranchName.trim() : '';
 

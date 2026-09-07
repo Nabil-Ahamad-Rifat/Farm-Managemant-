@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Trash2, Edit3, DollarSign, X, CheckCircle, Clock, Tag, FileText } from 'lucide-react';
+import { Plus, Search, Trash2, Edit3, DollarSign, X, CheckCircle, Clock, Tag, FileText, CalendarDays } from 'lucide-react';
 
 interface Cow {
   id: string;
@@ -34,8 +34,9 @@ const SALE_TYPES = [
 
 const PERIOD_FILTERS = [
   { label: 'Today', days: 1 },
-  { label: '4 Days', days: 4 },
-  { label: '8 Days', days: 8 },
+  { label: '3 Days', days: 3 },
+  { label: '5 Days', days: 5 },
+  { label: '7 Days', days: 7 },
   { label: '15 Days', days: 15 },
   { label: '30 Days', days: 30 },
   { label: 'All', days: 0 },
@@ -43,8 +44,8 @@ const PERIOD_FILTERS = [
 
 function daysAgo(days: number): Date {
   const d = new Date();
-  d.setDate(d.getDate() - (days - 1));
-  d.setHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() - (days - 1));
+  d.setUTCHours(0, 0, 0, 0);
   return d;
 }
 
@@ -56,12 +57,13 @@ export default function SalesManager({
   activeCows: Cow[];
 }) {
   const router = useRouter();
-  const [sales] = useState<Sale[]>(initialSales);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [periodDays, setPeriodDays] = useState(0);
+  // Default period = 1 (Today)
+  const [periodDays, setPeriodDays] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const todayStr = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     customerName: '',
     amount: '',
@@ -71,21 +73,26 @@ export default function SalesManager({
     quantity: '',
     unitPrice: '',
     notes: '',
+    saleDate: todayStr,
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   // Auto-calculate amount from quantity × unitPrice
   const calculatedAmount = useMemo(() => {
-    if (form.quantity && form.unitPrice) {
-      return (parseFloat(form.quantity) * parseFloat(form.unitPrice)).toFixed(2);
+    const qty = parseFloat(form.quantity);
+    const price = parseFloat(form.unitPrice);
+    if (!isNaN(qty) && !isNaN(price) && qty > 0 && price > 0) {
+      return (qty * price).toFixed(2);
     }
-    return form.amount;
-  }, [form.quantity, form.unitPrice, form.amount]);
+    return '';
+  }, [form.quantity, form.unitPrice]);
+
+  const displayAmount = calculatedAmount !== '' ? calculatedAmount : form.amount;
 
   function openCreateModal() {
     setEditingSale(null);
-    setForm({ customerName: '', amount: '', status: 'paid', cowId: '', saleType: 'general', quantity: '', unitPrice: '', notes: '' });
+    setForm({ customerName: '', amount: '', status: 'paid', cowId: '', saleType: 'general', quantity: '', unitPrice: '', notes: '', saleDate: todayStr });
     setError('');
     setIsModalOpen(true);
   }
@@ -101,6 +108,7 @@ export default function SalesManager({
       quantity: sale.quantity?.toString() || '',
       unitPrice: sale.unitPrice?.toString() || '',
       notes: sale.notes || '',
+      saleDate: new Date(sale.createdAt).toISOString().slice(0, 10),
     });
     setError('');
     setIsModalOpen(true);
@@ -114,15 +122,25 @@ export default function SalesManager({
     const url = editingSale ? `/api/sales/${editingSale.id}` : '/api/sales';
     const method = editingSale ? 'PUT' : 'POST';
 
-    const finalAmount = (form.quantity && form.unitPrice)
-      ? (parseFloat(form.quantity) * parseFloat(form.unitPrice)).toString()
-      : form.amount;
+    // Use calculated amount if qty+price provided, else manual amount
+    const finalAmount = calculatedAmount !== '' ? calculatedAmount : form.amount;
+
+    if (!finalAmount || parseFloat(finalAmount) <= 0) {
+      setError('Please enter a valid amount, or fill in Quantity and Unit Price.');
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, amount: finalAmount }),
+        body: JSON.stringify({
+          ...form,
+          amount: finalAmount,
+          quantity: form.quantity || null,
+          unitPrice: form.unitPrice || null,
+        }),
       });
 
       if (!res.ok) {
@@ -132,8 +150,8 @@ export default function SalesManager({
 
       setIsModalOpen(false);
       router.refresh();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -145,7 +163,7 @@ export default function SalesManager({
     try {
       const res = await fetch(`/api/sales/${id}`, { method: 'DELETE' });
       if (res.ok) router.refresh();
-    } catch (err) {
+    } catch {
       alert('Failed to delete sale record.');
     }
   }
@@ -310,9 +328,9 @@ export default function SalesManager({
                       {saleTypeLabel(sale.saleType)}
                     </span>
                   </td>
-                  <td className="px-5 py-4 whitespace-nowrap text-sm text-slate-500">
-                    {sale.quantity && sale.unitPrice
-                      ? `${sale.quantity} × ৳${sale.unitPrice}`
+                  <td className="px-5 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">
+                    {sale.quantity != null && sale.unitPrice != null
+                      ? <span className="font-semibold">{sale.quantity} × <span className="text-emerald-600">৳{sale.unitPrice}</span></span>
                       : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-5 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
@@ -376,6 +394,7 @@ export default function SalesManager({
             )}
 
             <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+              {/* Customer Name */}
               <div>
                 <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Customer / Buyer Name</label>
                 <input
@@ -388,6 +407,7 @@ export default function SalesManager({
                 />
               </div>
 
+              {/* Sale Type */}
               <div>
                 <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Sale Type</label>
                 <select
@@ -401,6 +421,7 @@ export default function SalesManager({
                 </select>
               </div>
 
+              {/* Quantity × Unit Price */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Quantity</label>
@@ -408,7 +429,7 @@ export default function SalesManager({
                     type="number"
                     step="0.01"
                     min="0"
-                    placeholder="e.g. 10 (liters/kg)"
+                    placeholder="e.g. 10"
                     value={form.quantity}
                     onChange={(e) => setForm({ ...form, quantity: e.target.value })}
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
@@ -428,29 +449,45 @@ export default function SalesManager({
                 </div>
               </div>
 
+              {/* Total Amount */}
               <div>
                 <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
                   Total Amount (৳)
-                  {form.quantity && form.unitPrice && (
+                  {calculatedAmount && (
                     <span className="ml-2 text-emerald-600 normal-case font-normal">
-                      Auto-calculated: ৳{calculatedAmount}
+                      Auto: ৳{calculatedAmount}
                     </span>
                   )}
                 </label>
                 <input
                   type="number"
                   step="0.01"
-                  required
+                  required={!calculatedAmount}
                   placeholder="e.g. 850.00"
-                  value={form.quantity && form.unitPrice ? calculatedAmount : form.amount}
+                  value={displayAmount}
                   onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                  readOnly={!!(form.quantity && form.unitPrice)}
+                  readOnly={!!calculatedAmount}
                   className={`w-full rounded-xl border px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none ${
-                    form.quantity && form.unitPrice ? 'bg-slate-50 border-slate-200 text-slate-500' : 'border-slate-200'
+                    calculatedAmount ? 'bg-emerald-50 border-emerald-200 text-slate-700 font-semibold' : 'border-slate-200'
                   }`}
                 />
               </div>
 
+              {/* Sale Date */}
+              <div>
+                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                  <CalendarDays className="inline h-3.5 w-3.5 mr-1" />Sale Date
+                </label>
+                <input
+                  type="date"
+                  value={form.saleDate}
+                  max={todayStr}
+                  onChange={(e) => setForm({ ...form, saleDate: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                />
+              </div>
+
+              {/* Link Livestock */}
               <div>
                 <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Link Livestock (Optional)</label>
                 <select
@@ -465,6 +502,7 @@ export default function SalesManager({
                 </select>
               </div>
 
+              {/* Payment Status */}
               <div>
                 <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Payment Status</label>
                 <select
@@ -477,6 +515,7 @@ export default function SalesManager({
                 </select>
               </div>
 
+              {/* Notes */}
               <div>
                 <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Notes (Optional)</label>
                 <input

@@ -1,4 +1,3 @@
-import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { withAuth, getIdFromParams } from '@/lib/middleware/withAuth';
 

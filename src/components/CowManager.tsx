@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Trash2, Edit3, BadgeCheck, X, DollarSign } from 'lucide-react';
+import { Plus, Search, Trash2, Edit3, X } from 'lucide-react';
 
 interface Cow {
   id: string;
@@ -16,7 +16,6 @@ interface Cow {
 
 export default function CowManager({ initialCows }: { initialCows: Cow[] }) {
   const router = useRouter();
-  const [cows, setCows] = useState<Cow[]>(initialCows);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -73,8 +72,8 @@ export default function CowManager({ initialCows }: { initialCows: Cow[] }) {
 
       setIsModalOpen(false);
       router.refresh();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -86,11 +85,10 @@ export default function CowManager({ initialCows }: { initialCows: Cow[] }) {
     try {
       const res = await fetch(`/api/cows/${id}`, { method: 'DELETE' });
       if (res.ok) {
-        setCows((prev) => prev.filter((c) => c.id !== id));
         router.refresh();
       }
-    } catch (err) {
-      alert('Failed to delete cow record.');
+    } catch {
+      alert('Failed to delete livestock record.');
     }
   }
 

@@ -2,9 +2,9 @@ import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
 import { randomUUID } from 'crypto';
 
-function parseNullableFloat(val: any): number | null {
+function parseNullableFloat(val: unknown): number | null {
   if (val === null || val === undefined || val === '') return null;
-  const parsed = parseFloat(val);
+  const parsed = parseFloat(String(val));
   return isNaN(parsed) ? null : parsed;
 }
 
@@ -16,16 +16,16 @@ export const GET = withAuth(async (_req, { tenantId }) => {
       orderBy: { createdAt: 'desc' },
     });
     return Response.json(sales);
-  } catch (err: any) {
-    console.error('Error fetching sales:', err);
-    return Response.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    console.error('Error creating sale:', err);
+    return Response.json({ error: (err as Error).message }, { status: 500 });
   }
 });
 
 export const POST = withAuth(async (req, { tenantId }) => {
   try {
     const body = await req.json();
-    const { customerName, amount, status, cowId, saleType, quantity, unitPrice, notes } = body;
+    const { customerName, amount, status, cowId, saleType, quantity, unitPrice, notes, saleDate } = body;
 
     const parsedAmount = parseNullableFloat(amount);
 
@@ -40,12 +40,14 @@ export const POST = withAuth(async (req, { tenantId }) => {
     const quantityVal = parseNullableFloat(quantity);
     const unitPriceVal = parseNullableFloat(unitPrice);
     const notesVal = notes || null;
+    // Use provided saleDate as createdAt at UTC noon; fall back to now
+    const saleDateTime = saleDate ? new Date(saleDate + 'T12:00:00Z') : new Date();
     const now = new Date();
 
     // Raw SQL insert — bypasses Turbopack DMMF caching that rejects saleType/cowId
     await db.$executeRaw`
       INSERT INTO "Sale" ("id","customerName","amount","status","cowId","saleType","quantity","unitPrice","notes","tenantId","createdAt","updatedAt")
-      VALUES (${id},${customerName},${parsedAmount},${statusVal},${cowIdVal},${saleTypeVal},${quantityVal},${unitPriceVal},${notesVal},${tenantId},${now},${now})
+      VALUES (${id},${customerName},${parsedAmount},${statusVal},${cowIdVal},${saleTypeVal},${quantityVal},${unitPriceVal},${notesVal},${tenantId},${saleDateTime},${now})
     `;
 
     if (cowId) {
@@ -57,9 +59,9 @@ export const POST = withAuth(async (req, { tenantId }) => {
 
     const sale = await db.sale.findFirst({ where: { id } });
     return Response.json(sale, { status: 201 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error creating sale:', err);
-    return Response.json({ error: err.message || 'Failed to create sale' }, { status: 500 });
+    return Response.json({ error: (err as Error).message }, { status: 500 });
   }
 });
 

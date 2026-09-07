@@ -22,7 +22,7 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
       description: body.description,
       amount: body.amount !== undefined ? parseFloat(body.amount) : undefined,
       category: body.category || undefined,
-      expenseDate: body.expenseDate ? new Date(body.expenseDate) : undefined,
+      expenseDate: body.expenseDate ? new Date(body.expenseDate + 'T12:00:00Z') : undefined,
     },
   });
 

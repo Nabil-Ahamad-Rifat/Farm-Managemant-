@@ -9,8 +9,8 @@ export const GET = withAuth(async (_req, { tenantId }) => {
       orderBy: { createdAt: 'desc' },
     });
     return Response.json(employees);
-  } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return Response.json({ error: (err as Error).message }, { status: 500 });
   }
 });
 
@@ -39,8 +39,8 @@ export const POST = withAuth(async (req, { tenantId }) => {
 
     const employee = await db.employee.findFirst({ where: { id } });
     return Response.json(employee, { status: 201 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error creating employee:', err);
-    return Response.json({ error: err.message || 'Failed to create employee' }, { status: 500 });
+    return Response.json({ error: (err as Error).message }, { status: 500 });
   }
 });

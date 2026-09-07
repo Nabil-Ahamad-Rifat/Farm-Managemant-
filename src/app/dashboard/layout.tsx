@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Home, Users, BadgeCheck, Wheat, DollarSign, Sprout, TrendingUp, PackageOpen } from 'lucide-react';
+import { Home, Users, BadgeCheck, Wheat, DollarSign, Sprout, TrendingUp, PackageOpen, Coins } from 'lucide-react';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import LogoutButton from '@/components/LogoutButton';
@@ -10,6 +10,7 @@ const links = [
   { href: '/dashboard/cows', label: 'Cows (Herd)', icon: BadgeCheck },
   { href: '/dashboard/feed', label: 'Feed Inventory', icon: Wheat },
   { href: '/dashboard/sales', label: 'Sales & Revenue', icon: DollarSign },
+  { href: '/dashboard/income', label: 'Other Income', icon: Coins },
   { href: '/dashboard/revenue', label: 'Revenue Portal', icon: TrendingUp },
   { href: '/dashboard/expenses', label: 'Other Expenses', icon: PackageOpen },
 ];

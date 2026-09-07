@@ -1,70 +1,89 @@
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
 
-function daysAgo(days: number): Date {
+function dayStartUTC(daysBack: number): Date {
   const d = new Date();
-  d.setDate(d.getDate() - days);
-  d.setHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() - daysBack);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+function todayEndUTC(): Date {
+  const d = new Date();
+  d.setUTCHours(23, 59, 59, 999);
   return d;
 }
 
 export const GET = withAuth(async (req, { tenantId }) => {
   const url = new URL(req.url);
-  const periodDays = parseInt(url.searchParams.get('period') || '30');
+  const periodDays = parseInt(url.searchParams.get('period') || '1');
 
-  // Compute per-period stats for each window
-  const periods = [1, 4, 8, 15, 30];
+  // Supported periods
+  const periods = [1, 3, 5, 7, 15, 30];
 
   async function getStatsForPeriod(days: number) {
-    const since = daysAgo(days);
+    // "since" = start of (days-1) days ago through end of today
+    // e.g. days=1 → today only; days=7 → last 7 days
+    const since = dayStartUTC(days - 1);
+    const until = todayEndUTC();
 
-    const [salesAgg, salaryPayments, feedBatches, otherExpenses] = await Promise.all([
-      // Total sales revenue in period
+    const [salesAgg, activeEmployees, feedUsages, otherExpAgg, otherIncAgg] = await Promise.all([
+      // Revenue: sum of paid sales in period
       db.sale.aggregate({
-        where: { tenantId, createdAt: { gte: since }, status: 'paid' },
+        where: { tenantId, createdAt: { gte: since, lte: until }, status: 'paid' },
         _sum: { amount: true },
         _count: { id: true },
       }),
-      // Salary costs paid in period
-      (db as any).salaryPayment
-        ? (db as any).salaryPayment.findMany({
-            where: {
-              employee: { tenantId },
-              paidAt: { gte: since },
-            },
-            select: { amount: true },
-          })
-        : Promise.resolve([]),
-      // Feed usages
-      (db as any).feedUsage
-        ? (db as any).feedUsage.findMany({
-            where: {
-              feedBatch: { tenantId },
-              usedAt: { gte: since },
-            },
-            include: { feedBatch: { select: { unitPrice: true } } },
-          })
-        : Promise.resolve([]),
+      // Active employees — used for prorated salary cost
+      db.employee.findMany({
+        where: { tenantId, status: 'active' },
+        select: { salary: true },
+      }),
+      // Feed usages in period (cost = quantity × unitPrice)
+      db.feedUsage.findMany({
+        where: {
+          feedBatch: { tenantId },
+          usedAt: { gte: since, lte: until },
+        },
+        include: { feedBatch: { select: { unitPrice: true } } },
+      }),
       // Other expenses in period
-      (db as any).otherExpense
-        ? (db as any).otherExpense.aggregate({
-            where: { tenantId, expenseDate: { gte: since } },
-            _sum: { amount: true },
-          })
-        : Promise.resolve({ _sum: { amount: 0 } }),
+      db.otherExpense.aggregate({
+        where: { tenantId, expenseDate: { gte: since, lte: until } },
+        _sum: { amount: true },
+      }),
+      // Other income in period
+      db.otherIncome.aggregate({
+        where: { tenantId, incomeDate: { gte: since, lte: until } },
+        _sum: { amount: true },
+      }),
     ]);
 
     const totalSales = salesAgg._sum.amount ?? 0;
     const salesCount = salesAgg._count.id;
-    const totalSalaryCost = (salaryPayments as any[]).reduce((sum: number, p: any) => sum + p.amount, 0);
-    const totalFeedCost = (feedBatches as any[]).reduce((sum: number, u: any) => sum + u.quantity * u.feedBatch.unitPrice, 0);
-    const totalOtherCost = otherExpenses._sum.amount ?? 0;
+
+    // Prorated labour cost: sum of (monthly salary / 30 * days)
+    const totalMonthlySalary = activeEmployees.reduce((sum, e) => sum + (e.salary ?? 0), 0);
+    const totalSalaryCost = parseFloat(((totalMonthlySalary / 30) * days).toFixed(2));
+
+    // Feed cost = sum of quantity × unitPrice for each usage record
+    const totalFeedCost = feedUsages.reduce(
+      (sum, u) => sum + u.quantity * u.feedBatch.unitPrice,
+      0
+    );
+
+    const totalOtherCost = otherExpAgg._sum.amount ?? 0;
+    const totalOtherIncome = otherIncAgg._sum.amount ?? 0;
+
+    const totalRevenue = totalSales + totalOtherIncome;
     const totalCost = totalSalaryCost + totalFeedCost + totalOtherCost;
-    const netProfit = totalSales - totalCost;
+    const netProfit = totalRevenue - totalCost;
 
     return {
       days,
       totalSales,
+      totalOtherIncome,
+      totalRevenue,
       salesCount,
       totalSalaryCost,
       totalFeedCost,
@@ -78,45 +97,50 @@ export const GET = withAuth(async (req, { tenantId }) => {
   async function getDailyBreakdown(days: number) {
     const breakdown = [];
     for (let i = days - 1; i >= 0; i--) {
-      const dayStart = new Date();
-      dayStart.setDate(dayStart.getDate() - i);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(dayStart);
-      dayEnd.setHours(23, 59, 59, 999);
+      const dStart = new Date();
+      dStart.setUTCDate(dStart.getUTCDate() - i);
+      dStart.setUTCHours(0, 0, 0, 0);
+      const dEnd = new Date(dStart);
+      dEnd.setUTCHours(23, 59, 59, 999);
 
-      const [salesAgg, salaryAgg, feedUsages, otherAgg] = await Promise.all([
+      const [salesAgg, activeEmployees, feedUsages, otherExpAgg, otherIncAgg] = await Promise.all([
         db.sale.aggregate({
-          where: { tenantId, createdAt: { gte: dayStart, lte: dayEnd }, status: 'paid' },
+          where: { tenantId, createdAt: { gte: dStart, lte: dEnd }, status: 'paid' },
           _sum: { amount: true },
         }),
-        (db as any).salaryPayment
-          ? (db as any).salaryPayment.findMany({
-              where: { employee: { tenantId }, paidAt: { gte: dayStart, lte: dayEnd } },
-              select: { amount: true },
-            })
-          : Promise.resolve([]),
-        (db as any).feedUsage
-          ? (db as any).feedUsage.findMany({
-              where: { feedBatch: { tenantId }, usedAt: { gte: dayStart, lte: dayEnd } },
-              include: { feedBatch: { select: { unitPrice: true } } },
-            })
-          : Promise.resolve([]),
-        (db as any).otherExpense
-          ? (db as any).otherExpense.aggregate({
-              where: { tenantId, expenseDate: { gte: dayStart, lte: dayEnd } },
-              _sum: { amount: true },
-            })
-          : Promise.resolve({ _sum: { amount: 0 } }),
+        db.employee.findMany({
+          where: { tenantId, status: 'active' },
+          select: { salary: true },
+        }),
+        db.feedUsage.findMany({
+          where: {
+            feedBatch: { tenantId },
+            usedAt: { gte: dStart, lte: dEnd },
+          },
+          include: { feedBatch: { select: { unitPrice: true } } },
+        }),
+        db.otherExpense.aggregate({
+          where: { tenantId, expenseDate: { gte: dStart, lte: dEnd } },
+          _sum: { amount: true },
+        }),
+        db.otherIncome.aggregate({
+          where: { tenantId, incomeDate: { gte: dStart, lte: dEnd } },
+          _sum: { amount: true },
+        }),
       ]);
 
-      const revenue = salesAgg._sum.amount ?? 0;
-      const cost =
-        (salaryAgg as any[]).reduce((s: number, p: any) => s + p.amount, 0) +
-        (feedUsages as any[]).reduce((s: number, u: any) => s + u.quantity * u.feedBatch.unitPrice, 0) +
-        (otherAgg._sum.amount ?? 0);
+      const salesRevenue = salesAgg._sum.amount ?? 0;
+      const otherIncome = otherIncAgg._sum.amount ?? 0;
+      const revenue = salesRevenue + otherIncome;
+
+      const totalMonthlySalary = activeEmployees.reduce((s, e) => s + (e.salary ?? 0), 0);
+      const labourCost = parseFloat(((totalMonthlySalary / 30) * 1).toFixed(2));
+      const feedCost = feedUsages.reduce((s, u) => s + u.quantity * u.feedBatch.unitPrice, 0);
+      const otherCost = otherExpAgg._sum.amount ?? 0;
+      const cost = labourCost + feedCost + otherCost;
 
       breakdown.push({
-        date: dayStart.toISOString().slice(0, 10),
+        date: dStart.toISOString().slice(0, 10),
         revenue,
         cost,
         profit: revenue - cost,

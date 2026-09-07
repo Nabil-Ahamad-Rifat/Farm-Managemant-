@@ -97,8 +97,8 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
       }
       setIsModalOpen(false);
       router.refresh();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -116,8 +116,8 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
 
   function daysAgo(days: number): Date {
     const d = new Date();
-    d.setDate(d.getDate() - (days - 1));
-    d.setHours(0, 0, 0, 0);
+    d.setUTCDate(d.getUTCDate() - (days - 1));
+    d.setUTCHours(0, 0, 0, 0);
     return d;
   }
 

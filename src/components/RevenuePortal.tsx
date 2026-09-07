@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Users, Wheat, PackageOpen, RefreshCw } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Users, Wheat, PackageOpen, RefreshCw, Coins } from 'lucide-react';
 
 interface PeriodStat {
   days: number;
   totalSales: number;
+  totalOtherIncome: number;
+  totalRevenue: number;
   salesCount: number;
   totalSalaryCost: number;
   totalFeedCost: number;
@@ -28,8 +30,9 @@ interface RevenueData {
 
 const PERIOD_LABELS: Record<number, string> = {
   1: 'Today',
-  4: '4 Days',
-  8: '8 Days',
+  3: '3 Days',
+  5: '5 Days',
+  7: '7 Days',
   15: '15 Days',
   30: '30 Days',
 };
@@ -73,7 +76,7 @@ function MiniBar({ data }: { data: DailyBreakdown[] }) {
 
 export default function RevenuePortal() {
   const [data, setData] = useState<RevenueData | null>(null);
-  const [activePeriod, setActivePeriod] = useState(30);
+  const [activePeriod, setActivePeriod] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -84,13 +87,14 @@ export default function RevenuePortal() {
       const res = await fetch(`/api/revenue?period=${activePeriod}`);
       if (!res.ok) throw new Error('Failed to fetch revenue data');
       setData(await res.json());
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
   }, [activePeriod]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const currentPeriod = data?.periods.find(p => p.days === activePeriod);
@@ -101,7 +105,7 @@ export default function RevenuePortal() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Revenue Portal</h1>
-          <p className="mt-1 text-slate-500">Total Earn − Total Cost (Salary + Feed + Other) = Net Profit</p>
+          <p className="mt-1 text-slate-500">Total Revenue (Sales + Other Income) − Total Cost (Labour + Feed + Other) = Net Profit</p>
         </div>
         <button
           onClick={fetchData}
@@ -114,7 +118,7 @@ export default function RevenuePortal() {
 
       {/* Period Selector */}
       <div className="flex flex-wrap gap-2">
-        {[1, 4, 8, 15, 30].map(days => (
+        {[1, 3, 5, 7, 15, 30].map(days => (
           <button
             key={days}
             onClick={() => setActivePeriod(days)}
@@ -148,6 +152,16 @@ export default function RevenuePortal() {
             <p className="mt-2 text-4xl font-extrabold tracking-tight">
               {fmt(currentPeriod.netProfit)}
             </p>
+            <div className="mt-3 grid grid-cols-2 gap-4 text-sm opacity-90">
+              <div>
+                <p className="text-xs opacity-70 uppercase tracking-wide">Total Revenue</p>
+                <p className="font-bold text-base">{fmt(currentPeriod.totalRevenue)}</p>
+              </div>
+              <div>
+                <p className="text-xs opacity-70 uppercase tracking-wide">Total Cost</p>
+                <p className="font-bold text-base">{fmt(currentPeriod.totalCost)}</p>
+              </div>
+            </div>
             <div className="mt-4 flex items-center gap-2 text-sm opacity-90">
               {currentPeriod.netProfit >= 0
                 ? <TrendingUp className="h-4 w-4" />
@@ -159,50 +173,70 @@ export default function RevenuePortal() {
             </div>
           </div>
 
-          {/* Breakdown Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Total Earn</p>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
-                  <DollarSign className="h-4 w-4" />
+          {/* Revenue Breakdown Cards */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Revenue Breakdown</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Sales Revenue</p>
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                    <DollarSign className="h-4 w-4" />
+                  </div>
                 </div>
+                <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalSales)}</p>
+                <p className="text-[11px] text-slate-400 mt-1">{currentPeriod.salesCount} paid sale{currentPeriod.salesCount !== 1 ? 's' : ''}</p>
               </div>
-              <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalSales)}</p>
-              <p className="text-[11px] text-slate-400 mt-1">{currentPeriod.salesCount} paid sales</p>
-            </div>
 
-            <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wider text-indigo-700">Labour Cost</p>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
-                  <Users className="h-4 w-4" />
+              <div className="rounded-2xl border border-teal-100 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold uppercase tracking-wider text-teal-700">Other Income</p>
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-100 text-teal-700">
+                    <Coins className="h-4 w-4" />
+                  </div>
                 </div>
+                <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalOtherIncome)}</p>
+                <p className="text-[11px] text-slate-400 mt-1">Grants, subsidies, donations, etc.</p>
               </div>
-              <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalSalaryCost)}</p>
-              <p className="text-[11px] text-slate-400 mt-1">Salary payments made</p>
             </div>
+          </div>
 
-            <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Feed Cost</p>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-                  <Wheat className="h-4 w-4" />
+          {/* Cost Breakdown Cards */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Cost Breakdown</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold uppercase tracking-wider text-indigo-700">Labour Cost</p>
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
+                    <Users className="h-4 w-4" />
+                  </div>
                 </div>
+                <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalSalaryCost)}</p>
+                <p className="text-[11px] text-slate-400 mt-1">Prorated: monthly salary × {activePeriod}/30</p>
               </div>
-              <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalFeedCost)}</p>
-              <p className="text-[11px] text-slate-400 mt-1">Feed consumed cost</p>
-            </div>
 
-            <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-700">Other Costs</p>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
-                  <PackageOpen className="h-4 w-4" />
+              <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Feed Cost</p>
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                    <Wheat className="h-4 w-4" />
+                  </div>
                 </div>
+                <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalFeedCost)}</p>
+                <p className="text-[11px] text-slate-400 mt-1">Feed consumed cost</p>
               </div>
-              <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalOtherCost)}</p>
-              <p className="text-[11px] text-slate-400 mt-1">Vet, equipment, misc</p>
+
+              <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-700">Other Costs</p>
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                    <PackageOpen className="h-4 w-4" />
+                  </div>
+                </div>
+                <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalOtherCost)}</p>
+                <p className="text-[11px] text-slate-400 mt-1">Vet, equipment, misc</p>
+              </div>
             </div>
           </div>
 
@@ -212,12 +246,14 @@ export default function RevenuePortal() {
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-center">
                 <p className="text-[11px] font-semibold text-emerald-700 uppercase">Revenue</p>
-                <p className="text-lg font-extrabold text-slate-900">{fmt(currentPeriod.totalSales)}</p>
+                <p className="text-lg font-extrabold text-slate-900">{fmt(currentPeriod.totalRevenue)}</p>
+                <p className="text-[10px] text-emerald-600">Sales + Other Income</p>
               </div>
               <span className="text-2xl text-slate-400 font-light">−</span>
               <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-center">
                 <p className="text-[11px] font-semibold text-red-700 uppercase">Total Cost</p>
                 <p className="text-lg font-extrabold text-slate-900">{fmt(currentPeriod.totalCost)}</p>
+                <p className="text-[10px] text-red-600">Labour + Feed + Other</p>
               </div>
               <span className="text-2xl text-slate-400 font-light">=</span>
               <div className={`rounded-xl px-4 py-3 text-center border ${currentPeriod.netProfit >= 0
@@ -229,12 +265,12 @@ export default function RevenuePortal() {
               </div>
             </div>
 
-            {/* Cost breakdown breakdown */}
+            {/* Cost breakdown bars */}
             <div className="mt-4 rounded-xl bg-slate-50 border border-slate-100 p-4">
               <p className="text-xs font-semibold text-slate-500 mb-2">Cost Breakdown</p>
               <div className="space-y-2">
                 {[
-                  { label: 'Labour (Salaries)', value: currentPeriod.totalSalaryCost, color: 'bg-indigo-400' },
+                  { label: 'Labour (Prorated Salary)', value: currentPeriod.totalSalaryCost, color: 'bg-indigo-400' },
                   { label: 'Feed', value: currentPeriod.totalFeedCost, color: 'bg-amber-400' },
                   { label: 'Other Expenses', value: currentPeriod.totalOtherCost, color: 'bg-slate-400' },
                 ].map(({ label, value, color }) => {
@@ -258,7 +294,7 @@ export default function RevenuePortal() {
           {/* Daily Chart */}
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
-              Daily Trend — Last {activePeriod} Day{activePeriod > 1 ? 's' : ''}
+              Daily Trend — {PERIOD_LABELS[activePeriod]}
             </h2>
             <MiniBar data={data?.dailyBreakdown || []} />
           </div>
@@ -271,8 +307,12 @@ export default function RevenuePortal() {
                 <thead>
                   <tr className="border-b border-slate-100">
                     <th className="py-2 pr-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Period</th>
-                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Revenue</th>
-                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Cost</th>
+                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Sales</th>
+                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Other Income</th>
+                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Total Revenue</th>
+                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Labour</th>
+                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Feed</th>
+                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Other Cost</th>
                     <th className="py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Net Profit</th>
                   </tr>
                 </thead>
@@ -281,7 +321,11 @@ export default function RevenuePortal() {
                     <tr key={p.days} className={`hover:bg-slate-50/50 transition ${activePeriod === p.days ? 'bg-slate-50' : ''}`}>
                       <td className="py-3 pr-4 font-medium text-slate-700">{PERIOD_LABELS[p.days]}</td>
                       <td className="py-3 pr-4 text-right text-emerald-600 font-semibold">{fmt(p.totalSales)}</td>
-                      <td className="py-3 pr-4 text-right text-red-500 font-semibold">{fmt(p.totalCost)}</td>
+                      <td className="py-3 pr-4 text-right text-teal-600 font-semibold">{fmt(p.totalOtherIncome)}</td>
+                      <td className="py-3 pr-4 text-right text-emerald-700 font-bold">{fmt(p.totalRevenue)}</td>
+                      <td className="py-3 pr-4 text-right text-indigo-500 text-xs">{fmt(p.totalSalaryCost)}</td>
+                      <td className="py-3 pr-4 text-right text-amber-500 text-xs">{fmt(p.totalFeedCost)}</td>
+                      <td className="py-3 pr-4 text-right text-slate-500 text-xs">{fmt(p.totalOtherCost)}</td>
                       <td className={`py-3 text-right font-bold ${p.netProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                         {fmt(p.netProfit)}
                       </td>
