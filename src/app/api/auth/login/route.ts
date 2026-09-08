@@ -16,6 +16,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
   }
 
+  // Google-only account — no password set
+  if (!user.password) {
+    return NextResponse.json(
+      { error: 'This account uses Google sign-in. Please click "Continue with Google".' },
+      { status: 401 }
+    );
+  }
+
   const isValid = await verifyPassword(password, user.password);
   if (!isValid) {
     return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
