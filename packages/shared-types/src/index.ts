@@ -4,6 +4,13 @@
 // objects (passed directly from a Next.js Server Component), so most date
 // fields are typed as `string | Date`.
 
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
 export interface Cow {
   id: string;
   tagNumber: string;
