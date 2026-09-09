@@ -19,8 +19,11 @@ export interface JwtPayload {
   name: string;
 }
 
-export function signToken(payload: JwtPayload) {
-  return jwt.sign(payload, getSecret(), { expiresIn: '7d' });
+// Web keeps the original 7-day cookie-only token. Mobile access tokens are
+// short-lived (see src/lib/auth/refreshToken.ts) since they're paired with
+// a long-lived refresh token instead.
+export function signToken(payload: JwtPayload, expiresIn: string = '7d') {
+  return jwt.sign(payload, getSecret(), { expiresIn } as jwt.SignOptions);
 }
 
 export function verifyToken(token: string) {

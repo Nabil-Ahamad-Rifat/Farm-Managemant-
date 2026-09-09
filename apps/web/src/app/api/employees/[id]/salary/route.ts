@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { withAuth, getIdFromParams } from '@/lib/middleware/withAuth';
+import { withIdempotency } from '@/lib/idempotency';
 
 // GET /api/employees/[id]/salary - list payments for employee
 export const GET = withAuth(async (req, { tenantId }, routeContext) => {
@@ -23,7 +24,7 @@ export const GET = withAuth(async (req, { tenantId }, routeContext) => {
 });
 
 // POST /api/employees/[id]/salary - record a salary payment
-export const POST = withAuth(async (req, { tenantId }, routeContext) => {
+export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdempotency(req, tenantId, 'salary:create', async () => {
   try {
     const employeeId = await getIdFromParams(routeContext, req);
     if (!employeeId) return Response.json({ error: 'Missing employee id' }, { status: 400 });
@@ -55,4 +56,4 @@ export const POST = withAuth(async (req, { tenantId }, routeContext) => {
     console.error('Error processing salary:', err);
     return Response.json({ error: 'Failed to record salary payment' }, { status: 500 });
   }
-});
+}));

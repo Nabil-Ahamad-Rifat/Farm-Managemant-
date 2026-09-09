@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
 import { parseNullableFloat } from '@/lib/parse';
+import { withIdempotency } from '@/lib/idempotency';
 
 // GET /api/feed/usage - list all feed usages
 export const GET = withAuth(async (_req, { tenantId }) => {
@@ -13,7 +14,7 @@ export const GET = withAuth(async (_req, { tenantId }) => {
 });
 
 // POST /api/feed/usage - record feed usage
-export const POST = withAuth(async (req, { tenantId }) => {
+export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, tenantId, 'feed-usage:create', async () => {
   const body = await req.json();
   const { feedBatchId, quantity, note, usedAt } = body;
 
@@ -49,4 +50,4 @@ export const POST = withAuth(async (req, { tenantId }) => {
   ]);
 
   return Response.json(usage, { status: 201 });
-});
+}));

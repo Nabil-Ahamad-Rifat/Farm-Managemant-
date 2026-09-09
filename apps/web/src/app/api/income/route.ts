@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
+import { withIdempotency } from '@/lib/idempotency';
 
 // GET /api/income - list all other income records for the tenant
 export const GET = withAuth(async (_req, { tenantId }) => {
@@ -16,7 +17,7 @@ export const GET = withAuth(async (_req, { tenantId }) => {
 });
 
 // POST /api/income - create a new other income record
-export const POST = withAuth(async (req, { tenantId }) => {
+export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, tenantId, 'income:create', async () => {
   try {
     const body = await req.json();
     const { description, amount, category, incomeDate } = body;
@@ -45,4 +46,4 @@ export const POST = withAuth(async (req, { tenantId }) => {
     console.error('Error handling income request:', err);
     return Response.json({ error: 'Failed to process income record' }, { status: 500 });
   }
-});
+}));

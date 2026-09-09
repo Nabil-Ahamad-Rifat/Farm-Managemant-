@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
 import { parseNullableFloat } from '@/lib/parse';
+import { withIdempotency } from '@/lib/idempotency';
 
 export const GET = withAuth(async (_req, { tenantId }) => {
   const cows = await db.cow.findMany({
@@ -11,7 +12,7 @@ export const GET = withAuth(async (_req, { tenantId }) => {
   return Response.json(cows);
 });
 
-export const POST = withAuth(async (req, { tenantId }) => {
+export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, tenantId, 'cows:create', async () => {
   const body = await req.json();
   const { tagNumber, name, breed, purchasePrice, status } = body;
 
@@ -36,4 +37,4 @@ export const POST = withAuth(async (req, { tenantId }) => {
   });
 
   return Response.json(cow, { status: 201 });
-});
+}));

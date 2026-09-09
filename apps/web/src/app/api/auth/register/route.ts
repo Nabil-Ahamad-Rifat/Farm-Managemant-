@@ -4,6 +4,8 @@ import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
 import { signToken } from '@/lib/auth/jwt';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { isMobileClient } from '@/lib/auth/clientType';
+import { issueRefreshToken, MOBILE_ACCESS_TOKEN_TTL } from '@/lib/auth/refreshToken';
 
 const registerSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -53,18 +55,29 @@ export async function POST(req: NextRequest) {
     return { tenant, user };
   });
 
-  const token = signToken({
-    userId: user.id,
-    tenantId: tenant.id,
-    role: user.role,
-    email: user.email,
-    name: user.name,
-  });
+  const mobile = isMobileClient(req);
+  const token = signToken(
+    {
+      userId: user.id,
+      tenantId: tenant.id,
+      role: user.role,
+      email: user.email,
+      name: user.name,
+    },
+    mobile ? MOBILE_ACCESS_TOKEN_TTL : undefined
+  );
 
-  const response = NextResponse.json({
+  const responseBody: Record<string, unknown> = {
     user: { id: user.id, name: user.name, email: user.email, role: user.role },
     tenant,
-  }, { status: 201 });
+  };
+
+  if (mobile) {
+    responseBody.accessToken = token;
+    responseBody.refreshToken = await issueRefreshToken(user.id, req.headers.get('user-agent'));
+  }
+
+  const response = NextResponse.json(responseBody, { status: 201 });
 
   response.cookies.set('token', token, {
     httpOnly: true,

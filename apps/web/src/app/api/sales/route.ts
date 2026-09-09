@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
 import { parseNullableFloat } from '@/lib/parse';
+import { withIdempotency } from '@/lib/idempotency';
 
 export const GET = withAuth(async (_req, { tenantId }) => {
   try {
@@ -16,7 +17,7 @@ export const GET = withAuth(async (_req, { tenantId }) => {
   }
 });
 
-export const POST = withAuth(async (req, { tenantId }) => {
+export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, tenantId, 'sales:create', async () => {
   try {
     const body = await req.json();
     const { customerName, amount, status, cowId, saleType, quantity, unitPrice, notes, saleDate } = body;
@@ -62,4 +63,4 @@ export const POST = withAuth(async (req, { tenantId }) => {
     console.error('Error creating sale:', err);
     return Response.json({ error: 'Failed to create sale' }, { status: 500 });
   }
-});
+}));

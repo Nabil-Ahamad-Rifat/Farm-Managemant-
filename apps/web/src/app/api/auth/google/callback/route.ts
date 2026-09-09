@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 import { signToken } from '@/lib/auth/jwt';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { findOrCreateGoogleUser } from '@/lib/auth/googleUser';
 
 interface GoogleTokenResponse {
   access_token: string;
@@ -83,37 +83,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 3. Find or create the user
-    let user = await db.user.findUnique({ where: { email: profile.email } });
-
-    if (!user) {
-      // New Google user — create a tenant + user automatically
-      const firstName = profile.name?.split(' ')[0] || 'User';
-
-      const { newUser } = await db.$transaction(async (tx) => {
-        const newTenant = await tx.tenant.create({
-          data: { name: `${firstName}'s Farm` },
-        });
-        const newUser = await tx.user.create({
-          data: {
-            name: profile.name || profile.email,
-            email: profile.email,
-            googleId: profile.sub,
-            password: null,
-            role: 'owner',
-            tenantId: newTenant.id,
-          },
-        });
-        return { newTenant, newUser };
-      });
-
-      user = newUser;
-    } else if (!user.googleId) {
-      // Existing email user — link their Google account
-      user = await db.user.update({
-        where: { id: user.id },
-        data: { googleId: profile.sub },
-      });
-    }
+    const user = await findOrCreateGoogleUser({ sub: profile.sub, email: profile.email, name: profile.name });
 
     // 4. Issue JWT cookie and redirect to dashboard
     const token = signToken({

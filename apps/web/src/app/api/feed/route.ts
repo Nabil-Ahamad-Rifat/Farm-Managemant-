@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
 import { parseNullableFloat } from '@/lib/parse';
+import { withIdempotency } from '@/lib/idempotency';
 
 export const GET = withAuth(async (_req, { tenantId }) => {
   const feeds = await db.feedBatch.findMany({
@@ -11,7 +12,7 @@ export const GET = withAuth(async (_req, { tenantId }) => {
   return Response.json(feeds);
 });
 
-export const POST = withAuth(async (req, { tenantId }) => {
+export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, tenantId, 'feed:create', async () => {
   const body = await req.json();
   const { name, quantity, unitPrice, remainingQuantity } = body;
 
@@ -37,4 +38,4 @@ export const POST = withAuth(async (req, { tenantId }) => {
   });
 
   return Response.json(feed, { status: 201 });
-});
+}));

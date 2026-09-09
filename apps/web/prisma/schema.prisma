@@ -33,6 +33,40 @@ model User {
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+}
+
+// Mobile-only (the web app keeps its single 7-day cookie JWT). Opaque,
+// rotated on every use; reuse of an already-rotated token revokes the
+// whole chain (signals the token was stolen and replayed).
+model RefreshToken {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String    @db.ObjectId
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  deviceInfo String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  replacedBy String?   @db.ObjectId
+  createdAt  DateTime  @default(now())
+}
+
+// Opt-in de-duplication for mutating requests replayed by the mobile app's
+// offline outbox after reconnecting. A request with no Idempotency-Key
+// header is unaffected — this only engages when a client sends one.
+// A Mongo TTL index on createdAt (~24-48h) should be added out-of-band
+// (Prisma's schema DSL has no TTL index syntax) so old rows self-expire.
+model IdempotencyKey {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  tenantId     String   @db.ObjectId
+  key          String
+  route        String
+  responseBody String
+  statusCode   Int
+  createdAt    DateTime @default(now())
+
+  @@unique([tenantId, route, key])
 }
 
 model PasswordResetToken {

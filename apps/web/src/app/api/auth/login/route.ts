@@ -4,6 +4,8 @@ import { db } from '@/lib/db';
 import { verifyPassword } from '@/lib/auth/password';
 import { signToken } from '@/lib/auth/jwt';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { isMobileClient } from '@/lib/auth/clientType';
+import { issueRefreshToken, MOBILE_ACCESS_TOKEN_TTL } from '@/lib/auth/refreshToken';
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(255),
@@ -44,17 +46,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
   }
 
-  const token = signToken({
-    userId: user.id,
-    tenantId: user.tenantId,
-    role: user.role,
-    email: user.email,
-    name: user.name,
-  });
+  const mobile = isMobileClient(req);
+  const token = signToken(
+    {
+      userId: user.id,
+      tenantId: user.tenantId,
+      role: user.role,
+      email: user.email,
+      name: user.name,
+    },
+    mobile ? MOBILE_ACCESS_TOKEN_TTL : undefined
+  );
 
-  const response = NextResponse.json({
+  const responseBody: Record<string, unknown> = {
     user: { id: user.id, name: user.name, email: user.email, role: user.role },
-  });
+  };
+
+  if (mobile) {
+    responseBody.accessToken = token;
+    responseBody.refreshToken = await issueRefreshToken(user.id, req.headers.get('user-agent'));
+  }
+
+  const response = NextResponse.json(responseBody);
 
   response.cookies.set('token', token, {
     httpOnly: true,

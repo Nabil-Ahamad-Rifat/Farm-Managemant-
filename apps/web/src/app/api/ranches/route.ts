@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { signToken } from '@/lib/auth/jwt';
 import { withAuth } from '@/lib/middleware/withAuth';
+import { isMobileClient } from '@/lib/auth/clientType';
+import { issueRefreshToken, MOBILE_ACCESS_TOKEN_TTL } from '@/lib/auth/refreshToken';
 
 export const POST = withAuth(async (req: NextRequest, { userId }) => {
   const body = await req.json();
@@ -22,15 +24,19 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
     data: { tenantId: tenant.id },
   });
 
-  const token = signToken({
-    userId: updatedUser.id,
-    tenantId: tenant.id,
-    role: updatedUser.role,
-    email: updatedUser.email,
-    name: updatedUser.name,
-  });
+  const mobile = isMobileClient(req);
+  const token = signToken(
+    {
+      userId: updatedUser.id,
+      tenantId: tenant.id,
+      role: updatedUser.role,
+      email: updatedUser.email,
+      name: updatedUser.name,
+    },
+    mobile ? MOBILE_ACCESS_TOKEN_TTL : undefined
+  );
 
-  const response = NextResponse.json({
+  const responseBody: Record<string, unknown> = {
     user: {
       id: updatedUser.id,
       name: updatedUser.name,
@@ -38,7 +44,14 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       role: updatedUser.role,
     },
     tenant,
-  }, { status: 201 });
+  };
+
+  if (mobile) {
+    responseBody.accessToken = token;
+    responseBody.refreshToken = await issueRefreshToken(updatedUser.id, req.headers.get('user-agent'));
+  }
+
+  const response = NextResponse.json(responseBody, { status: 201 });
 
   response.cookies.set('token', token, {
     httpOnly: true,

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
 import { parseNullableFloat } from '@/lib/parse';
+import { withIdempotency } from '@/lib/idempotency';
 
 export const GET = withAuth(async (_req, { tenantId }) => {
   const expenses = await db.otherExpense.findMany({
@@ -10,7 +11,7 @@ export const GET = withAuth(async (_req, { tenantId }) => {
   return Response.json(expenses);
 });
 
-export const POST = withAuth(async (req, { tenantId }) => {
+export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, tenantId, 'expenses:create', async () => {
   const body = await req.json();
   const { description, amount, category, expenseDate } = body;
 
@@ -30,4 +31,4 @@ export const POST = withAuth(async (req, { tenantId }) => {
   });
 
   return Response.json(expense, { status: 201 });
-});
+}));
