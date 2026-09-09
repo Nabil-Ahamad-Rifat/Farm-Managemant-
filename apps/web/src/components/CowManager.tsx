@@ -3,16 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, Trash2, Edit3, X } from 'lucide-react';
-
-interface Cow {
-  id: string;
-  tagNumber: string;
-  name: string;
-  breed: string | null;
-  purchasePrice: number | null;
-  status: string;
-  createdAt: Date | string;
-}
+import type { Cow } from '@farm/shared-types';
+import { webApiClient } from '@farm/api-client';
 
 export default function CowManager({ initialCows }: { initialCows: Cow[] }) {
   const router = useRouter();
@@ -55,19 +47,11 @@ export default function CowManager({ initialCows }: { initialCows: Cow[] }) {
     setLoading(true);
     setError('');
 
-    const url = editingCow ? `/api/cows/${editingCow.id}` : '/api/cows';
-    const method = editingCow ? 'PUT' : 'POST';
-
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to save cow details');
+      if (editingCow) {
+        await webApiClient.put(`/api/cows/${editingCow.id}`, form, 'Failed to save cow details');
+      } else {
+        await webApiClient.post('/api/cows', form, 'Failed to save cow details');
       }
 
       setIsModalOpen(false);
@@ -83,10 +67,8 @@ export default function CowManager({ initialCows }: { initialCows: Cow[] }) {
     if (!confirm('Are you sure you want to remove this cow from the herd record?')) return;
 
     try {
-      const res = await fetch(`/api/cows/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        router.refresh();
-      }
+      await webApiClient.delete(`/api/cows/${id}`);
+      router.refresh();
     } catch {
       alert('Failed to delete livestock record.');
     }

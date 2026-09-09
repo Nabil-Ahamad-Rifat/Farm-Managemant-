@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
+import { forgotPasswordSchema } from '@farm/shared-validation';
 import { db } from '@/lib/db';
 import { generateResetToken } from '@/lib/auth/reset-token';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
-
-const forgotPasswordSchema = z.object({
-  email: z.string().trim().toLowerCase().email().max(255),
-});
 
 export async function POST(req: NextRequest) {
   try {

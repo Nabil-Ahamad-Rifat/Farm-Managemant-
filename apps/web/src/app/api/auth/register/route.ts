@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
+import { registerSchema } from '@farm/shared-validation';
 import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
 import { signToken } from '@/lib/auth/jwt';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { isMobileClient } from '@/lib/auth/clientType';
 import { issueRefreshToken, MOBILE_ACCESS_TOKEN_TTL } from '@/lib/auth/refreshToken';
-
-const registerSchema = z.object({
-  name: z.string().trim().min(1).max(100),
-  email: z.string().trim().toLowerCase().email().max(255),
-  password: z.string().min(8).max(200),
-  tenantName: z.string().trim().max(100).optional(),
-});
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);

@@ -3,26 +3,9 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, Trash2, Edit3, DollarSign, X, CheckCircle, Clock, Tag, FileText, CalendarDays } from 'lucide-react';
-
-interface Cow {
-  id: string;
-  name: string;
-  tagNumber: string;
-}
-
-interface Sale {
-  id: string;
-  customerName: string;
-  amount: number;
-  status: string;
-  saleType: string;
-  quantity: number | null;
-  unitPrice: number | null;
-  notes: string | null;
-  cowId: string | null;
-  cow?: Cow | null;
-  createdAt: Date | string;
-}
+import type { Cow, Sale } from '@farm/shared-types';
+import { webApiClient } from '@farm/api-client';
+import { daysAgo, sumAmounts, calculateSaleAmount } from '@farm/business-logic';
 
 const SALE_TYPES = [
   { value: 'general', label: 'General Sale' },
@@ -41,13 +24,6 @@ const PERIOD_FILTERS = [
   { label: '30 Days', days: 30 },
   { label: 'All', days: 0 },
 ];
-
-function daysAgo(days: number): Date {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - (days - 1));
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
-}
 
 export default function SalesManager({
   initialSales,
@@ -80,12 +56,8 @@ export default function SalesManager({
 
   // Auto-calculate amount from quantity × unitPrice
   const calculatedAmount = useMemo(() => {
-    const qty = parseFloat(form.quantity);
-    const price = parseFloat(form.unitPrice);
-    if (!isNaN(qty) && !isNaN(price) && qty > 0 && price > 0) {
-      return (qty * price).toFixed(2);
-    }
-    return '';
+    const result = calculateSaleAmount(form.quantity, form.unitPrice);
+    return result !== null ? result.toFixed(2) : '';
   }, [form.quantity, form.unitPrice]);
 
   const displayAmount = calculatedAmount !== '' ? calculatedAmount : form.amount;
@@ -119,9 +91,6 @@ export default function SalesManager({
     setLoading(true);
     setError('');
 
-    const url = editingSale ? `/api/sales/${editingSale.id}` : '/api/sales';
-    const method = editingSale ? 'PUT' : 'POST';
-
     // Use calculated amount if qty+price provided, else manual amount
     const finalAmount = calculatedAmount !== '' ? calculatedAmount : form.amount;
 
@@ -131,21 +100,18 @@ export default function SalesManager({
       return;
     }
 
-    try {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          amount: finalAmount,
-          quantity: form.quantity || null,
-          unitPrice: form.unitPrice || null,
-        }),
-      });
+    const payload = {
+      ...form,
+      amount: finalAmount,
+      quantity: form.quantity || null,
+      unitPrice: form.unitPrice || null,
+    };
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to save sale record');
+    try {
+      if (editingSale) {
+        await webApiClient.put(`/api/sales/${editingSale.id}`, payload, 'Failed to save sale record');
+      } else {
+        await webApiClient.post('/api/sales', payload, 'Failed to save sale record');
       }
 
       setIsModalOpen(false);
@@ -161,8 +127,8 @@ export default function SalesManager({
     if (!confirm('Are you sure you want to delete this sale record?')) return;
 
     try {
-      const res = await fetch(`/api/sales/${id}`, { method: 'DELETE' });
-      if (res.ok) router.refresh();
+      await webApiClient.delete(`/api/sales/${id}`);
+      router.refresh();
     } catch {
       alert('Failed to delete sale record.');
     }
@@ -186,8 +152,8 @@ export default function SalesManager({
     return matchesSearch && matchesStatus && matchesPeriod;
   });
 
-  const totalRevenue = filteredSales.filter(s => s.status === 'paid').reduce((sum, s) => sum + s.amount, 0);
-  const pendingRevenue = filteredSales.filter(s => s.status === 'pending').reduce((sum, s) => sum + s.amount, 0);
+  const totalRevenue = sumAmounts(filteredSales.filter(s => s.status === 'paid'));
+  const pendingRevenue = sumAmounts(filteredSales.filter(s => s.status === 'pending'));
 
   const saleTypeLabel = (type: string) => SALE_TYPES.find(t => t.value === type)?.label || type;
   const saleTypeColors: Record<string, string> = {

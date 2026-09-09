@@ -3,15 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, Trash2, Edit3, Wheat, AlertTriangle, X, BarChart2, Droplets } from 'lucide-react';
-
-interface FeedBatch {
-  id: string;
-  name: string;
-  quantity: number;
-  unitPrice: number;
-  remainingQuantity: number;
-  createdAt: Date | string;
-}
+import type { FeedBatch } from '@farm/shared-types';
+import { webApiClient } from '@farm/api-client';
+import { isLowStock, stockPercentage, totalStockValue, totalBatchCost } from '@farm/business-logic';
 
 const PRESET_FEED_NAMES = ['Bushi', 'Butta', 'Gom', 'Chaw', 'Khud', 'Soyabin', 'Khoil', 'Dhan', 'Kaher', 'Atta'];
 
@@ -64,19 +58,11 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
     setLoading(true);
     setError('');
 
-    const url = editingFeed ? `/api/feed/${editingFeed.id}` : '/api/feed';
-    const method = editingFeed ? 'PUT' : 'POST';
-
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to save feed batch');
+      if (editingFeed) {
+        await webApiClient.put(`/api/feed/${editingFeed.id}`, form, 'Failed to save feed batch');
+      } else {
+        await webApiClient.post('/api/feed', form, 'Failed to save feed batch');
       }
 
       setIsModalOpen(false);
@@ -95,17 +81,7 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
     setUsageError('');
 
     try {
-      const res = await fetch('/api/feed/usage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feedBatchId: usageFeed.id, ...usageForm }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to record usage');
-      }
-
+      await webApiClient.post('/api/feed/usage', { feedBatchId: usageFeed.id, ...usageForm }, 'Failed to record usage');
       setIsUsageModalOpen(false);
       router.refresh();
     } catch (err) {
@@ -119,8 +95,8 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
     if (!confirm('Are you sure you want to delete this feed batch record?')) return;
 
     try {
-      const res = await fetch(`/api/feed/${id}`, { method: 'DELETE' });
-      if (res.ok) router.refresh();
+      await webApiClient.delete(`/api/feed/${id}`);
+      router.refresh();
     } catch {
       alert('Failed to delete feed batch.');
     }
@@ -130,8 +106,8 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
     item.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalFeedValue = filteredFeed.reduce((sum, f) => sum + f.remainingQuantity * f.unitPrice, 0);
-  const totalFeedCost = initialFeed.reduce((sum, f) => sum + f.quantity * f.unitPrice, 0);
+  const totalFeedValue = totalStockValue(filteredFeed);
+  const totalFeedCost = totalBatchCost(initialFeed);
 
   return (
     <div className="space-y-6">
@@ -230,8 +206,8 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
               </tr>
             ) : (
               filteredFeed.map((item) => {
-                const isLowStock = item.remainingQuantity < item.quantity * 0.2;
-                const stockPct = Math.round((item.remainingQuantity / item.quantity) * 100);
+                const lowStock = isLowStock(item);
+                const stockPct = stockPercentage(item);
                 const totalValue = item.remainingQuantity * item.unitPrice;
                 return (
                   <tr key={item.id} className="hover:bg-slate-50/50 transition">
@@ -244,7 +220,7 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
                           <p className="text-sm font-semibold text-slate-900">{item.name}</p>
                           <div className="mt-1 w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full transition-all ${isLowStock ? 'bg-red-400' : 'bg-emerald-400'}`}
+                              className={`h-full rounded-full transition-all ${lowStock ? 'bg-red-400' : 'bg-emerald-400'}`}
                               style={{ width: `${Math.min(stockPct, 100)}%` }}
                             />
                           </div>
@@ -257,7 +233,7 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-900">
                       <div className="flex items-center gap-2">
                         <span>{item.remainingQuantity.toLocaleString()}</span>
-                        {isLowStock && (
+                        {lowStock && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
                             <AlertTriangle className="h-3 w-3" /> Low Stock
                           </span>

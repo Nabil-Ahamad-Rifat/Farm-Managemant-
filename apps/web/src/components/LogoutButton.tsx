@@ -7,9 +7,14 @@ export default function LogoutButton() {
   const router = useRouter();
 
   async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
-    router.refresh();
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (err) {
+      console.error('Logout request failed:', err);
+    } finally {
+      router.push('/login');
+      router.refresh();
+    }
   }
 
   return (

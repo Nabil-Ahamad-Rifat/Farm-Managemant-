@@ -3,15 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, Trash2, Edit3, X, PackageOpen } from 'lucide-react';
-
-interface OtherExpense {
-  id: string;
-  description: string;
-  amount: number;
-  category: string;
-  expenseDate: string | Date;
-  createdAt: string | Date;
-}
+import type { OtherExpense } from '@farm/shared-types';
+import { webApiClient } from '@farm/api-client';
+import { daysAgo, sumAmounts } from '@farm/business-logic';
 
 const CATEGORIES = [
   { value: 'vet', label: 'Veterinary' },
@@ -82,18 +76,11 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
     setLoading(true);
     setError('');
 
-    const url = editingExpense ? `/api/expenses/${editingExpense.id}` : '/api/expenses';
-    const method = editingExpense ? 'PUT' : 'POST';
-
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to save expense');
+      if (editingExpense) {
+        await webApiClient.put(`/api/expenses/${editingExpense.id}`, form, 'Failed to save expense');
+      } else {
+        await webApiClient.post('/api/expenses', form, 'Failed to save expense');
       }
       setIsModalOpen(false);
       router.refresh();
@@ -107,18 +94,11 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
   async function handleDelete(id: string) {
     if (!confirm('Delete this expense?')) return;
     try {
-      await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+      await webApiClient.delete(`/api/expenses/${id}`);
       router.refresh();
     } catch {
       alert('Failed to delete expense.');
     }
-  }
-
-  function daysAgo(days: number): Date {
-    const d = new Date();
-    d.setUTCDate(d.getUTCDate() - (days - 1));
-    d.setUTCHours(0, 0, 0, 0);
-    return d;
   }
 
   const filteredExpenses = initialExpenses.filter(exp => {
@@ -128,7 +108,7 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
     return matchesSearch && matchesCategory && matchesPeriod;
   });
 
-  const totalAmount = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalAmount = sumAmounts(filteredExpenses);
   const categoryLabel = (val: string) => CATEGORIES.find(c => c.value === val)?.label || val;
 
   return (

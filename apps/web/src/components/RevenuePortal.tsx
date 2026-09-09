@@ -2,31 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Users, Wheat, PackageOpen, RefreshCw, Coins } from 'lucide-react';
-
-interface PeriodStat {
-  days: number;
-  totalSales: number;
-  totalOtherIncome: number;
-  totalRevenue: number;
-  salesCount: number;
-  totalSalaryCost: number;
-  totalFeedCost: number;
-  totalOtherCost: number;
-  totalCost: number;
-  netProfit: number;
-}
-
-interface DailyBreakdown {
-  date: string;
-  revenue: number;
-  cost: number;
-  profit: number;
-}
-
-interface RevenueData {
-  periods: PeriodStat[];
-  dailyBreakdown: DailyBreakdown[];
-}
+import type { DailyBreakdown, RevenueData } from '@farm/shared-types';
+import { webApiClient } from '@farm/api-client';
+import { formatCurrency as fmt, barHeightPx } from '@farm/business-logic';
 
 const PERIOD_LABELS: Record<number, string> = {
   1: 'Today',
@@ -36,10 +14,6 @@ const PERIOD_LABELS: Record<number, string> = {
   15: '15 Days',
   30: '30 Days',
 };
-
-function fmt(n: number) {
-  return '৳' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 function MiniBar({ data }: { data: DailyBreakdown[] }) {
   if (!data || data.length === 0) return null;
@@ -53,11 +27,11 @@ function MiniBar({ data }: { data: DailyBreakdown[] }) {
             <div className="w-full flex flex-col justify-end gap-0.5" style={{ height: '72px' }}>
               <div
                 className="w-full rounded-t bg-red-300/80 transition-all"
-                style={{ height: `${Math.max((d.cost / maxVal) * 72, d.cost > 0 ? 2 : 0)}px` }}
+                style={{ height: `${barHeightPx(d.cost, maxVal, 72)}px` }}
               />
               <div
                 className="w-full rounded-t bg-emerald-400/80 transition-all"
-                style={{ height: `${Math.max((d.revenue / maxVal) * 72, d.revenue > 0 ? 2 : 0)}px` }}
+                style={{ height: `${barHeightPx(d.revenue, maxVal, 72)}px` }}
               />
             </div>
             <span className="text-[9px] text-slate-400 rotate-45 mt-1">
@@ -84,9 +58,7 @@ export default function RevenuePortal() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`/api/revenue?period=${activePeriod}`);
-      if (!res.ok) throw new Error('Failed to fetch revenue data');
-      setData(await res.json());
+      setData(await webApiClient.get<RevenueData>(`/api/revenue?period=${activePeriod}`, 'Failed to fetch revenue data'));
     } catch (err) {
       setError((err as Error).message);
     } finally {

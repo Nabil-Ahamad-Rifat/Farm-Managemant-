@@ -3,15 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Trash2, Edit3, X, Coins, TrendingUp, CalendarDays, Search } from 'lucide-react';
-
-interface OtherIncome {
-  id: string;
-  description: string;
-  amount: number;
-  category: string;
-  incomeDate: string | Date;
-  createdAt: string | Date;
-}
+import type { OtherIncome } from '@farm/shared-types';
+import { webApiClient } from '@farm/api-client';
+import { daysAgo, sumAmounts, formatCurrency as fmt } from '@farm/business-logic';
 
 const CATEGORIES = [
   { value: 'subsidy', label: 'Government Subsidy' },
@@ -42,17 +36,6 @@ const PERIOD_FILTERS = [
   { label: '30 Days', days: 30 },
   { label: 'All', days: 0 },
 ];
-
-function daysAgo(days: number): Date {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - (days - 1));
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
-}
-
-function fmt(n: number) {
-  return '৳' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 export default function OtherIncomeManager({ initialIncomes }: { initialIncomes: OtherIncome[] }) {
   const router = useRouter();
@@ -95,18 +78,11 @@ export default function OtherIncomeManager({ initialIncomes }: { initialIncomes:
     setLoading(true);
     setError('');
 
-    const url = editingIncome ? `/api/income/${editingIncome.id}` : '/api/income';
-    const method = editingIncome ? 'PUT' : 'POST';
-
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to save income record');
+      if (editingIncome) {
+        await webApiClient.put(`/api/income/${editingIncome.id}`, form, 'Failed to save income record');
+      } else {
+        await webApiClient.post('/api/income', form, 'Failed to save income record');
       }
       setIsModalOpen(false);
       router.refresh();
@@ -120,7 +96,7 @@ export default function OtherIncomeManager({ initialIncomes }: { initialIncomes:
   async function handleDelete(id: string) {
     if (!confirm('Delete this income record?')) return;
     try {
-      await fetch(`/api/income/${id}`, { method: 'DELETE' });
+      await webApiClient.delete(`/api/income/${id}`);
       router.refresh();
     } catch {
       alert('Failed to delete income record.');
@@ -134,7 +110,7 @@ export default function OtherIncomeManager({ initialIncomes }: { initialIncomes:
     return matchesSearch && matchesCategory && matchesPeriod;
   });
 
-  const totalAmount = filteredIncomes.reduce((sum, i) => sum + i.amount, 0);
+  const totalAmount = sumAmounts(filteredIncomes);
   const categoryLabel = (val: string) => CATEGORIES.find(c => c.value === val)?.label || val;
 
   return (

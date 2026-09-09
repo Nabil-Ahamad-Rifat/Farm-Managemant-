@@ -3,27 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, Trash2, Edit3, Calendar, Banknote, CheckCircle2, AlertCircle, Clock3, X } from 'lucide-react';
-
-interface SalaryPayment {
-  id: string;
-  amount: number;
-  periodMonth: number;
-  periodYear: number;
-  note: string | null;
-  paidAt: string;
-}
-
-interface Employee {
-  id: string;
-  name: string;
-  role: string;
-  email: string | null;
-  phone: string | null;
-  salary: number;
-  joinDate: string | Date | null;
-  status: string;
-  salaryPayments?: SalaryPayment[];
-}
+import type { Employee } from '@farm/shared-types';
+import { webApiClient } from '@farm/api-client';
+import { totalActiveMonthlySalary } from '@farm/business-logic';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const now = new Date();
@@ -86,19 +68,11 @@ export default function EmployeeManager({ initialEmployees }: { initialEmployees
     setLoading(true);
     setError('');
 
-    const url = editingEmployee ? `/api/employees/${editingEmployee.id}` : '/api/employees';
-    const method = editingEmployee ? 'PUT' : 'POST';
-
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to save employee');
+      if (editingEmployee) {
+        await webApiClient.put(`/api/employees/${editingEmployee.id}`, form, 'Failed to save employee');
+      } else {
+        await webApiClient.post('/api/employees', form, 'Failed to save employee');
       }
 
       setIsModalOpen(false);
@@ -117,17 +91,7 @@ export default function EmployeeManager({ initialEmployees }: { initialEmployees
     setSalaryError('');
 
     try {
-      const res = await fetch(`/api/employees/${salaryEmployee.id}/salary`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(salaryForm),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to record salary payment');
-      }
-
+      await webApiClient.post(`/api/employees/${salaryEmployee.id}/salary`, salaryForm, 'Failed to record salary payment');
       setIsSalaryModalOpen(false);
       router.refresh();
     } catch (err) {
@@ -141,10 +105,8 @@ export default function EmployeeManager({ initialEmployees }: { initialEmployees
     if (!confirm('Are you sure you want to delete this employee?')) return;
 
     try {
-      const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        router.refresh();
-      }
+      await webApiClient.delete(`/api/employees/${id}`);
+      router.refresh();
     } catch {
       alert('Failed to delete employee.');
     }
@@ -160,9 +122,7 @@ export default function EmployeeManager({ initialEmployees }: { initialEmployees
     return matchesSearch && matchesStatus;
   });
 
-  const totalMonthlySalary = filteredEmployees
-    .filter(e => (e.status || 'active') === 'active')
-    .reduce((sum, e) => sum + (e.salary ?? 0), 0);
+  const totalMonthlySalary = totalActiveMonthlySalary(filteredEmployees);
 
   const statusConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; className: string }> = {
     active: { label: 'Active', icon: CheckCircle2, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
