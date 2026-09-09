@@ -1,19 +1,58 @@
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import { View, Text, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { LogOut, BadgeCheck, Users, Wheat, DollarSign } from 'lucide-react-native';
+import type { Cow, Employee, FeedBatch, RevenueData } from '@farm/shared-types';
+import { totalStockValue, formatCurrency } from '@farm/business-logic';
+import { mobileApiClient } from '@/src/lib/apiClient';
 import { useSession } from '@/src/context/AuthContext';
-
-const CARDS = [
-  { label: 'Herd (Cows)', icon: BadgeCheck, color: '#2563eb' },
-  { label: 'Employees', icon: Users, color: '#4f46e5' },
-  { label: 'Feed Stock', icon: Wheat, color: '#d97706' },
-  { label: 'Revenue', icon: DollarSign, color: '#059669' },
-];
+import { StatCard } from '@/src/components/ui';
 
 export default function OverviewScreen() {
   const { user, signOut } = useSession();
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [cowCount, setCowCount] = useState(0);
+  const [activeEmployeeCount, setActiveEmployeeCount] = useState(0);
+  const [feedStockValue, setFeedStockValue] = useState(0);
+  const [todayRevenue, setTodayRevenue] = useState(0);
+
+  const fetchOverview = useCallback(async () => {
+    const [cows, employees, feed, revenue] = await Promise.all([
+      mobileApiClient.get<Cow[]>('/api/cows').catch(() => [] as Cow[]),
+      mobileApiClient.get<Employee[]>('/api/employees').catch(() => [] as Employee[]),
+      mobileApiClient.get<FeedBatch[]>('/api/feed').catch(() => [] as FeedBatch[]),
+      mobileApiClient.get<RevenueData>('/api/revenue?period=1').catch(() => null),
+    ]);
+    setCowCount(cows.length);
+    setActiveEmployeeCount(employees.filter((e) => (e.status || 'active') === 'active').length);
+    setFeedStockValue(totalStockValue(feed));
+    setTodayRevenue(revenue?.periods.find((p) => p.days === 1)?.totalRevenue ?? 0);
+  }, []);
+
+  useEffect(() => {
+    fetchOverview().finally(() => setLoading(false));
+  }, [fetchOverview]);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await fetchOverview();
+    setRefreshing(false);
+  }
+
+  if (loading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-slate-50">
+        <ActivityIndicator />
+      </View>
+    );
+  }
 
   return (
-    <ScrollView className="flex-1 bg-slate-50" contentContainerClassName="p-5 gap-5">
+    <ScrollView
+      className="flex-1 bg-slate-50"
+      contentContainerClassName="p-5 gap-5"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       <View className="rounded-2xl border border-slate-200 bg-white p-5">
         <Text className="text-xs font-semibold uppercase tracking-wider text-slate-500">Signed in as</Text>
         <Text className="mt-1 text-lg font-bold text-slate-900">{user?.name}</Text>
@@ -28,21 +67,18 @@ export default function OverviewScreen() {
       </View>
 
       <View className="flex-row flex-wrap gap-4">
-        {CARDS.map(({ label, icon: Icon, color }) => (
-          <View key={label} className="min-w-[45%] flex-1 rounded-2xl border border-slate-200 bg-white p-4">
-            <View className="h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: `${color}1a` }}>
-              <Icon size={18} color={color} />
-            </View>
-            <Text className="mt-3 text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</Text>
-            <Text className="mt-1 text-2xl font-extrabold text-slate-900">—</Text>
-          </View>
-        ))}
-      </View>
-
-      <View className="rounded-2xl border border-slate-200 bg-white p-5">
-        <Text className="text-sm text-slate-500">
-          Live stats, recent sales, and the 30-day revenue trend come to this screen in Phase 5 of the mobile rollout.
-        </Text>
+        <View className="min-w-[45%] flex-1">
+          <StatCard label="Herd (Cows)" value={String(cowCount)} icon={BadgeCheck} color="#2563eb" />
+        </View>
+        <View className="min-w-[45%] flex-1">
+          <StatCard label="Active Employees" value={String(activeEmployeeCount)} icon={Users} color="#4f46e5" />
+        </View>
+        <View className="min-w-[45%] flex-1">
+          <StatCard label="Feed Stock Value" value={formatCurrency(feedStockValue)} icon={Wheat} color="#d97706" />
+        </View>
+        <View className="min-w-[45%] flex-1">
+          <StatCard label="Revenue Today" value={formatCurrency(todayRevenue)} icon={DollarSign} color="#059669" />
+        </View>
       </View>
     </ScrollView>
   );
