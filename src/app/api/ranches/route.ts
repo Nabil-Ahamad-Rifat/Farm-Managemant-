@@ -38,7 +38,6 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       role: updatedUser.role,
     },
     tenant,
-    token,
   }, { status: 201 });
 
   response.cookies.set('token', token, {

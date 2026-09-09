@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateResetToken, markTokenUsed } from '@/lib/auth/reset-token';
 import { hashPassword } from '@/lib/auth/password';
 import { db } from '@/lib/db';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    if (!checkRateLimit(`reset-password:${ip}`, 10, 15 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
+    }
+
     const { token, newPassword } = await req.json() as { token?: string; newPassword?: string };
 
-    if (!token || !newPassword) {
+    if (!token || typeof token !== 'string' || !newPassword || typeof newPassword !== 'string') {
       return NextResponse.json({ error: 'Token and new password are required' }, { status: 400 });
     }
 

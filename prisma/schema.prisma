@@ -3,11 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
 }
 
 model Tenant {
-  id        String   @id @default(cuid())
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -22,20 +23,20 @@ model Tenant {
 }
 
 model User {
-  id        String   @id @default(cuid())
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
   name      String
   email     String   @unique
   password  String?
   googleId  String?  @unique
   role      String   @default("owner")
-  tenantId  String
+  tenantId  String   @db.ObjectId
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
   token     String   @unique
   email     String
   expiresAt DateTime
@@ -44,7 +45,7 @@ model PasswordResetToken {
 }
 
 model Employee {
-  id          String    @id @default(cuid())
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
   name        String
   role        String
   email       String?
@@ -52,7 +53,7 @@ model Employee {
   salary      Float     @default(0)
   joinDate    DateTime?
   status      String    @default("active")
-  tenantId    String
+  tenantId    String    @db.ObjectId
   tenant      Tenant    @relation(fields: [tenantId], references: [id])
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -61,8 +62,8 @@ model Employee {
 }
 
 model SalaryPayment {
-  id          String   @id @default(cuid())
-  employeeId  String
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId  String   @db.ObjectId
   employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   amount      Float
   periodMonth Int
@@ -73,13 +74,13 @@ model SalaryPayment {
 }
 
 model Cow {
-  id            String   @id @default(cuid())
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
   tagNumber     String
   name          String
   breed         String?
   purchasePrice Float?
   status        String   @default("active")
-  tenantId      String
+  tenantId      String   @db.ObjectId
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -89,12 +90,12 @@ model Cow {
 }
 
 model FeedBatch {
-  id                String      @id @default(cuid())
+  id                String      @id @default(auto()) @map("_id") @db.ObjectId
   name              String
   quantity          Float
   unitPrice         Float
   remainingQuantity Float
-  tenantId          String
+  tenantId          String      @db.ObjectId
   tenant            Tenant      @relation(fields: [tenantId], references: [id])
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
@@ -103,8 +104,8 @@ model FeedBatch {
 }
 
 model FeedUsage {
-  id          String    @id @default(cuid())
-  feedBatchId String
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  feedBatchId String    @db.ObjectId
   feedBatch   FeedBatch @relation(fields: [feedBatchId], references: [id], onDelete: Cascade)
   quantity    Float
   usedAt      DateTime  @default(now())
@@ -113,7 +114,7 @@ model FeedUsage {
 }
 
 model Sale {
-  id            String   @id @default(cuid())
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
   customerName  String
   amount        Float
   status        String   @default("paid")
@@ -121,33 +122,33 @@ model Sale {
   quantity      Float?
   unitPrice     Float?
   notes         String?
-  tenantId      String
+  tenantId      String   @db.ObjectId
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
-  cowId         String?
+  cowId         String?  @db.ObjectId
   cow           Cow?     @relation(fields: [cowId], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
 
 model OtherExpense {
-  id          String   @id @default(cuid())
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
   description String
   amount      Float
   category    String   @default("other")
   expenseDate DateTime @default(now())
-  tenantId    String
+  tenantId    String   @db.ObjectId
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
 model OtherIncome {
-  id          String   @id @default(cuid())
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
   description String
   amount      Float
   category    String   @default("other")
   incomeDate  DateTime @default(now())
-  tenantId    String
+  tenantId    String   @db.ObjectId
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

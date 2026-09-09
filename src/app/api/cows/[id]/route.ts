@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { withAuth, getIdFromParams } from '@/lib/middleware/withAuth';
+import { parseNullableFloat } from '@/lib/parse';
 
 export const GET = withAuth(async (req, { tenantId }, routeContext) => {
   const id = await getIdFromParams(routeContext, req);
@@ -24,7 +25,7 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
       tagNumber,
       name,
       breed: breed || null,
-      purchasePrice: purchasePrice !== undefined && purchasePrice !== null && purchasePrice !== '' ? parseFloat(purchasePrice) : null,
+      purchasePrice: parseNullableFloat(purchasePrice),
       status,
     },
   });

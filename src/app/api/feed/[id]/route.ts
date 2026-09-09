@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { withAuth, getIdFromParams } from '@/lib/middleware/withAuth';
+import { parseNullableFloat } from '@/lib/parse';
 
 export const GET = withAuth(async (req, { tenantId }, routeContext) => {
   const id = await getIdFromParams(routeContext, req);
@@ -18,13 +19,21 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
   const body = await req.json();
   const { name, quantity, unitPrice, remainingQuantity } = body;
 
+  const parsedQty = parseNullableFloat(quantity);
+  const parsedPrice = parseNullableFloat(unitPrice);
+  const parsedRemaining = parseNullableFloat(remainingQuantity);
+
+  if (!name || parsedQty === null || parsedPrice === null || parsedRemaining === null) {
+    return Response.json({ error: 'Name, valid quantity, unit price, and remaining quantity are required' }, { status: 400 });
+  }
+
   const result = await db.feedBatch.updateMany({
     where: { id, tenantId },
     data: {
       name,
-      quantity: parseFloat(quantity),
-      unitPrice: parseFloat(unitPrice),
-      remainingQuantity: parseFloat(remainingQuantity),
+      quantity: parsedQty,
+      unitPrice: parsedPrice,
+      remainingQuantity: parsedRemaining,
     },
   });
 

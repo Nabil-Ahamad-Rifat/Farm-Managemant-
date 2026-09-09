@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { signToken } from '@/lib/auth/jwt';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 
 interface GoogleTokenResponse {
   access_token: string;
@@ -22,16 +23,33 @@ export async function GET(req: NextRequest) {
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const redirectUri = `${appUrl}/api/auth/google/callback`;
 
+  const ip = getClientIp(req);
+  if (!checkRateLimit(`google-callback:${ip}`, 20, 15 * 60 * 1000)) {
+    return NextResponse.redirect(`${appUrl}/login?error=google_rate_limited`);
+  }
+
   const { searchParams } = new URL(req.url);
   const code = searchParams.get('code');
   const error = searchParams.get('error');
+  const state = searchParams.get('state');
+  const expectedState = req.cookies.get('oauth_state')?.value;
+
+  // Always clear the one-time state cookie regardless of outcome.
+  const clearStateCookie = (response: NextResponse) => {
+    response.cookies.set('oauth_state', '', { expires: new Date(0), path: '/' });
+    return response;
+  };
 
   if (error || !code) {
-    return NextResponse.redirect(`${appUrl}/login?error=google_cancelled`);
+    return clearStateCookie(NextResponse.redirect(`${appUrl}/login?error=google_cancelled`));
+  }
+
+  if (!state || !expectedState || state !== expectedState) {
+    return clearStateCookie(NextResponse.redirect(`${appUrl}/login?error=google_invalid_state`));
   }
 
   if (!clientId || !clientSecret) {
-    return NextResponse.redirect(`${appUrl}/login?error=google_not_configured`);
+    return clearStateCookie(NextResponse.redirect(`${appUrl}/login?error=google_not_configured`));
   }
 
   try {
@@ -51,7 +69,7 @@ export async function GET(req: NextRequest) {
     const tokens = await tokenRes.json() as GoogleTokenResponse;
     if (tokens.error || !tokens.access_token) {
       console.error('Google token exchange failed:', tokens);
-      return NextResponse.redirect(`${appUrl}/login?error=google_token_failed`);
+      return clearStateCookie(NextResponse.redirect(`${appUrl}/login?error=google_token_failed`));
     }
 
     // 2. Fetch user profile from Google
@@ -60,8 +78,8 @@ export async function GET(req: NextRequest) {
     });
     const profile = await profileRes.json() as GoogleUserInfo;
 
-    if (!profile.email) {
-      return NextResponse.redirect(`${appUrl}/login?error=google_no_email`);
+    if (!profile.email || !profile.email_verified) {
+      return clearStateCookie(NextResponse.redirect(`${appUrl}/login?error=google_no_email`));
     }
 
     // 3. Find or create the user
@@ -71,7 +89,7 @@ export async function GET(req: NextRequest) {
       // New Google user — create a tenant + user automatically
       const firstName = profile.name?.split(' ')[0] || 'User';
 
-      const { newTenant, newUser } = await db.$transaction(async (tx) => {
+      const { newUser } = await db.$transaction(async (tx) => {
         const newTenant = await tx.tenant.create({
           data: { name: `${firstName}'s Farm` },
         });
@@ -89,7 +107,6 @@ export async function GET(req: NextRequest) {
       });
 
       user = newUser;
-      void newTenant; // used inside transaction
     } else if (!user.googleId) {
       // Existing email user — link their Google account
       user = await db.user.update({
@@ -116,9 +133,9 @@ export async function GET(req: NextRequest) {
       maxAge: 60 * 60 * 24 * 7,
     });
 
-    return response;
+    return clearStateCookie(response);
   } catch (err) {
     console.error('Google OAuth callback error:', err);
-    return NextResponse.redirect(`${appUrl}/login?error=google_server_error`);
+    return clearStateCookie(NextResponse.redirect(`${appUrl}/login?error=google_server_error`));
   }
 }

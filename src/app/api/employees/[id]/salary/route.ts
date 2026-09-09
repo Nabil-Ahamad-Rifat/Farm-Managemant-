@@ -17,7 +17,8 @@ export const GET = withAuth(async (req, { tenantId }, routeContext) => {
 
     return Response.json(payments);
   } catch (err: unknown) {
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    console.error('Error listing salary payments:', err);
+    return Response.json({ error: 'Failed to load salary payments' }, { status: 500 });
   }
 });
 
@@ -52,6 +53,6 @@ export const POST = withAuth(async (req, { tenantId }, routeContext) => {
     return Response.json(payment, { status: 201 });
   } catch (err: unknown) {
     console.error('Error processing salary:', err);
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    return Response.json({ error: 'Failed to record salary payment' }, { status: 500 });
   }
 });

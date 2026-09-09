@@ -1,21 +1,15 @@
 import { PrismaClient } from '@prisma/client';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
-import path from 'path';
+
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL is not set. Add it to your .env file (see .env.example).');
+}
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-function createPrismaClient() {
-  const dbUrl = process.env.DATABASE_URL || 'file:./dev.db';
-  const relativePath = dbUrl.replace('file:', '');
-  const absolutePath = path.isAbsolute(relativePath)
-    ? relativePath
-    : path.join(process.cwd(), relativePath);
+// Reuse a single client across hot reloads / lambda invocations to avoid
+// exhausting MongoDB Atlas connection pool limits.
+export const db = globalForPrisma.prisma ?? new PrismaClient();
 
-  const adapter = new PrismaBetterSqlite3({ url: absolutePath });
-  return new PrismaClient({ adapter });
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = db;
 }
-
-// In development, create a fresh client to pick up schema changes instantly
-export const db = process.env.NODE_ENV === 'production'
-  ? (globalForPrisma.prisma ?? (globalForPrisma.prisma = createPrismaClient()))
-  : createPrismaClient();

@@ -13,7 +13,8 @@ export const GET = withAuth(async (req, { tenantId }, routeContext) => {
 
     return Response.json(employee);
   } catch (err: unknown) {
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    console.error('Error fetching employee:', err);
+    return Response.json({ error: 'Failed to load employee' }, { status: 500 });
   }
 });
 
@@ -25,31 +26,30 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
     const body = await req.json();
     const { name, role, email, phone, salary, joinDate, status } = body;
 
-    const salaryVal = salary !== undefined ? parseFloat(salary) || 0 : 0;
-    const statusVal = status || 'active';
-    const joinDateVal = joinDate ? new Date(joinDate) : null;
-    const emailVal = email || null;
-    const phoneVal = phone || null;
-    const nameVal = name || '';
-    const roleVal = role || '';
-    const now = new Date();
+    const salaryVal = salary !== undefined && Number.isFinite(parseFloat(salary)) ? parseFloat(salary) : 0;
 
-    // Raw SQL update to bypass Turbopack DMMF caching — guarantees all fields persist
-    const result = await db.$executeRaw`
-      UPDATE "Employee"
-      SET "name"=${nameVal},"role"=${roleVal},"email"=${emailVal},"phone"=${phoneVal},
-          "salary"=${salaryVal},"joinDate"=${joinDateVal},"status"=${statusVal},"updatedAt"=${now}
-      WHERE "id"=${id} AND "tenantId"=${tenantId}
-    `;
+    const result = await db.employee.updateMany({
+      where: { id, tenantId },
+      data: {
+        name: name || '',
+        role: role || '',
+        email: email || null,
+        phone: phone || null,
+        salary: salaryVal,
+        joinDate: joinDate ? new Date(joinDate) : null,
+        status: status || 'active',
+      },
+    });
 
-    if (result === 0) {
+    if (result.count === 0) {
       return Response.json({ error: 'Employee not found' }, { status: 404 });
     }
 
     const updated = await db.employee.findFirst({ where: { id, tenantId } });
     return Response.json(updated);
   } catch (err: unknown) {
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    console.error('Error updating employee:', err);
+    return Response.json({ error: 'Failed to update employee' }, { status: 500 });
   }
 });
 
@@ -61,7 +61,7 @@ export const DELETE = withAuth(async (req, { tenantId }, routeContext) => {
     await db.employee.deleteMany({ where: { id, tenantId } });
     return Response.json({ success: true });
   } catch (err: unknown) {
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    console.error('Error deleting employee:', err);
+    return Response.json({ error: 'Failed to delete employee' }, { status: 500 });
   }
 });
-

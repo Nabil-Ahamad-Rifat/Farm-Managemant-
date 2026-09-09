@@ -1,20 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
 import { signToken } from '@/lib/auth/jwt';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+
+const registerSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  email: z.string().trim().toLowerCase().email().max(255),
+  password: z.string().min(8).max(200),
+  tenantName: z.string().trim().max(100).optional(),
+});
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { name, email, password, tenantName } = body as {
-    name?: string;
-    email?: string;
-    password?: string;
-    tenantName?: string;
-  };
-
-  if (!name || !email || !password) {
-    return NextResponse.json({ error: 'Name, email, and password are required' }, { status: 400 });
+  const ip = getClientIp(req);
+  if (!checkRateLimit(`register:${ip}`, 10, 60 * 60 * 1000)) {
+    return NextResponse.json({ error: 'Too many accounts created from this network. Please try again later.' }, { status: 429 });
   }
+
+  const parsed = registerSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const message = issue?.path[0] === 'password'
+      ? 'Password must be at least 8 characters'
+      : 'Name, a valid email, and password are required';
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+  const { name, email, password, tenantName } = parsed.data;
 
   const existingUser = await db.user.findUnique({ where: { email } });
   if (existingUser) {
@@ -52,7 +64,6 @@ export async function POST(req: NextRequest) {
   const response = NextResponse.json({
     user: { id: user.id, name: user.name, email: user.email, role: user.role },
     tenant,
-    token,
   }, { status: 201 });
 
   response.cookies.set('token', token, {

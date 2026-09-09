@@ -9,8 +9,10 @@ const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   google_cancelled: 'Google sign-in was cancelled.',
   google_not_configured: 'Google sign-in is not configured yet.',
   google_token_failed: 'Google authentication failed. Please try again.',
-  google_no_email: 'Could not retrieve email from Google account.',
+  google_no_email: 'Could not retrieve a verified email from Google account.',
   google_server_error: 'An error occurred during Google sign-in.',
+  google_invalid_state: 'Your sign-in session expired. Please try again.',
+  google_rate_limited: 'Too many sign-in attempts. Please wait a moment and try again.',
 };
 
 function GoogleIcon() {

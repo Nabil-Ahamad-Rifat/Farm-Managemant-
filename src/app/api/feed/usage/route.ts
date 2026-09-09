@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
+import { parseNullableFloat } from '@/lib/parse';
 
 // GET /api/feed/usage - list all feed usages
 export const GET = withAuth(async (_req, { tenantId }) => {
@@ -24,7 +25,10 @@ export const POST = withAuth(async (req, { tenantId }) => {
   const batch = await db.feedBatch.findFirst({ where: { id: feedBatchId, tenantId } });
   if (!batch) return Response.json({ error: 'Feed batch not found' }, { status: 404 });
 
-  const qtyNum = parseFloat(quantity);
+  const qtyNum = parseNullableFloat(quantity);
+  if (qtyNum === null || qtyNum <= 0) {
+    return Response.json({ error: 'A valid usage quantity greater than zero is required' }, { status: 400 });
+  }
   if (qtyNum > batch.remainingQuantity) {
     return Response.json({ error: `Insufficient stock. Only ${batch.remainingQuantity} kg remaining.` }, { status: 400 });
   }

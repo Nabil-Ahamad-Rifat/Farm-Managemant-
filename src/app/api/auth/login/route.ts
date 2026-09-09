@@ -1,14 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { db } from '@/lib/db';
 import { verifyPassword } from '@/lib/auth/password';
 import { signToken } from '@/lib/auth/jwt';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+
+const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(255),
+  password: z.string().min(1).max(200),
+});
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { email, password } = body as { email?: string; password?: string };
+  const ip = getClientIp(req);
+  if (!checkRateLimit(`login:${ip}`, 20, 15 * 60 * 1000)) {
+    return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
+  }
 
-  if (!email || !password) {
-    return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
+  const parsed = loginSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'A valid email and password are required' }, { status: 400 });
+  }
+  const { email, password } = parsed.data;
+
+  if (!checkRateLimit(`login-email:${email}`, 8, 15 * 60 * 1000)) {
+    return NextResponse.json({ error: 'Too many attempts for this account. Please try again later.' }, { status: 429 });
   }
 
   const user = await db.user.findUnique({ where: { email } });
@@ -39,7 +54,6 @@ export async function POST(req: NextRequest) {
 
   const response = NextResponse.json({
     user: { id: user.id, name: user.name, email: user.email, role: user.role },
-    token,
   });
 
   response.cookies.set('token', token, {

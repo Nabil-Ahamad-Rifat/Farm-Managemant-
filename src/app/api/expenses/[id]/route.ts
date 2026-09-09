@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { withAuth, getIdFromParams } from '@/lib/middleware/withAuth';
+import { parseNullableFloat } from '@/lib/parse';
 
 export const GET = withAuth(async (req, { tenantId }, routeContext) => {
   const id = await getIdFromParams(routeContext, req);
@@ -16,11 +17,21 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
   if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
 
   const body = await req.json();
+
+  let amount: number | undefined;
+  if (body.amount !== undefined) {
+    const parsedAmount = parseNullableFloat(body.amount);
+    if (parsedAmount === null || parsedAmount <= 0) {
+      return Response.json({ error: 'Amount must be a positive number' }, { status: 400 });
+    }
+    amount = parsedAmount;
+  }
+
   const result = await db.otherExpense.updateMany({
     where: { id, tenantId },
     data: {
       description: body.description,
-      amount: body.amount !== undefined ? parseFloat(body.amount) : undefined,
+      amount,
       category: body.category || undefined,
       expenseDate: body.expenseDate ? new Date(body.expenseDate + 'T12:00:00Z') : undefined,
     },

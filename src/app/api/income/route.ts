@@ -10,7 +10,8 @@ export const GET = withAuth(async (_req, { tenantId }) => {
     });
     return Response.json(incomes);
   } catch (err: unknown) {
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    console.error('Error handling income request:', err);
+    return Response.json({ error: 'Failed to process income record' }, { status: 500 });
   }
 });
 
@@ -41,6 +42,7 @@ export const POST = withAuth(async (req, { tenantId }) => {
 
     return Response.json(income, { status: 201 });
   } catch (err: unknown) {
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    console.error('Error handling income request:', err);
+    return Response.json({ error: 'Failed to process income record' }, { status: 500 });
   }
 });

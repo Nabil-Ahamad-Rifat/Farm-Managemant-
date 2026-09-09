@@ -30,7 +30,8 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
 
     return Response.json(updated);
   } catch (err: unknown) {
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    console.error('Error handling income record:', err);
+    return Response.json({ error: 'Failed to process income record' }, { status: 500 });
   }
 });
 
@@ -46,6 +47,7 @@ export const DELETE = withAuth(async (req, { tenantId }, routeContext) => {
     await db.otherIncome.delete({ where: { id } });
     return Response.json({ success: true });
   } catch (err: unknown) {
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    console.error('Error handling income record:', err);
+    return Response.json({ error: 'Failed to process income record' }, { status: 500 });
   }
 });

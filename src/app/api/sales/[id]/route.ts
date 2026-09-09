@@ -1,14 +1,6 @@
 import { db } from '@/lib/db';
 import { withAuth, getIdFromParams } from '@/lib/middleware/withAuth';
-
-function parseNullableFloat(val: unknown): number | null {
-  if (val === null || val === undefined || val === '') return null;
-  if (typeof val === 'string' || typeof val === 'number') {
-    const parsed = typeof val === 'string' ? parseFloat(val) : val;
-    return isNaN(parsed) ? null : parsed;
-  }
-  return null;
-}
+import { parseNullableFloat } from '@/lib/parse';
 
 export const GET = withAuth(async (req, { tenantId }, routeContext) => {
   try {
@@ -23,7 +15,8 @@ export const GET = withAuth(async (req, { tenantId }, routeContext) => {
 
     return Response.json(sale);
   } catch (err: unknown) {
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    console.error('Error fetching sale:', err);
+    return Response.json({ error: 'Failed to load sale' }, { status: 500 });
   }
 });
 
@@ -43,6 +36,12 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
     const existingSale = await db.sale.findFirst({ where: { id, tenantId } });
     if (!existingSale) return Response.json({ error: 'Sale not found' }, { status: 404 });
 
+    // If linking to a (new) cow, make sure it belongs to this tenant.
+    if (cowId && cowId !== existingSale.cowId) {
+      const cow = await db.cow.findFirst({ where: { id: cowId, tenantId } });
+      if (!cow) return Response.json({ error: 'Cow not found' }, { status: 404 });
+    }
+
     // If old cow was unlinked, revert its status
     if (existingSale.cowId && existingSale.cowId !== cowId) {
       await db.cow.updateMany({
@@ -51,24 +50,26 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
       });
     }
 
-    const cowIdVal = cowId || null;
-    const saleTypeVal = saleType || existingSale.saleType || 'general';
-    const statusVal = status || 'paid';
-    const quantityVal = parseNullableFloat(quantity);
-    const unitPriceVal = parseNullableFloat(unitPrice);
-    const notesVal = notes || null;
-    const customerNameVal = customerName || '';
-    const now = new Date();
     const saleDateTime = saleDate ? new Date(saleDate + 'T12:00:00Z') : existingSale.createdAt;
 
-    // Raw SQL update — bypasses Turbopack DMMF caching that rejects cowId/saleType
-    await db.$executeRaw`
-      UPDATE "Sale"
-      SET "customerName"=${customerNameVal},"amount"=${parsedAmount},"status"=${statusVal},
-          "cowId"=${cowIdVal},"saleType"=${saleTypeVal},"quantity"=${quantityVal},
-          "unitPrice"=${unitPriceVal},"notes"=${notesVal},"createdAt"=${saleDateTime},"updatedAt"=${now}
-      WHERE "id"=${id} AND "tenantId"=${tenantId}
-    `;
+    const result = await db.sale.updateMany({
+      where: { id, tenantId },
+      data: {
+        customerName: customerName || '',
+        amount: parsedAmount,
+        status: status || 'paid',
+        cowId: cowId || null,
+        saleType: saleType || existingSale.saleType || 'general',
+        quantity: parseNullableFloat(quantity),
+        unitPrice: parseNullableFloat(unitPrice),
+        notes: notes || null,
+        createdAt: saleDateTime,
+      },
+    });
+
+    if (result.count === 0) {
+      return Response.json({ error: 'Sale not found' }, { status: 404 });
+    }
 
     // Link new cow if provided
     if (cowId) {
@@ -81,7 +82,8 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
     const updated = await db.sale.findFirst({ where: { id, tenantId } });
     return Response.json(updated);
   } catch (err: unknown) {
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    console.error('Error updating sale:', err);
+    return Response.json({ error: 'Failed to update sale' }, { status: 500 });
   }
 });
 
@@ -102,6 +104,7 @@ export const DELETE = withAuth(async (req, { tenantId }, routeContext) => {
     await db.sale.deleteMany({ where: { id, tenantId } });
     return Response.json({ success: true });
   } catch (err: unknown) {
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    console.error('Error deleting sale:', err);
+    return Response.json({ error: 'Failed to delete sale' }, { status: 500 });
   }
 });

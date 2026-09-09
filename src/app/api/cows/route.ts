@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
+import { parseNullableFloat } from '@/lib/parse';
 
 export const GET = withAuth(async (_req, { tenantId }) => {
   const cows = await db.cow.findMany({
@@ -28,7 +29,7 @@ export const POST = withAuth(async (req, { tenantId }) => {
       tagNumber,
       name,
       breed: breed || null,
-      purchasePrice: purchasePrice !== undefined && purchasePrice !== null && purchasePrice !== '' ? parseFloat(purchasePrice) : null,
+      purchasePrice: parseNullableFloat(purchasePrice),
       status: status || 'active',
       tenantId,
     },

@@ -1,13 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { db } from '@/lib/db';
 import { generateResetToken } from '@/lib/auth/reset-token';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+
+const forgotPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(255),
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const { email } = await req.json() as { email?: string };
+    const ip = getClientIp(req);
+    if (!checkRateLimit(`forgot-password:${ip}`, 5, 15 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
+    }
 
-    if (!email) {
-      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    const parsed = forgotPasswordSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'A valid email is required' }, { status: 400 });
+    }
+    const { email } = parsed.data;
+
+    if (!checkRateLimit(`forgot-password-email:${email}`, 3, 15 * 60 * 1000)) {
+      return NextResponse.json({ message: 'If that email exists, a reset link has been sent.' });
     }
 
     // Always return success to avoid user enumeration attacks
@@ -27,7 +42,7 @@ export async function POST(req: NextRequest) {
       const resend = new Resend(apiKey);
 
       await resend.emails.send({
-        from: 'Farm Manager <no-reply@yourdomain.com>',
+        from: process.env.RESEND_FROM_EMAIL || 'Farm Manager <no-reply@yourdomain.com>',
         to: email,
         subject: 'Reset your Farm Manager password',
         html: `
