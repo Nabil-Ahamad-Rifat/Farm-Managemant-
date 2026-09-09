@@ -29,6 +29,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  transpilePackages: ["@farm/shared-types", "@farm/shared-validation", "@farm/api-client", "@farm/business-logic"],
   async headers() {
     return [
       {
