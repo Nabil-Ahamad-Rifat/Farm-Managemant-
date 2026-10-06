@@ -88,11 +88,15 @@ function LoginForm() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+          <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
             Email Address
           </label>
           <input
             className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+            id="email"
+            name="email"
+            autoComplete="email"
+            inputMode="email"
             placeholder="owner@farm.com"
             type="email"
             value={form.email}
@@ -103,13 +107,16 @@ function LoginForm() {
 
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Password</label>
+            <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Password</label>
             <Link href="/forgot-password" className="text-[11px] font-semibold text-emerald-400 hover:underline">
               Forgot password?
             </Link>
           </div>
           <input
             className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+            id="password"
+            name="password"
+            autoComplete="current-password"
             placeholder="••••••••"
             type="password"
             value={form.password}

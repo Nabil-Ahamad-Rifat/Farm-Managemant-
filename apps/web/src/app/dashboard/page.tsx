@@ -2,7 +2,12 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
-import { Users, BadgeCheck, Wheat, DollarSign, ArrowRight, TrendingUp, PackageOpen, Banknote } from 'lucide-react';
+import { collectedBetween, legacySaleFilter, listCustomersWithBalances } from '@/lib/receivables';
+import { listFeed, listSuppliersWithBalances } from '@/lib/payables';
+import { feedCostBetween } from '@/lib/feed-cost';
+import { PaymentStatusPill, CustomerTypeBadge, tk } from '@/components/sales/shared';
+import CollectButton from '@/components/sales/CollectButton';
+import { Users, BadgeCheck, Wheat, DollarSign, ArrowRight, TrendingUp, PackageOpen, Banknote, HandCoins, Phone, Store, AlertTriangle } from 'lucide-react';
 
 export default async function DashboardPage() {
   const session = await getSession();
@@ -15,6 +20,8 @@ export default async function DashboardPage() {
   // Date helpers
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  // Feed days are UTC calendar days (see feedSchedule), so its month is too.
+  const startOfMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
   thirtyDaysAgo.setHours(0, 0, 0, 0);
@@ -24,24 +31,28 @@ export default async function DashboardPage() {
     cowCount,
     activeCowsCount,
     feedBatches,
-    salesData,
+    totalCollected,
+    totalSalesCount,
     recentSales,
     recentCows,
     monthlySalaryData,
     monthlyExpenses,
     monthlyOtherIncome,
-    dailySalesData,
+    dailyPayments,
+    dailyLegacySales,
     dailyOtherIncomeData,
+    customers,
+    suppliers,
+    monthlyFeedCost,
   ] = await Promise.all([
     db.employee.findMany({ where: { tenantId } }),
     db.cow.count({ where: { tenantId } }),
     db.cow.count({ where: { tenantId, status: 'active' } }),
-    db.feedBatch.findMany({ where: { tenantId } }),
-    db.sale.aggregate({
-      where: { tenantId, status: 'paid' },
-      _sum: { amount: true },
-      _count: { id: true },
-    }),
+    // Stock left now: scheduled batches already have their daily use taken off
+    listFeed(tenantId),
+    // All money actually received from sales, ever
+    collectedBetween(tenantId, new Date(0), now),
+    db.sale.count({ where: { tenantId } }),
     db.sale.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
@@ -73,11 +84,15 @@ export default async function DashboardPage() {
           _sum: { amount: true },
         })
       : Promise.resolve({ _sum: { amount: 0 } }),
-    // Daily sales for 30-day mini chart
+    // Money received per day for the 30-day mini chart: customer payments...
+    db.payment.findMany({
+      where: { tenantId, paidAt: { gte: thirtyDaysAgo } },
+      select: { amount: true, paidAt: true },
+    }),
+    // ...plus legacy (customer-less) sales marked paid
     db.sale.findMany({
-      where: { tenantId, status: 'paid', createdAt: { gte: thirtyDaysAgo } },
+      where: { tenantId, status: 'paid', createdAt: { gte: thirtyDaysAgo }, ...legacySaleFilter },
       select: { amount: true, createdAt: true },
-      orderBy: { createdAt: 'asc' },
     }),
     // Daily other income for 30-day mini chart
     db.otherIncome.findMany({
@@ -85,6 +100,10 @@ export default async function DashboardPage() {
       select: { amount: true, incomeDate: true },
       orderBy: { incomeDate: 'asc' },
     }),
+    listCustomersWithBalances(tenantId),
+    listSuppliersWithBalances(tenantId),
+    // Purchases spread over their days, plus usage of older batches, this month so far
+    feedCostBetween(tenantId, startOfMonthUTC, now),
   ]);
 
   const employeeCount = allEmployees.length;
@@ -92,13 +111,15 @@ export default async function DashboardPage() {
 
   const totalRemainingFeed = feedBatches.reduce((acc, f) => acc + f.remainingQuantity, 0);
   const totalFeedValue = feedBatches.reduce((acc, f) => acc + f.remainingQuantity * f.unitPrice, 0);
-  const totalSalesRevenue = salesData._sum.amount ?? 0;
   const totalOtherIncome = monthlyOtherIncome._sum.amount ?? 0;
-  const totalRevenue = totalSalesRevenue + totalOtherIncome;
-  const totalSalesCount = salesData._count.id;
+  const totalRevenue = totalCollected + totalOtherIncome;
+  const owing = customers.filter((c) => c.totalDue > 0);
+  const totalDue = owing.reduce((sum, c) => sum + c.totalDue, 0);
   const monthlySalaryCost = monthlySalaryData.reduce((sum: number, p: { amount: number }) => sum + p.amount, 0);
   const monthlyOtherCost = monthlyExpenses._sum.amount ?? 0;
-  const monthlyFeedCost = feedBatches.reduce((acc, f) => acc + (f.quantity - f.remainingQuantity) * f.unitPrice, 0);
+  const owedSuppliers = suppliers.filter((s) => s.totalDue > 0);
+  const totalPayable = owedSuppliers.reduce((sum, s) => sum + s.totalDue, 0);
+  const feedRunningOut = feedBatches.filter((b) => b.schedule && b.schedule.remaining > 0 && b.schedule.daysLeft <= 1);
 
   // Build 30-day chart data
   const chartDays: { date: string; revenue: number }[] = [];
@@ -106,9 +127,13 @@ export default async function DashboardPage() {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().slice(0, 10);
-    const daySalesRevenue = dailySalesData
-      .filter(s => new Date(s.createdAt).toISOString().slice(0, 10) === dateStr)
-      .reduce((sum, s) => sum + s.amount, 0);
+    const daySalesRevenue =
+      dailyPayments
+        .filter(p => new Date(p.paidAt).toISOString().slice(0, 10) === dateStr)
+        .reduce((sum, p) => sum + p.amount, 0) +
+      dailyLegacySales
+        .filter(s => new Date(s.createdAt).toISOString().slice(0, 10) === dateStr)
+        .reduce((sum, s) => sum + s.amount, 0);
     const dayOtherIncomeRevenue = dailyOtherIncomeData
       .filter(s => new Date(s.incomeDate).toISOString().slice(0, 10) === dateStr)
       .reduce((sum, s) => sum + s.amount, 0);
@@ -144,7 +169,7 @@ export default async function DashboardPage() {
     {
       label: 'Total Revenue',
       value: `৳${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
-      subtext: `${totalSalesCount} sales + other income`,
+      subtext: `Received from ${totalSalesCount} sale${totalSalesCount === 1 ? "" : "s"} + other income`,
       href: '/dashboard/revenue',
       icon: DollarSign,
       color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
@@ -186,6 +211,126 @@ export default async function DashboardPage() {
         })}
       </div>
 
+      {feedRunningOut.length > 0 && (
+        <Link
+          href="/dashboard/feed"
+          className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 transition hover:bg-amber-100"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <span className="font-semibold">Feed running out:</span>{' '}
+            {feedRunningOut.map((b) => `${b.name} (${b.schedule!.remaining.toLocaleString()} kg left)`).join(', ')}. Buy more soon →
+          </span>
+        </Link>
+      )}
+
+      <div className="grid gap-6 xl:grid-cols-2">
+      {/* Who owes me */}
+      <div className="rounded-2xl border border-red-100 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600">
+              <HandCoins className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Who owes me</h2>
+              <p className="text-xs text-slate-500">
+                {owing.length === 0 ? 'Nobody owes you right now.' : `${owing.length} customer${owing.length === 1 ? '' : 's'} with unpaid sales`}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-red-700">Total due</p>
+              <p className="text-2xl font-extrabold text-slate-900">{tk(totalDue)}</p>
+            </div>
+            <Link href="/dashboard/customers" className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">
+              All customers <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+        {owing.length > 0 && (
+          <ul className="mt-2 divide-y divide-slate-100">
+            {owing.slice(0, 6).map((c) => (
+              <li key={c.id} className="flex items-center gap-3 rounded-lg px-2 py-3 transition hover:bg-slate-50">
+                <Link href={`/dashboard/customers/${c.id}`} className="flex min-w-0 flex-1 items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-slate-900">{c.name}</p>
+                      <CustomerTypeBadge type={c.type} />
+                    </div>
+                    <p className="flex items-center gap-1 text-xs text-slate-500">
+                      {c.phone ? <><Phone className="h-3 w-3" /> {c.phone} · </> : null}
+                      Bought {tk(c.totalSold)} · paid {tk(c.totalPaid)}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-base font-bold text-red-600">{tk(c.totalDue)}</p>
+                </Link>
+                <CollectButton party={{ id: c.id, name: c.name, totalDue: c.totalDue }} />
+              </li>
+            ))}
+          </ul>
+        )}
+        {owing.length > 6 && (
+          <Link href="/dashboard/customers" className="mt-2 block text-center text-xs font-semibold text-slate-500 hover:text-slate-900">
+            + {owing.length - 6} more
+          </Link>
+        )}
+      </div>
+
+      {/* Who I owe */}
+      <div className="rounded-2xl border border-amber-100 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+              <Store className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Who I owe</h2>
+              <p className="text-xs text-slate-500">
+                {owedSuppliers.length === 0
+                  ? 'You owe no suppliers right now.'
+                  : `${owedSuppliers.length} supplier${owedSuppliers.length === 1 ? '' : 's'} with unpaid feed`}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">Total owed</p>
+              <p className="text-2xl font-extrabold text-slate-900">{tk(totalPayable)}</p>
+            </div>
+            <Link href="/dashboard/suppliers" className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">
+              All suppliers <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+        {owedSuppliers.length > 0 && (
+          <ul className="mt-2 divide-y divide-slate-100">
+            {owedSuppliers.slice(0, 6).map((s) => (
+              <li key={s.id} className="flex items-center gap-3 rounded-lg px-2 py-3 transition hover:bg-slate-50">
+                <Link href={`/dashboard/suppliers/${s.id}`} className="flex min-w-0 flex-1 items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{s.name}</p>
+                    <p className="flex items-center gap-1 text-xs text-slate-500">
+                      {s.phone ? <><Phone className="h-3 w-3" /> {s.phone} · </> : null}
+                      Bought {tk(s.totalBought)} · paid {tk(s.totalPaid)}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-base font-bold text-red-600">{tk(s.totalDue)}</p>
+                </Link>
+                <CollectButton mode="pay" party={{ id: s.id, name: s.name, totalDue: s.totalDue }} />
+              </li>
+            ))}
+          </ul>
+        )}
+        {owedSuppliers.length > 6 && (
+          <Link href="/dashboard/suppliers" className="mt-2 block text-center text-xs font-semibold text-slate-500 hover:text-slate-900">
+            + {owedSuppliers.length - 6} more
+          </Link>
+        )}
+      </div>
+      </div>
+
       {/* Monthly Cost Summary */}
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
@@ -200,7 +345,7 @@ export default async function DashboardPage() {
         </div>
         <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Feed Cost (Used)</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Feed Cost (This Month)</p>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
               <Wheat className="h-4 w-4" />
             </div>
@@ -225,7 +370,7 @@ export default async function DashboardPage() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base font-bold text-slate-900">30-Day Revenue Trend</h2>
-            <p className="text-xs text-slate-500">Daily sales revenue over the last 30 days</p>
+            <p className="text-xs text-slate-500">Money received per day over the last 30 days</p>
           </div>
           <Link href="/dashboard/revenue" className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition">
             <TrendingUp className="h-3.5 w-3.5" /> Revenue Portal
@@ -269,12 +414,8 @@ export default async function DashboardPage() {
                     <p className="text-xs text-slate-500">{new Date(sale.createdAt).toLocaleDateString()}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-bold text-slate-900">৳{sale.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                    <span className={`inline-block text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${
-                      sale.status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                    }`}>
-                      {sale.status}
-                    </span>
+                    <p className="mb-1 text-sm font-bold text-slate-900">{tk(sale.amount)}</p>
+                    <PaymentStatusPill status={sale.customerId ? sale.status : sale.status === 'paid' ? 'paid' : 'pending'} />
                   </div>
                 </div>
               ))

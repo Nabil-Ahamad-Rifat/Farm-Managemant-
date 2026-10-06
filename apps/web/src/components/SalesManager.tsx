@@ -1,517 +1,264 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Trash2, Edit3, DollarSign, X, CheckCircle, Clock, Tag, FileText, CalendarDays } from 'lucide-react';
+import { Plus, Search, Trash2, Edit3, Wallet, HandCoins, AlertCircle, FileText, Users } from 'lucide-react';
 import type { Cow, Sale } from '@farm/shared-types';
 import { webApiClient } from '@farm/api-client';
-import { daysAgo, sumAmounts, calculateSaleAmount } from '@farm/business-logic';
-
-const SALE_TYPES = [
-  { value: 'general', label: 'General Sale' },
-  { value: 'cow_sale', label: 'Cow Sale' },
-  { value: 'milk', label: 'Milk' },
-  { value: 'products', label: 'Farm Products' },
-  { value: 'other', label: 'Other' },
-];
+import { daysAgo } from '@farm/business-logic';
+import SaleFormModal from '@/components/sales/SaleFormModal';
+import type { PickerCustomer } from '@/components/sales/CustomerPicker';
+import {
+  SummaryCard,
+  PaymentStatusPill,
+  CustomerTypeBadge,
+  productTypeInfo,
+  salePaid,
+  tk,
+  fmtDate,
+} from '@/components/sales/shared';
 
 const PERIOD_FILTERS = [
   { label: 'Today', days: 1 },
-  { label: '3 Days', days: 3 },
-  { label: '5 Days', days: 5 },
   { label: '7 Days', days: 7 },
-  { label: '15 Days', days: 15 },
   { label: '30 Days', days: 30 },
   { label: 'All', days: 0 },
 ];
 
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: 'paid', label: 'Paid' },
+  { value: 'partial', label: 'Partial' },
+  { value: 'pending', label: 'Due' },
+];
+
+const chip = (active: boolean) =>
+  `rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
+    active ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+  }`;
+
 export default function SalesManager({
   initialSales,
   activeCows,
+  customers,
+  totalDue,
+  defaultMilkPrice,
 }: {
   initialSales: Sale[];
   activeCows: Cow[];
+  customers: PickerCustomer[];
+  /** What all customers owe right now. */
+  totalDue: number;
+  defaultMilkPrice: number;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  // Default period = 1 (Today)
-  const [periodDays, setPeriodDays] = useState(1);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingSale, setEditingSale] = useState<Sale | null>(null);
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const [form, setForm] = useState({
-    customerName: '',
-    amount: '',
-    status: 'paid',
-    cowId: '',
-    saleType: 'general',
-    quantity: '',
-    unitPrice: '',
-    notes: '',
-    saleDate: todayStr,
-  });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [periodDays, setPeriodDays] = useState(30);
+  const [modal, setModal] = useState<{ sale: Sale | null } | null>(null);
 
-  // Auto-calculate amount from quantity × unitPrice
-  const calculatedAmount = useMemo(() => {
-    const result = calculateSaleAmount(form.quantity, form.unitPrice);
-    return result !== null ? result.toFixed(2) : '';
-  }, [form.quantity, form.unitPrice]);
-
-  const displayAmount = calculatedAmount !== '' ? calculatedAmount : form.amount;
-
-  function openCreateModal() {
-    setEditingSale(null);
-    setForm({ customerName: '', amount: '', status: 'paid', cowId: '', saleType: 'general', quantity: '', unitPrice: '', notes: '', saleDate: todayStr });
-    setError('');
-    setIsModalOpen(true);
-  }
-
-  function openEditModal(sale: Sale) {
-    setEditingSale(sale);
-    setForm({
-      customerName: sale.customerName,
-      amount: sale.amount.toString(),
-      status: sale.status,
-      cowId: sale.cowId || '',
-      saleType: sale.saleType || 'general',
-      quantity: sale.quantity?.toString() || '',
-      unitPrice: sale.unitPrice?.toString() || '',
-      notes: sale.notes || '',
-      saleDate: new Date(sale.createdAt).toISOString().slice(0, 10),
-    });
-    setError('');
-    setIsModalOpen(true);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    // Use calculated amount if qty+price provided, else manual amount
-    const finalAmount = calculatedAmount !== '' ? calculatedAmount : form.amount;
-
-    if (!finalAmount || parseFloat(finalAmount) <= 0) {
-      setError('Please enter a valid amount, or fill in Quantity and Unit Price.');
-      setLoading(false);
-      return;
-    }
-
-    const payload = {
-      ...form,
-      amount: finalAmount,
-      quantity: form.quantity || null,
-      unitPrice: form.unitPrice || null,
-    };
-
+  async function handleDelete(sale: Sale) {
+    const paid = salePaid(sale);
+    const msg = paid > 0 && sale.customerId
+      ? `Delete this sale of ${tk(sale.amount)}? The ${tk(paid)} paid on it stays with ${sale.customerName} and will cover their other dues (or become advance).`
+      : `Delete this sale of ${tk(sale.amount)}?`;
+    if (!confirm(msg)) return;
     try {
-      if (editingSale) {
-        await webApiClient.put(`/api/sales/${editingSale.id}`, payload, 'Failed to save sale record');
-      } else {
-        await webApiClient.post('/api/sales', payload, 'Failed to save sale record');
-      }
-
-      setIsModalOpen(false);
-      router.refresh();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm('Are you sure you want to delete this sale record?')) return;
-
-    try {
-      await webApiClient.delete(`/api/sales/${id}`);
+      await webApiClient.delete(`/api/sales/${sale.id}`);
       router.refresh();
     } catch {
-      alert('Failed to delete sale record.');
+      alert('Failed to delete sale.');
     }
   }
 
-  const filteredSales = initialSales.filter((sale) => {
+  const q = search.trim().toLowerCase();
+  const since = periodDays > 0 ? daysAgo(periodDays) : null;
+  const filtered = initialSales.filter((sale) => {
     const matchesSearch =
-      sale.customerName.toLowerCase().includes(search.toLowerCase()) ||
-      (sale.cow && (
-        sale.cow.name.toLowerCase().includes(search.toLowerCase()) ||
-        sale.cow.tagNumber.toLowerCase().includes(search.toLowerCase())
-      ));
-    const matchesStatus = statusFilter === 'all' || sale.status === statusFilter;
-
-    let matchesPeriod = true;
-    if (periodDays > 0) {
-      const since = daysAgo(periodDays);
-      matchesPeriod = new Date(sale.createdAt) >= since;
-    }
-
-    return matchesSearch && matchesStatus && matchesPeriod;
+      !q ||
+      sale.customerName.toLowerCase().includes(q) ||
+      (sale.cow && (sale.cow.name.toLowerCase().includes(q) || sale.cow.tagNumber.toLowerCase().includes(q)));
+    const status = sale.customerId ? sale.status : sale.status === 'paid' ? 'paid' : 'pending';
+    const matchesStatus = statusFilter === 'all' || status === statusFilter;
+    const matchesType = typeFilter === 'all' || sale.customer?.type === typeFilter;
+    const matchesPeriod = !since || new Date(sale.createdAt) >= since;
+    return matchesSearch && matchesStatus && matchesType && matchesPeriod;
   });
 
-  const totalRevenue = sumAmounts(filteredSales.filter(s => s.status === 'paid'));
-  const pendingRevenue = sumAmounts(filteredSales.filter(s => s.status === 'pending'));
-
-  const saleTypeLabel = (type: string) => SALE_TYPES.find(t => t.value === type)?.label || type;
-  const saleTypeColors: Record<string, string> = {
-    cow_sale: 'bg-blue-50 text-blue-700 border-blue-200',
-    milk: 'bg-sky-50 text-sky-700 border-sky-200',
-    products: 'bg-violet-50 text-violet-700 border-violet-200',
-    general: 'bg-slate-50 text-slate-700 border-slate-200',
-    other: 'bg-gray-50 text-gray-700 border-gray-200',
-  };
+  const sold = filtered.reduce((s, x) => s + x.amount, 0);
+  const paid = filtered.reduce((s, x) => s + salePaid(x), 0);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Sales & Revenue</h1>
-          <p className="mt-1 text-slate-500">Record customer sales with details: type, quantity, unit price, and notes.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Sales</h1>
+          <p className="mt-1 text-slate-500">Every sale with who bought, what, how much, and what is still due.</p>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition"
-        >
-          <Plus className="h-4 w-4" />
-          Record Sale
-        </button>
-      </div>
-
-      {/* Revenue Banners */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent p-5 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-emerald-800">Collected Revenue</p>
-            <p className="mt-1 text-2xl font-extrabold text-slate-900">
-              ৳{totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-600/20">
-            <DollarSign className="h-5 w-5" />
-          </div>
-        </div>
-        <div className="rounded-2xl border border-amber-100 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-5 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-amber-800">Pending Revenue</p>
-            <p className="mt-1 text-2xl font-extrabold text-slate-900">
-              ৳{pendingRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-600 text-white shadow-md shadow-amber-600/20">
-            <Clock className="h-5 w-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Period Tabs */}
-      <div className="flex flex-wrap gap-2">
-        {PERIOD_FILTERS.map(({ label, days }) => (
-          <button
-            key={label}
-            onClick={() => setPeriodDays(days)}
-            className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-              periodDays === days
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-            }`}
+        <div className="flex gap-2">
+          <Link
+            href="/dashboard/customers"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
+            <Users className="h-4 w-4" />
+            Customers & dues
+          </Link>
+          <button
+            onClick={() => setModal({ sale: null })}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          >
+            <Plus className="h-4 w-4" />
+            Record sale
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <SummaryCard label="Sold (filtered)" value={tk(sold)} Icon={Wallet} tone="slate" />
+        <SummaryCard label="Received on these sales" value={tk(paid)} Icon={HandCoins} tone="emerald" />
+        <Link href="/dashboard/customers" className="block">
+          <SummaryCard label="Total due — all customers" value={tk(totalDue)} Icon={AlertCircle} tone="red" hint="View who owes →" />
+        </Link>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {PERIOD_FILTERS.map(({ label, days }) => (
+          <button key={label} onClick={() => setPeriodDays(days)} className={chip(periodDays === days)}>
             {label}
+          </button>
+        ))}
+        <span className="mx-1 h-6 w-px bg-slate-200" aria-hidden="true" />
+        {STATUS_FILTERS.map((s) => (
+          <button key={s.value} onClick={() => setStatusFilter(s.value)} className={chip(statusFilter === s.value)}>
+            {s.label}
+          </button>
+        ))}
+        <span className="mx-1 h-6 w-px bg-slate-200" aria-hidden="true" />
+        {['all', 'regular', 'new'].map((t) => (
+          <button key={t} onClick={() => setTypeFilter(t)} className={`${chip(typeFilter === t)} capitalize`}>
+            {t === 'all' ? 'All customers' : t}
           </button>
         ))}
       </div>
 
-      {/* Search & Status Filters */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center justify-between">
-        <div className="relative max-w-md flex-1">
-          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by customer name or cow tag..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-slate-400 focus:outline-none"
-          />
-        </div>
-        <div className="flex gap-2">
-          {['all', 'paid', 'pending'].map((status) => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={`rounded-xl px-3.5 py-2 text-xs font-semibold capitalize transition ${
-                statusFilter === status
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              {status}
-            </button>
-          ))}
-        </div>
+      <div className="relative max-w-md">
+        <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          aria-label="Search sales"
+          placeholder="Search by customer name or cow tag..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-slate-400 focus:outline-none"
+        />
       </div>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Customer</th>
-              <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Type</th>
-              <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Qty × Price</th>
-              <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Amount</th>
-              <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-              <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
-              <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
+              {['Customer', 'Product', 'Qty × Price', 'Amount', 'Paid', 'Due', 'Status', 'Date'].map((h) => (
+                <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>
+              ))}
+              <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
-            {filteredSales.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-10 text-center text-sm text-slate-500">
-                  No sales transactions found.
+                <td colSpan={9} className="py-12 text-center text-sm text-slate-500">
+                  No sales match these filters.
                 </td>
               </tr>
             ) : (
-              filteredSales.map((sale) => (
-                <tr key={sale.id} className="hover:bg-slate-50/50 transition">
-                  <td className="px-5 py-4 whitespace-nowrap">
-                    <p className="text-sm font-semibold text-slate-900">{sale.customerName}</p>
-                    {sale.cow && (
-                      <p className="text-[11px] text-slate-400">{sale.cow.name} ({sale.cow.tagNumber})</p>
-                    )}
-                    {sale.notes && (
-                      <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                        <FileText className="h-3 w-3" /> {sale.notes}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold uppercase px-2 py-0.5 rounded-full border ${saleTypeColors[sale.saleType] || saleTypeColors.general}`}>
-                      <Tag className="h-3 w-3" />
-                      {saleTypeLabel(sale.saleType)}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">
-                    {sale.quantity != null && sale.unitPrice != null
-                      ? <span className="font-semibold">{sale.quantity} × <span className="text-emerald-600">৳{sale.unitPrice}</span></span>
-                      : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-5 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
-                    ৳{sale.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-5 py-4 whitespace-nowrap text-sm">
-                    <span className={`inline-flex items-center gap-1 text-xs font-semibold uppercase px-2.5 py-1 rounded-full ${
-                      sale.status === 'paid'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-amber-50 text-amber-700 border border-amber-200'
-                    }`}>
-                      {sale.status === 'paid' ? <CheckCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
-                      {sale.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 whitespace-nowrap text-sm text-slate-500">
-                    {new Date(sale.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-5 py-4 whitespace-nowrap text-right text-sm">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => openEditModal(sale)}
-                        className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition"
-                        title="Edit sale"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(sale.id)}
-                        className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 transition"
-                        title="Delete sale"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              filtered.map((sale) => {
+                const info = productTypeInfo(sale.saleType);
+                const salePaidAmt = salePaid(sale);
+                const due = Math.max(0, sale.amount - salePaidAmt);
+                const status = sale.customerId ? sale.status : sale.status === 'paid' ? 'paid' : 'pending';
+                return (
+                  <tr key={sale.id} className="transition hover:bg-slate-50/50">
+                    <td className="whitespace-nowrap px-5 py-4">
+                      <div className="flex items-center gap-2">
+                        {sale.customerId ? (
+                          <Link href={`/dashboard/customers/${sale.customerId}`} className="text-sm font-semibold text-slate-900 hover:underline">
+                            {sale.customerName}
+                          </Link>
+                        ) : (
+                          <span className="text-sm font-semibold text-slate-900">{sale.customerName}</span>
+                        )}
+                        {sale.customer && <CustomerTypeBadge type={sale.customer.type} />}
+                      </div>
+                      {sale.cow && <p className="text-[11px] text-slate-400">{sale.cow.name} ({sale.cow.tagNumber})</p>}
+                      {sale.notes && (
+                        <p className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400">
+                          <FileText className="h-3 w-3" /> {sale.notes}
+                        </p>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase ${info.color}`}>
+                        {info.label}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">
+                      {sale.quantity != null && sale.unitPrice != null ? (
+                        <span>
+                          {sale.quantity}{info.unit ? ` ${info.unit}` : ''} × {tk(sale.unitPrice)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-sm font-bold text-slate-900">{tk(sale.amount)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-emerald-700">{tk(salePaidAmt)}</td>
+                    <td className={`whitespace-nowrap px-5 py-4 text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-slate-300'}`}>
+                      {due > 0 ? tk(due) : '—'}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4"><PaymentStatusPill status={status} /></td>
+                    <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-500">{fmtDate(sale.createdAt)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-right">
+                      <div className="flex justify-end gap-1">
+                        <button
+                          onClick={() => setModal({ sale })}
+                          className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                          aria-label={`Edit sale to ${sale.customerName}`}
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(sale)}
+                          className="rounded-lg p-2 text-red-500 transition hover:bg-red-50 hover:text-red-700"
+                          aria-label={`Delete sale to ${sale.customerName}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Sale Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl border border-slate-100 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <h2 className="text-lg font-bold text-slate-900">
-                {editingSale ? 'Edit Transaction' : 'Record New Sale'}
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {error && (
-              <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-medium text-red-700 border border-red-100">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-              {/* Customer Name */}
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Customer / Buyer Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Abdul Karim"
-                  value={form.customerName}
-                  onChange={(e) => setForm({ ...form, customerName: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                />
-              </div>
-
-              {/* Sale Type */}
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Sale Type</label>
-                <select
-                  value={form.saleType}
-                  onChange={(e) => setForm({ ...form, saleType: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                >
-                  {SALE_TYPES.map(t => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Quantity × Unit Price */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Quantity</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="e.g. 10"
-                    value={form.quantity}
-                    onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Unit Price (৳)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="e.g. 85.00"
-                    value={form.unitPrice}
-                    onChange={(e) => setForm({ ...form, unitPrice: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Total Amount */}
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-                  Total Amount (৳)
-                  {calculatedAmount && (
-                    <span className="ml-2 text-emerald-600 normal-case font-normal">
-                      Auto: ৳{calculatedAmount}
-                    </span>
-                  )}
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required={!calculatedAmount}
-                  placeholder="e.g. 850.00"
-                  value={displayAmount}
-                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                  readOnly={!!calculatedAmount}
-                  className={`w-full rounded-xl border px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none ${
-                    calculatedAmount ? 'bg-emerald-50 border-emerald-200 text-slate-700 font-semibold' : 'border-slate-200'
-                  }`}
-                />
-              </div>
-
-              {/* Sale Date */}
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-                  <CalendarDays className="inline h-3.5 w-3.5 mr-1" />Sale Date
-                </label>
-                <input
-                  type="date"
-                  value={form.saleDate}
-                  max={todayStr}
-                  onChange={(e) => setForm({ ...form, saleDate: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                />
-              </div>
-
-              {/* Link Livestock */}
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Link Livestock (Optional)</label>
-                <select
-                  value={form.cowId}
-                  onChange={(e) => setForm({ ...form, cowId: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                >
-                  <option value="">None</option>
-                  {activeCows.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.tagNumber})</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Payment Status */}
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Payment Status</label>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                >
-                  <option value="paid">Paid</option>
-                  <option value="pending">Pending</option>
-                </select>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Notes (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Morning milk delivery"
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : 'Save Transaction'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {modal && (
+        <SaleFormModal
+          customers={customers}
+          activeCows={activeCows}
+          sale={modal.sale}
+          defaultMilkPrice={defaultMilkPrice}
+          onClose={() => setModal(null)}
+          onSaved={() => {
+            setModal(null);
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );

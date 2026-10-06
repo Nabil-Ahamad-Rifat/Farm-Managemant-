@@ -83,9 +83,12 @@ export default function RegisterPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Full Name</label>
+            <label htmlFor="name" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Full Name</label>
             <input
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+              id="name"
+              name="name"
+              autoComplete="name"
               placeholder="e.g. Sarah Jenkins"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -94,9 +97,13 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Email Address</label>
+            <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Email Address</label>
             <input
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+              id="email"
+              name="email"
+              autoComplete="email"
+              inputMode="email"
               placeholder="sarah@greenfield.com"
               type="email"
               value={form.email}
@@ -106,9 +113,12 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Password</label>
+            <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Password</label>
             <input
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+              id="password"
+              name="password"
+              autoComplete="new-password"
               placeholder="At least 8 characters"
               type="password"
               minLength={8}
@@ -119,9 +129,12 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Farm / Enterprise Name</label>
+            <label htmlFor="tenantName" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Farm / Enterprise Name</label>
             <input
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+              id="tenantName"
+              name="tenantName"
+              autoComplete="organization"
               placeholder="e.g. Greenfield Organic Farm"
               value={form.tenantName}
               onChange={(e) => setForm({ ...form, tenantName: e.target.value })}

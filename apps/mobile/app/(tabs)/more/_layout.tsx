@@ -8,6 +8,8 @@ export default function MoreLayout() {
       <Stack.Screen name="income" options={{ title: 'Other Income' }} />
       <Stack.Screen name="expenses" options={{ title: 'Other Expenses' }} />
       <Stack.Screen name="revenue" options={{ title: 'Revenue Portal' }} />
+      <Stack.Screen name="ranch" options={{ title: 'New Ranch' }} />
+      <Stack.Screen name="delete-account" options={{ title: 'Delete Account' }} />
     </Stack>
   );
 }

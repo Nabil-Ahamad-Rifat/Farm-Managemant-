@@ -1,77 +1,41 @@
 "use client";
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Trash2, Edit3, Wheat, AlertTriangle, X, BarChart2, Droplets } from 'lucide-react';
+import { Plus, Search, Trash2, Edit3, Wheat, AlertTriangle, X, BarChart2, Droplets, CalendarClock, Store } from 'lucide-react';
 import type { FeedBatch } from '@farm/shared-types';
 import { webApiClient } from '@farm/api-client';
-import { isLowStock, stockPercentage, totalStockValue, totalBatchCost } from '@farm/business-logic';
+import { isLowStock, stockPercentage, totalStockValue } from '@farm/business-logic';
+import FeedPurchaseModal, { PRESET_FEED_NAMES } from '@/components/feed/FeedPurchaseModal';
+import type { PickerCustomer } from '@/components/sales/CustomerPicker';
+import { PaymentStatusPill, SummaryCard, tk, fmtDate } from '@/components/sales/shared';
+import { feedPayStatus } from '@/components/feed/shared';
 
-const PRESET_FEED_NAMES = ['Bushi', 'Butta', 'Gom', 'Chaw', 'Khud', 'Soyabin', 'Khoil', 'Dhan', 'Kaher', 'Atta'];
-
-export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] }) {
+export default function FeedManager({
+  initialFeed,
+  suppliers,
+  feedCostToday,
+  totalPayable,
+}: {
+  initialFeed: FeedBatch[];
+  suppliers: PickerCustomer[];
+  /** Today's share of all scheduled purchases plus today's usage of older batches. */
+  feedCostToday: number;
+  totalPayable: number;
+}) {
   const router = useRouter();
   const [search, setSearch] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
-  const [editingFeed, setEditingFeed] = useState<FeedBatch | null>(null);
+  const [purchaseModal, setPurchaseModal] = useState<{ batch: FeedBatch | null } | null>(null);
   const [usageFeed, setUsageFeed] = useState<FeedBatch | null>(null);
-  const [form, setForm] = useState({
-    name: '',
-    quantity: '',
-    unitPrice: '',
-    remainingQuantity: '',
-  });
   const [usageForm, setUsageForm] = useState({ quantity: '', note: '' });
-  const [error, setError] = useState('');
   const [usageError, setUsageError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  function openCreateModal() {
-    setEditingFeed(null);
-    setForm({ name: '', quantity: '', unitPrice: '', remainingQuantity: '' });
-    setError('');
-    setIsModalOpen(true);
-  }
-
-  function openEditModal(feed: FeedBatch) {
-    setEditingFeed(feed);
-    setForm({
-      name: feed.name,
-      quantity: feed.quantity.toString(),
-      unitPrice: feed.unitPrice.toString(),
-      remainingQuantity: feed.remainingQuantity.toString(),
-    });
-    setError('');
-    setIsModalOpen(true);
-  }
 
   function openUsageModal(feed: FeedBatch) {
     setUsageFeed(feed);
     setUsageForm({ quantity: '', note: '' });
     setUsageError('');
-    setIsUsageModalOpen(true);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      if (editingFeed) {
-        await webApiClient.put(`/api/feed/${editingFeed.id}`, form, 'Failed to save feed batch');
-      } else {
-        await webApiClient.post('/api/feed', form, 'Failed to save feed batch');
-      }
-
-      setIsModalOpen(false);
-      router.refresh();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
   }
 
   async function handleUsageSubmit(e: React.FormEvent) {
@@ -82,7 +46,7 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
 
     try {
       await webApiClient.post('/api/feed/usage', { feedBatchId: usageFeed.id, ...usageForm }, 'Failed to record usage');
-      setIsUsageModalOpen(false);
+      setUsageFeed(null);
       router.refresh();
     } catch (err) {
       setUsageError((err as Error).message);
@@ -91,23 +55,23 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Are you sure you want to delete this feed batch record?')) return;
+  async function handleDelete(item: FeedBatch) {
+    const owedNote = item.supplier ? ` Payments to ${item.supplier.name} stay and count towards their other purchases.` : '';
+    if (!confirm(`Delete the ${item.name} purchase of ${item.quantity} kg?${owedNote}`)) return;
 
     try {
-      await webApiClient.delete(`/api/feed/${id}`);
+      await webApiClient.delete(`/api/feed/${item.id}`);
       router.refresh();
     } catch {
       alert('Failed to delete feed batch.');
     }
   }
 
-  const filteredFeed = initialFeed.filter((item) =>
-    item.name.toLowerCase().includes(search.toLowerCase())
+  const q = search.toLowerCase();
+  const filteredFeed = initialFeed.filter(
+    (item) => item.name.toLowerCase().includes(q) || (item.supplier?.name ?? '').toLowerCase().includes(q),
   );
-
-  const totalFeedValue = totalStockValue(filteredFeed);
-  const totalFeedCost = totalBatchCost(initialFeed);
+  const runningLow = initialFeed.filter((b) => b.schedule && b.schedule.remaining > 0 && b.schedule.daysLeft <= 1);
 
   return (
     <div className="space-y-6">
@@ -115,319 +79,135 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Feed Inventory</h1>
-          <p className="mt-1 text-slate-500">Track feed batches (Bushi, Butta, Gom, Chaw, Khud), stock levels, and costs.</p>
+          <p className="mt-1 text-slate-500">What you bought, from whom, how long it lasts, and what it costs per day.</p>
         </div>
         <button
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition"
+          onClick={() => setPurchaseModal({ batch: null })}
+          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
         >
           <Plus className="h-4 w-4" />
-          Add Feed Batch
+          Buy feed
         </button>
       </div>
 
-      {/* Feed Cost Summary Banners */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="rounded-2xl border border-amber-100 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-5 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-amber-800">Total Feed Investment</p>
-            <p className="mt-1 text-2xl font-extrabold text-slate-900">
-              ৳{totalFeedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <p className="text-xs text-amber-700 mt-1">{initialFeed.length} batches purchased</p>
-          </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-600 text-white shadow-md shadow-amber-600/20">
-            <Wheat className="h-5 w-5" />
-          </div>
-        </div>
-        <div className="rounded-2xl border border-green-100 bg-gradient-to-r from-green-500/10 via-green-500/5 to-transparent p-5 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-green-800">Current Stock Value</p>
-            <p className="mt-1 text-2xl font-extrabold text-slate-900">
-              ৳{totalFeedValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <p className="text-xs text-green-700 mt-1">Remaining inventory</p>
-          </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-600 text-white shadow-md shadow-green-600/20">
-            <BarChart2 className="h-5 w-5" />
-          </div>
-        </div>
+      {/* Summary */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <SummaryCard label="Feed cost today" value={tk(feedCostToday)} Icon={CalendarClock} tone="slate" hint="Each purchase split over its days" />
+        <SummaryCard label="Current stock value" value={tk(Math.round(totalStockValue(initialFeed)))} Icon={BarChart2} tone="emerald" />
+        <Link href="/dashboard/suppliers" className="block">
+          <SummaryCard label="You owe suppliers" value={tk(totalPayable)} Icon={Store} tone="red" hint="Open suppliers →" />
+        </Link>
       </div>
 
-      {/* Quick Preset Tags */}
+      {runningLow.length > 0 && (
+        <div role="status" className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            <span className="font-semibold">Running out soon:</span>{' '}
+            {runningLow.map((b) => `${b.name} (${b.schedule!.remaining.toLocaleString()} kg left)`).join(', ')}. Time to buy more.
+          </p>
+        </div>
+      )}
+
+      {/* Quick filter + search */}
       <div className="flex flex-wrap gap-2">
-        <span className="text-xs text-slate-500 self-center font-medium">Quick filter:</span>
+        <span className="self-center text-xs font-medium text-slate-500">Quick filter:</span>
         {PRESET_FEED_NAMES.map((name) => (
           <button
             key={name}
             onClick={() => setSearch(search === name ? '' : name)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold border transition ${
-              search === name
-                ? 'bg-amber-600 text-white border-amber-600'
-                : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+              search === name ? 'border-amber-600 bg-amber-600 text-white' : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
             }`}
           >
             {name}
           </button>
         ))}
       </div>
-
-      {/* Search */}
       <div className="relative max-w-md">
         <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <input
           type="text"
-          placeholder="Search feed batches..."
+          aria-label="Search feed"
+          placeholder="Search feed or supplier..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-slate-400 focus:outline-none"
+          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-slate-400 focus:outline-none"
         />
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Feed Name</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Initial Qty (kg)</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Unit Price (৳/kg)</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Remaining (kg)</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Stock Value</th>
-              <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
+              {['Feed', 'Supplier', 'Bought', 'Total', 'Per day', 'Days left', 'Stock left'].map((h) => (
+                <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>
+              ))}
+              <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
             {filteredFeed.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-10 text-center text-sm text-slate-500">
-                  No feed batches recorded.
+                <td colSpan={8} className="py-10 text-center text-sm text-slate-500">
+                  {initialFeed.length === 0 ? 'No feed bought yet. Use “Buy feed” to record your first purchase.' : 'No feed matches.'}
                 </td>
               </tr>
             ) : (
-              filteredFeed.map((item) => {
-                const lowStock = isLowStock(item);
-                const stockPct = stockPercentage(item);
-                const totalValue = item.remainingQuantity * item.unitPrice;
-                return (
-                  <tr key={item.id} className="hover:bg-slate-50/50 transition">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-                          <Wheat className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{item.name}</p>
-                          <div className="mt-1 w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${lowStock ? 'bg-red-400' : 'bg-emerald-400'}`}
-                              style={{ width: `${Math.min(stockPct, 100)}%` }}
-                            />
-                          </div>
-                          <p className="text-[10px] text-slate-400">{stockPct}% remaining</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">{item.quantity.toLocaleString()}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">৳{item.unitPrice.toFixed(2)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-900">
-                      <div className="flex items-center gap-2">
-                        <span>{item.remainingQuantity.toLocaleString()}</span>
-                        {lowStock && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
-                            <AlertTriangle className="h-3 w-3" /> Low Stock
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600">
-                      ৳{totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => openUsageModal(item)}
-                          className="rounded-lg px-2 py-1.5 text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition flex items-center gap-1"
-                          title="Record feed usage"
-                        >
-                          <Droplets className="h-3.5 w-3.5" /> Use
-                        </button>
-                        <button
-                          onClick={() => openEditModal(item)}
-                          className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition"
-                          title="Edit feed batch"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 transition"
-                          title="Delete feed batch"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
+              filteredFeed.map((item) => <FeedRow key={item.id} item={item} onUse={openUsageModal} onEdit={(b) => setPurchaseModal({ batch: b })} onDelete={handleDelete} />)
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Feed Add/Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border border-slate-100">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <h2 className="text-lg font-bold text-slate-900">
-                {editingFeed ? 'Edit Feed Batch' : 'Add New Feed Batch'}
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {error && (
-              <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-medium text-red-700 border border-red-100">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Feed / Grain Name</label>
-                <input
-                  type="text"
-                  required
-                  list="feed-presets"
-                  placeholder="e.g. Bushi, Butta, Gom, Chaw, Khud..."
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                />
-                <datalist id="feed-presets">
-                  {PRESET_FEED_NAMES.map(n => <option key={n} value={n} />)}
-                </datalist>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {PRESET_FEED_NAMES.map(n => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setForm({ ...form, name: n })}
-                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold border transition ${
-                        form.name === n
-                          ? 'bg-amber-600 text-white border-amber-600'
-                          : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Total Quantity (kg)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  required
-                  placeholder="e.g. 500"
-                  value={form.quantity}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setForm({
-                      ...form,
-                      quantity: val,
-                      remainingQuantity: editingFeed ? form.remainingQuantity : val,
-                    });
-                  }}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Unit Price (৳ per kg)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  placeholder="e.g. 35.00"
-                  value={form.unitPrice}
-                  onChange={(e) => setForm({ ...form, unitPrice: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Remaining Quantity (kg)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  placeholder="Defaults to initial quantity"
-                  value={form.remainingQuantity}
-                  onChange={(e) => setForm({ ...form, remainingQuantity: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                />
-              </div>
-
-              {form.quantity && form.unitPrice && (
-                <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-xs text-amber-800">
-                  Total batch cost: <span className="font-bold">৳{(parseFloat(form.quantity) * parseFloat(form.unitPrice)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : 'Save Feed Batch'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {purchaseModal && (
+        <FeedPurchaseModal
+          suppliers={suppliers}
+          batch={purchaseModal.batch}
+          onClose={() => setPurchaseModal(null)}
+          onSaved={() => {
+            setPurchaseModal(null);
+            router.refresh();
+          }}
+        />
       )}
 
       {/* Feed Usage Modal */}
-      {isUsageModalOpen && usageFeed && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-slate-100">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+      {usageFeed && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Record feed usage">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-100 bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Record Feed Usage</h2>
-                <p className="text-xs text-slate-500 mt-0.5">{usageFeed.name}</p>
+                <h2 className="text-lg font-bold text-slate-900">{usageFeed.schedule ? 'Record extra use' : 'Record Feed Usage'}</h2>
+                <p className="mt-0.5 text-xs text-slate-500">{usageFeed.name}</p>
               </div>
-              <button onClick={() => setIsUsageModalOpen(false)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+              <button onClick={() => setUsageFeed(null)} aria-label="Close" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="mt-3 rounded-xl bg-amber-50 border border-amber-100 p-3 text-xs text-amber-800">
+            <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
               Available stock: <span className="font-bold">{usageFeed.remainingQuantity.toLocaleString()} kg</span>
+              {usageFeed.schedule && (
+                <p className="mt-1">
+                  {usageFeed.schedule.perDayQty.toLocaleString()} kg/day is taken off automatically. Record only extra use here — it lowers
+                  stock, not cost.
+                </p>
+              )}
             </div>
 
             {usageError && (
-              <div className="mt-3 rounded-xl bg-red-50 p-3 text-xs font-medium text-red-700 border border-red-100">
+              <div role="alert" className="mt-3 rounded-xl border border-red-100 bg-red-50 p-3 text-xs font-medium text-red-700">
                 {usageError}
               </div>
             )}
 
             <form onSubmit={handleUsageSubmit} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Quantity Used (kg)</label>
+                <label htmlFor="usage-qty" className="mb-1 block text-xs font-semibold uppercase text-slate-600">Quantity Used (kg)</label>
                 <input
+                  id="usage-qty"
                   type="number"
                   step="0.1"
                   min="0.1"
@@ -440,22 +220,23 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Note (Optional)</label>
+                <label htmlFor="usage-note" className="mb-1 block text-xs font-semibold uppercase text-slate-600">Note (Optional)</label>
                 <input
+                  id="usage-note"
                   type="text"
-                  placeholder="e.g. Morning feeding"
+                  placeholder={usageFeed.schedule ? 'e.g. Spilled, given to calves' : 'e.g. Morning feeding'}
                   value={usageForm.note}
                   onChange={(e) => setUsageForm({ ...usageForm, note: e.target.value })}
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
                 />
               </div>
-              {usageForm.quantity && (
-                <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-xs text-slate-600">
-                  Feed cost: <span className="font-bold">৳{(parseFloat(usageForm.quantity) * usageFeed.unitPrice).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              {usageForm.quantity && !usageFeed.schedule && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
+                  Feed cost: <span className="font-bold">{tk(parseFloat(usageForm.quantity) * usageFeed.unitPrice)}</span>
                 </div>
               )}
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <button type="button" onClick={() => setIsUsageModalOpen(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+                <button type="button" onClick={() => setUsageFeed(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
                   Cancel
                 </button>
                 <button type="submit" disabled={loading} className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50">
@@ -467,5 +248,118 @@ export default function FeedManager({ initialFeed }: { initialFeed: FeedBatch[] 
         </div>
       )}
     </div>
+  );
+}
+
+function FeedRow({
+  item,
+  onUse,
+  onEdit,
+  onDelete,
+}: {
+  item: FeedBatch;
+  onUse: (b: FeedBatch) => void;
+  onEdit: (b: FeedBatch) => void;
+  onDelete: (b: FeedBatch) => void;
+}) {
+  const s = item.schedule;
+  const total = item.quantity * item.unitPrice;
+  const status = feedPayStatus(item);
+  const due = item.supplierId ? Math.max(0, total - (item.paidAmount ?? 0)) : 0;
+  const low = s ? s.remaining > 0 && s.daysLeft <= 1 : isLowStock(item);
+  const finished = s ? s.remaining <= 0 : item.remainingQuantity <= 0;
+  const pct = s ? Math.round((s.daysLeft / s.coverDays) * 100) : stockPercentage(item);
+
+  return (
+    <tr className={`transition hover:bg-slate-50/50 ${finished ? 'opacity-60' : ''}`}>
+      <td className="whitespace-nowrap px-5 py-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+            <Wheat className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">{item.name}</p>
+            <p className="text-[11px] text-slate-400">{fmtDate(item.purchasedAt ?? item.createdAt)}</p>
+          </div>
+        </div>
+      </td>
+      <td className="whitespace-nowrap px-5 py-4 text-sm">
+        {item.supplier ? (
+          <Link href={`/dashboard/suppliers/${item.supplier.id}`} className="font-medium text-slate-700 hover:text-slate-900 hover:underline">
+            {item.supplier.name}
+          </Link>
+        ) : (
+          <span className="text-slate-300">—</span>
+        )}
+      </td>
+      <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">
+        <span className="font-medium text-slate-900">{item.quantity.toLocaleString()} kg</span>
+        <span className="block text-[11px] text-slate-400">at {tk(item.unitPrice)}/kg</span>
+      </td>
+      <td className="whitespace-nowrap px-5 py-4 text-sm">
+        <p className="mb-1 font-bold text-slate-900">{tk(total)}</p>
+        <PaymentStatusPill status={status} />
+        {due > 0 && <span className="ml-1 text-[11px] font-semibold text-red-600">{tk(due)} due</span>}
+      </td>
+      <td className="whitespace-nowrap px-5 py-4 text-sm">
+        {s ? (
+          <>
+            <p className="font-semibold text-slate-900">{tk(s.perDayCost)}</p>
+            <p className="text-[11px] text-slate-500">{s.perDayQty.toLocaleString()} kg/day</p>
+          </>
+        ) : (
+          <span className="text-xs text-slate-400">By usage</span>
+        )}
+      </td>
+      <td className="whitespace-nowrap px-5 py-4 text-sm">
+        <div className="w-28">
+          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className={`h-full rounded-full transition-all ${low ? 'bg-red-400' : 'bg-emerald-400'}`}
+              style={{ width: `${Math.max(0, Math.min(pct, 100))}%` }}
+            />
+          </div>
+          {s ? (
+            <p className={`mt-1 text-[11px] font-semibold ${low ? 'text-red-600' : finished ? 'text-slate-400' : 'text-slate-600'}`}>
+              {finished
+                ? `Finished ${fmtDate(s.runsOutOn)}`
+                : s.daysLeft === 0
+                  ? 'Last day today'
+                  : `${s.daysLeft} day${s.daysLeft === 1 ? '' : 's'} left · to ${fmtDate(s.runsOutOn).replace(/ \d{4}$/, '')}`}
+            </p>
+          ) : (
+            <p className="mt-1 text-[11px] text-slate-400">{pct}% remaining</p>
+          )}
+        </div>
+      </td>
+      <td className="whitespace-nowrap px-5 py-4 text-sm font-semibold text-slate-900">
+        <div className="flex items-center gap-2">
+          <span>{item.remainingQuantity.toLocaleString()} kg</span>
+          {low && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+              <AlertTriangle className="h-3 w-3" /> {s ? 'Running low' : 'Low Stock'}
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="whitespace-nowrap px-5 py-4 text-right text-sm">
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => onUse(item)}
+            disabled={finished}
+            className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-40"
+            title={s ? 'Record extra use' : 'Record feed usage'}
+          >
+            <Droplets className="h-3.5 w-3.5" /> Use
+          </button>
+          <button onClick={() => onEdit(item)} className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" aria-label={`Edit ${item.name}`}>
+            <Edit3 className="h-4 w-4" />
+          </button>
+          <button onClick={() => onDelete(item)} className="rounded-lg p-1.5 text-red-500 transition hover:bg-red-50 hover:text-red-700" aria-label={`Delete ${item.name}`}>
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }

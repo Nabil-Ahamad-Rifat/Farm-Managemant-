@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Home, Users, BadgeCheck, Wheat, DollarSign, Sprout, TrendingUp, PackageOpen, Coins } from 'lucide-react';
+import { Home, Users, BadgeCheck, Wheat, DollarSign, Sprout, TrendingUp, PackageOpen, Coins, Settings, HandCoins, Store, CalendarRange } from 'lucide-react';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import LogoutButton from '@/components/LogoutButton';
@@ -9,10 +9,14 @@ const links = [
   { href: '/dashboard/employees', label: 'Employees', icon: Users },
   { href: '/dashboard/cows', label: 'Cows (Herd)', icon: BadgeCheck },
   { href: '/dashboard/feed', label: 'Feed Inventory', icon: Wheat },
-  { href: '/dashboard/sales', label: 'Sales & Revenue', icon: DollarSign },
+  { href: '/dashboard/suppliers', label: 'Suppliers & Payables', icon: Store },
+  { href: '/dashboard/sales', label: 'Sales', icon: DollarSign },
+  { href: '/dashboard/customers', label: 'Customers & Dues', icon: HandCoins },
+  { href: '/dashboard/reports', label: 'Monthly Report', icon: CalendarRange },
   { href: '/dashboard/income', label: 'Other Income', icon: Coins },
   { href: '/dashboard/revenue', label: 'Revenue Portal', icon: TrendingUp },
   { href: '/dashboard/expenses', label: 'Other Expenses', icon: PackageOpen },
+  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {

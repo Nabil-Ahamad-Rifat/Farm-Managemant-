@@ -30,6 +30,10 @@ export default function OverviewScreen() {
   }, []);
 
   useEffect(() => {
+    // setLoading(false) only runs once fetchOverview's promise settles, not
+    // synchronously within this effect — the rule can't see through the
+    // .finally() boundary, but there's no cascading-render risk here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchOverview().finally(() => setLoading(false));
   }, [fetchOverview]);
 

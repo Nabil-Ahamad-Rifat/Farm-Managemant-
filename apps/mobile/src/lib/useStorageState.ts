@@ -60,7 +60,10 @@ export function useStorageState(key: string): UseStateHook<string> {
       setState(value);
       setStorageItemAsync(key, value);
     },
-    [key]
+    // setState is useReducer's dispatch (via useAsyncState above) — React
+    // guarantees its identity never changes, so listing it is safe and just
+    // satisfies the rule; it will never actually trigger a re-create.
+    [key, setState]
   );
 
   return [state, setValue];

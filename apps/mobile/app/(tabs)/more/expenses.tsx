@@ -4,6 +4,7 @@ import { Plus, Search, Edit3, Trash2, PackageOpen } from 'lucide-react-native';
 import type { OtherExpense } from '@farm/shared-types';
 import { daysAgo, sumAmounts, formatCurrency } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';
+import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { useCrudList } from '@/src/hooks/useCrudList';
 import { FormModal, TextField, ChipGroup, DateField, PrimaryButton, IconButton, EmptyState, StatCard, useConfirm } from '@/src/components/ui';
 
@@ -41,11 +42,13 @@ export default function ExpensesScreen() {
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [createKey, setCreateKey] = useState(generateIdempotencyKey);
 
   function openCreate() {
     setEditing(null);
     setForm(emptyForm);
     setError('');
+    setCreateKey(generateIdempotencyKey());
     setModalOpen(true);
   }
 
@@ -62,13 +65,17 @@ export default function ExpensesScreen() {
   }
 
   async function handleSubmit() {
+    if (!form.description.trim() || !form.amount || parseFloat(form.amount) <= 0) {
+      setError('A description and a valid amount are required.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
       if (editing) {
         await mobileApiClient.put(`/api/expenses/${editing.id}`, form, 'Failed to save expense');
       } else {
-        await mobileApiClient.post('/api/expenses', form, 'Failed to save expense');
+        await mobileApiClient.post('/api/expenses', form, 'Failed to save expense', { idempotencyKey: createKey });
       }
       setModalOpen(false);
       await reload();

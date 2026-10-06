@@ -1,0 +1,60 @@
+import { customerMonths, monthBounds, monthKey, monthlyStatement, type MonthLine } from '@farm/business-logic';
+import { db } from '@/lib/db';
+
+/** "YYYY-MM" if valid, else the current month. */
+export function parseMonth(raw: string | string[] | undefined): string {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value && /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : monthKey(new Date());
+}
+
+export interface ReportLine extends MonthLine {
+  customer: { id: string; name: string; type: string; phone: string | null } | null;
+}
+
+/** The month's statement for the whole farm, with each line's customer attached. */
+export async function getMonthlyReport(tenantId: string, month: string) {
+  const { end } = monthBounds(month);
+  const [sales, payments, customers] = await Promise.all([
+    db.sale.findMany({
+      where: { tenantId, createdAt: { lte: end } },
+      select: { customerId: true, amount: true, createdAt: true, saleType: true, quantity: true, status: true },
+    }),
+    db.payment.findMany({
+      where: { tenantId, paidAt: { lte: end } },
+      select: { customerId: true, amount: true, paidAt: true },
+    }),
+    db.customer.findMany({ where: { tenantId }, select: { id: true, name: true, type: true, phone: true } }),
+  ]);
+
+  const statement = monthlyStatement(
+    sales.map((s) => ({
+      partyId: s.customerId ?? null,
+      amount: s.amount,
+      date: s.createdAt,
+      saleType: s.saleType,
+      quantity: s.quantity,
+      status: s.status,
+    })),
+    payments.map((p) => ({ partyId: p.customerId, amount: p.amount, date: p.paidAt })),
+    month,
+  );
+
+  const byId = new Map(customers.map((c) => [c.id, c]));
+  const lines: ReportLine[] = statement.lines.map((l) => ({ ...l, customer: l.partyId ? byId.get(l.partyId) ?? null : null }));
+  return { month, totals: statement.totals, lines };
+}
+
+/** One customer's months with activity, newest first, for the grouped history on their page. */
+export async function getCustomerMonths(tenantId: string, customerId: string) {
+  const [sales, payments] = await Promise.all([
+    db.sale.findMany({
+      where: { tenantId, customerId },
+      select: { amount: true, createdAt: true, saleType: true, quantity: true },
+    }),
+    db.payment.findMany({ where: { tenantId, customerId }, select: { amount: true, paidAt: true } }),
+  ]);
+  return customerMonths(
+    sales.map((s) => ({ partyId: customerId, amount: s.amount, date: s.createdAt, saleType: s.saleType, quantity: s.quantity })),
+    payments.map((p) => ({ partyId: customerId, amount: p.amount, date: p.paidAt })),
+  );
+}

@@ -4,6 +4,7 @@ import { Plus, Search, Edit3, Trash2, DollarSign, Clock, CheckCircle, FileText, 
 import type { Sale, Cow } from '@farm/shared-types';
 import { daysAgo, sumAmounts, calculateSaleAmount, formatCurrency } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';
+import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { useCrudList } from '@/src/hooks/useCrudList';
 import { FormModal, TextField, ChipGroup, DateField, SelectField, PrimaryButton, IconButton, EmptyState, StatCard, useConfirm } from '@/src/components/ui';
 
@@ -50,6 +51,7 @@ export default function SalesScreen() {
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [createKey, setCreateKey] = useState(generateIdempotencyKey);
 
   const calculatedAmount = useMemo(() => {
     const result = calculateSaleAmount(form.quantity, form.unitPrice);
@@ -61,6 +63,7 @@ export default function SalesScreen() {
     setEditing(null);
     setForm(emptyForm);
     setError('');
+    setCreateKey(generateIdempotencyKey());
     setModalOpen(true);
   }
 
@@ -83,6 +86,10 @@ export default function SalesScreen() {
 
   async function handleSubmit() {
     setError('');
+    if (!form.customerName.trim()) {
+      setError('Customer / buyer name is required.');
+      return;
+    }
     const finalAmount = calculatedAmount !== '' ? calculatedAmount : form.amount;
     if (!finalAmount || parseFloat(finalAmount) <= 0) {
       setError('Please enter a valid amount, or fill in Quantity and Unit Price.');
@@ -95,7 +102,7 @@ export default function SalesScreen() {
       if (editing) {
         await mobileApiClient.put(`/api/sales/${editing.id}`, payload, 'Failed to save sale record');
       } else {
-        await mobileApiClient.post('/api/sales', payload, 'Failed to save sale record');
+        await mobileApiClient.post('/api/sales', payload, 'Failed to save sale record', { idempotencyKey: createKey });
       }
       setModalOpen(false);
       await reload();

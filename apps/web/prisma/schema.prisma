@@ -10,6 +10,9 @@ datasource db {
 model Tenant {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   name      String
+  // Milk price per litre the sale form starts with for a customer who has no
+  // earlier milk sale. Null means the built-in default (see src/lib/settings.ts).
+  defaultMilkPrice Float?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -20,6 +23,10 @@ model Tenant {
   sales          Sale[]
   otherExpenses  OtherExpense[]
   otherIncomes   OtherIncome[]
+  customers      Customer[]
+  payments       Payment[]
+  suppliers        Supplier[]
+  supplierPayments SupplierPayment[]
 }
 
 model User {
@@ -133,8 +140,22 @@ model FeedBatch {
   tenant            Tenant      @relation(fields: [tenantId], references: [id])
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
+  // Purchase tracking. All optional: older batches have none of these and
+  // are treated as fully paid, with cost taken from usage records.
+  // With coverDays set, the batch is used up evenly over that many days from
+  // purchasedAt, and remainingQuantity only goes down for extra manual use
+  // (see feedSchedule in @farm/business-logic).
+  supplierId        String?     @db.ObjectId
+  supplier          Supplier?   @relation(fields: [supplierId], references: [id])
+  coverDays         Int?
+  purchasedAt       DateTime?
+  // Cache recomputed by recomputeSupplier() in src/lib/payables.ts — never write directly.
+  paidAmount        Float?
+  payStatus         String?     // "paid" | "partial" | "pending"
 
   usages FeedUsage[]
+
+  @@index([tenantId, supplierId])
 }
 
 model FeedUsage {
@@ -160,8 +181,89 @@ model Sale {
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
   cowId         String?  @db.ObjectId
   cow           Cow?     @relation(fields: [cowId], references: [id])
+  // Set for every sale made through the customer/dues flow. Legacy sales
+  // without a customer keep a hand-set status. For linked sales, paidAmount
+  // and status ("paid" | "partial" | "pending") are a cache recomputed by
+  // recomputeCustomer() in src/lib/receivables.ts — never write them directly.
+  customerId    String?   @db.ObjectId
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  paidAmount    Float?   @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([tenantId, customerId])
+}
+
+model Customer {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  phone     String?
+  address   String?
+  notes     String?
+  type      String   @default("new") // "regular" | "new"
+  tenantId  String   @db.ObjectId
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales    Sale[]
+  payments Payment[]
+
+  @@index([tenantId])
+}
+
+// Money received from a customer. Applied to that customer's sales oldest
+// first (see allocatePayments in @farm/business-logic); anything beyond the
+// total sold is advance credit for future sales.
+model Payment {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  customerId String   @db.ObjectId
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  amount     Float
+  method     String   @default("cash") // cash | bkash | nagad | bank | other
+  note       String?
+  paidAt     DateTime @default(now())
+  tenantId   String   @db.ObjectId
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId, customerId])
+}
+
+model Supplier {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  phone     String?
+  address   String?
+  notes     String?
+  tenantId  String   @db.ObjectId
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  feedBatches FeedBatch[]
+  payments    SupplierPayment[]
+
+  @@index([tenantId])
+}
+
+// Money paid to a supplier. Applied to their purchases oldest first, the same
+// way customer payments are; anything beyond the total bought is advance.
+model SupplierPayment {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  supplierId String   @db.ObjectId
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  amount     Float
+  method     String   @default("cash") // cash | bkash | nagad | bank | other
+  note       String?
+  paidAt     DateTime @default(now())
+  tenantId   String   @db.ObjectId
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId, supplierId])
 }
 
 model OtherExpense {

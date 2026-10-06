@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
-import { db } from '@/lib/db';
+import { listFeed, listSuppliersWithBalances } from '@/lib/payables';
+import { feedCostBetween } from '@/lib/feed-cost';
 import FeedManager from '@/components/FeedManager';
 
 export default async function FeedPage() {
@@ -9,10 +10,22 @@ export default async function FeedPage() {
     redirect('/login');
   }
 
-  const feed = await db.feedBatch.findMany({
-    where: { tenantId: session.tenantId },
-    orderBy: { createdAt: 'desc' },
-  });
+  const { tenantId } = session;
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
 
-  return <FeedManager initialFeed={feed} />;
+  const [feed, suppliers, feedCostToday] = await Promise.all([
+    listFeed(tenantId),
+    listSuppliersWithBalances(tenantId),
+    feedCostBetween(tenantId, todayStart, new Date()),
+  ]);
+
+  return (
+    <FeedManager
+      initialFeed={feed}
+      suppliers={suppliers.map((s) => ({ id: s.id, name: s.name, phone: s.phone, totalDue: s.totalDue }))}
+      feedCostToday={feedCostToday}
+      totalPayable={suppliers.reduce((sum, s) => sum + s.totalDue, 0)}
+    />
+  );
 }

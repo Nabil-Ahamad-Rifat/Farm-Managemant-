@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
 import { parseNullableFloat } from '@/lib/parse';
 import { withIdempotency } from '@/lib/idempotency';
+import { presentFeed } from '@/lib/payables';
 
 // GET /api/feed/usage - list all feed usages
 export const GET = withAuth(async (_req, { tenantId }) => {
@@ -30,8 +31,11 @@ export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, t
   if (qtyNum === null || qtyNum <= 0) {
     return Response.json({ error: 'A valid usage quantity greater than zero is required' }, { status: 400 });
   }
-  if (qtyNum > batch.remainingQuantity) {
-    return Response.json({ error: `Insufficient stock. Only ${batch.remainingQuantity} kg remaining.` }, { status: 400 });
+  // For a scheduled batch the stock left now is below the saved value (the daily use is
+  // worked out from the date). Extra use on it moves stock only; its cost is spread by day.
+  const available = presentFeed(batch).remainingQuantity;
+  if (qtyNum > available) {
+    return Response.json({ error: `Insufficient stock. Only ${available} kg remaining.` }, { status: 400 });
   }
 
   const [usage] = await db.$transaction([

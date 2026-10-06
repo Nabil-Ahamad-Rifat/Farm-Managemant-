@@ -1,5 +1,8 @@
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
+import { collectedBetween, totalReceivable } from '@/lib/receivables';
+import { totalPayable } from '@/lib/payables';
+import { feedCostBetween } from '@/lib/feed-cost';
 
 function dayStartUTC(daysBack: number): Date {
   const d = new Date();
@@ -27,26 +30,17 @@ export const GET = withAuth(async (req, { tenantId }) => {
     const since = dayStartUTC(days - 1);
     const until = todayEndUTC();
 
-    const [salesAgg, activeEmployees, feedUsages, otherExpAgg, otherIncAgg] = await Promise.all([
-      // Revenue: sum of paid sales in period
-      db.sale.aggregate({
-        where: { tenantId, createdAt: { gte: since, lte: until }, status: 'paid' },
-        _sum: { amount: true },
-        _count: { id: true },
-      }),
+    const [totalSales, salesCount, activeEmployees, totalFeedCost, otherExpAgg, otherIncAgg] = await Promise.all([
+      // Revenue: money actually collected in the period (payments + legacy paid sales)
+      collectedBetween(tenantId, since, until),
+      db.sale.count({ where: { tenantId, createdAt: { gte: since, lte: until } } }),
       // Active employees — used for prorated salary cost
       db.employee.findMany({
         where: { tenantId, status: 'active' },
         select: { salary: true },
       }),
-      // Feed usages in period (cost = quantity × unitPrice)
-      db.feedUsage.findMany({
-        where: {
-          feedBatch: { tenantId },
-          usedAt: { gte: since, lte: until },
-        },
-        include: { feedBatch: { select: { unitPrice: true } } },
-      }),
+      // Feed: purchases spread evenly over their days, plus usage of older batches
+      feedCostBetween(tenantId, since, until),
       // Other expenses in period
       db.otherExpense.aggregate({
         where: { tenantId, expenseDate: { gte: since, lte: until } },
@@ -59,18 +53,10 @@ export const GET = withAuth(async (req, { tenantId }) => {
       }),
     ]);
 
-    const totalSales = salesAgg._sum.amount ?? 0;
-    const salesCount = salesAgg._count.id;
 
     // Prorated labour cost: sum of (monthly salary / 30 * days)
     const totalMonthlySalary = activeEmployees.reduce((sum, e) => sum + (e.salary ?? 0), 0);
     const totalSalaryCost = parseFloat(((totalMonthlySalary / 30) * days).toFixed(2));
-
-    // Feed cost = sum of quantity × unitPrice for each usage record
-    const totalFeedCost = feedUsages.reduce(
-      (sum, u) => sum + u.quantity * u.feedBatch.unitPrice,
-      0
-    );
 
     const totalOtherCost = otherExpAgg._sum.amount ?? 0;
     const totalOtherIncome = otherIncAgg._sum.amount ?? 0;
@@ -103,22 +89,13 @@ export const GET = withAuth(async (req, { tenantId }) => {
       const dEnd = new Date(dStart);
       dEnd.setUTCHours(23, 59, 59, 999);
 
-      const [salesAgg, activeEmployees, feedUsages, otherExpAgg, otherIncAgg] = await Promise.all([
-        db.sale.aggregate({
-          where: { tenantId, createdAt: { gte: dStart, lte: dEnd }, status: 'paid' },
-          _sum: { amount: true },
-        }),
+      const [salesRevenue, activeEmployees, feedCost, otherExpAgg, otherIncAgg] = await Promise.all([
+        collectedBetween(tenantId, dStart, dEnd),
         db.employee.findMany({
           where: { tenantId, status: 'active' },
           select: { salary: true },
         }),
-        db.feedUsage.findMany({
-          where: {
-            feedBatch: { tenantId },
-            usedAt: { gte: dStart, lte: dEnd },
-          },
-          include: { feedBatch: { select: { unitPrice: true } } },
-        }),
+        feedCostBetween(tenantId, dStart, dEnd),
         db.otherExpense.aggregate({
           where: { tenantId, expenseDate: { gte: dStart, lte: dEnd } },
           _sum: { amount: true },
@@ -129,13 +106,11 @@ export const GET = withAuth(async (req, { tenantId }) => {
         }),
       ]);
 
-      const salesRevenue = salesAgg._sum.amount ?? 0;
       const otherIncome = otherIncAgg._sum.amount ?? 0;
       const revenue = salesRevenue + otherIncome;
 
       const totalMonthlySalary = activeEmployees.reduce((s, e) => s + (e.salary ?? 0), 0);
       const labourCost = parseFloat(((totalMonthlySalary / 30) * 1).toFixed(2));
-      const feedCost = feedUsages.reduce((s, u) => s + u.quantity * u.feedBatch.unitPrice, 0);
       const otherCost = otherExpAgg._sum.amount ?? 0;
       const cost = labourCost + feedCost + otherCost;
 
@@ -149,13 +124,17 @@ export const GET = withAuth(async (req, { tenantId }) => {
     return breakdown;
   }
 
-  const [allPeriodStats, dailyBreakdown] = await Promise.all([
+  const [allPeriodStats, dailyBreakdown, totalDue, payable] = await Promise.all([
     Promise.all(periods.map(getStatsForPeriod)),
     getDailyBreakdown(periodDays),
+    totalReceivable(tenantId),
+    totalPayable(tenantId),
   ]);
 
   return Response.json({
     periods: allPeriodStats,
     dailyBreakdown,
+    totalDue,
+    totalPayable: payable,
   });
 });
