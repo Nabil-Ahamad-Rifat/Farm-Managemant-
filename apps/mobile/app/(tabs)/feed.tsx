@@ -1,54 +1,47 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
-import { Plus, Search, Edit3, Trash2, Droplets, AlertTriangle, Wheat } from 'lucide-react-native';
-import type { FeedBatch } from '@farm/shared-types';
-import { isLowStock, stockPercentage, totalStockValue, totalBatchCost, formatCurrency } from '@farm/business-logic';
+import { Plus, Search, Edit3, Trash2, Droplets, AlertTriangle, Wheat, Store } from 'lucide-react-native';
+import type { FeedBatch, SupplierSummary } from '@farm/shared-types';
+import { isLowStock, stockPercentage, totalStockValue } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { useCrudList } from '@/src/hooks/useCrudList';
+import { tk, fmtDate } from '@/src/lib/format';
 import { FormModal, TextField, PrimaryButton, IconButton, EmptyState, StatCard, useConfirm } from '@/src/components/ui';
+import { StatusPill } from '@/src/components/StatusPill';
+import { FeedPurchaseModal } from '@/src/components/FeedPurchaseModal';
 
-const PRESET_NAMES = ['Bushi', 'Butta', 'Gom', 'Chaw', 'Khud', 'Soyabin', 'Khoil', 'Dhan', 'Kaher', 'Atta'];
-
-const emptyForm = { name: '', quantity: '', unitPrice: '', remainingQuantity: '' };
+/** Paid/partial/due for a batch: derived for supplier purchases; older and supplier-less ones are paid. */
+const payStatus = (b: FeedBatch) => (b.supplierId ? b.payStatus ?? 'pending' : 'paid');
 
 export default function FeedScreen() {
   const { items: feed, loading, refreshing, refresh, reload } = useCrudList<FeedBatch>('/api/feed');
   const confirm = useConfirm();
 
-  const [search, setSearch] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<FeedBatch | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
+  const loadSuppliers = () =>
+    mobileApiClient
+      .get<SupplierSummary[]>('/api/suppliers')
+      .then(setSuppliers)
+      .catch(() => {
+        // Non-fatal: the supplier picker just shows no existing suppliers.
+      });
+  useEffect(() => {
+    loadSuppliers();
+  }, []);
 
-  const [usageOpen, setUsageOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [purchase, setPurchase] = useState<{ batch: FeedBatch | null } | null>(null);
+  const [error, setError] = useState('');
+
   const [usageFeed, setUsageFeed] = useState<FeedBatch | null>(null);
   const [usageForm, setUsageForm] = useState({ quantity: '', note: '' });
   const [usageError, setUsageError] = useState('');
-
-  const [createKey, setCreateKey] = useState(generateIdempotencyKey);
+  const [saving, setSaving] = useState(false);
   const [usageKey, setUsageKey] = useState(generateIdempotencyKey);
 
-  function openCreate() {
-    setEditing(null);
-    setForm(emptyForm);
-    setError('');
-    setCreateKey(generateIdempotencyKey());
-    setModalOpen(true);
-  }
-
-  function openEdit(item: FeedBatch) {
-    setEditing(item);
-    setForm({
-      name: item.name,
-      quantity: String(item.quantity),
-      unitPrice: String(item.unitPrice),
-      remainingQuantity: String(item.remainingQuantity),
-    });
-    setError('');
-    setModalOpen(true);
+  async function afterChange() {
+    await Promise.all([reload(), loadSuppliers()]);
   }
 
   function openUsage(item: FeedBatch) {
@@ -56,29 +49,6 @@ export default function FeedScreen() {
     setUsageForm({ quantity: '', note: '' });
     setUsageError('');
     setUsageKey(generateIdempotencyKey());
-    setUsageOpen(true);
-  }
-
-  async function handleSubmit() {
-    if (!form.name.trim() || !form.quantity || !form.unitPrice) {
-      setError('Feed name, quantity, and unit price are required.');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      if (editing) {
-        await mobileApiClient.put(`/api/feed/${editing.id}`, form, 'Failed to save feed batch');
-      } else {
-        await mobileApiClient.post('/api/feed', form, 'Failed to save feed batch', { idempotencyKey: createKey });
-      }
-      setModalOpen(false);
-      await reload();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
   }
 
   async function handleUsageSubmit() {
@@ -89,7 +59,7 @@ export default function FeedScreen() {
       await mobileApiClient.post('/api/feed/usage', { feedBatchId: usageFeed.id, ...usageForm }, 'Failed to record usage', {
         idempotencyKey: usageKey,
       });
-      setUsageOpen(false);
+      setUsageFeed(null);
       await reload();
     } catch (err) {
       setUsageError((err as Error).message);
@@ -99,16 +69,19 @@ export default function FeedScreen() {
   }
 
   async function handleDelete(item: FeedBatch) {
-    if (!(await confirm(`Delete the feed batch "${item.name}"?`))) return;
+    if (!(await confirm(`Delete the ${item.name} purchase of ${item.quantity} kg?`))) return;
     try {
       await mobileApiClient.delete(`/api/feed/${item.id}`);
-      await reload();
+      await afterChange();
     } catch (err) {
       setError((err as Error).message);
     }
   }
 
-  const filtered = feed.filter((item) => item.name.toLowerCase().includes(search.toLowerCase()));
+  const q = search.toLowerCase();
+  const filtered = feed.filter((item) => item.name.toLowerCase().includes(q) || (item.supplier?.name ?? '').toLowerCase().includes(q));
+  const owed = suppliers.reduce((s, x) => s + x.totalDue, 0);
+  const runningLow = feed.filter((b) => b.schedule && b.schedule.remaining > 0 && b.schedule.daysLeft <= 1);
 
   if (loading) {
     return (
@@ -122,18 +95,20 @@ export default function FeedScreen() {
     <View className="flex-1 bg-slate-50">
       <View className="gap-3 border-b border-slate-100 bg-white p-4">
         <View className="flex-row gap-3">
-          <StatCard label="Total Investment" value={formatCurrency(totalBatchCost(feed))} icon={Wheat} color="#d97706" />
-          <StatCard label="Stock Value" value={formatCurrency(totalStockValue(filtered))} icon={Wheat} color="#059669" />
+          <StatCard label="Stock Value" value={tk(Math.round(totalStockValue(feed)))} icon={Wheat} color="#059669" />
+          <StatCard label="You owe" value={tk(owed)} icon={Store} color="#dc2626" />
         </View>
+        {runningLow.length ? (
+          <View className="flex-row items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <AlertTriangle size={14} color="#b45309" />
+            <Text className="flex-1 text-xs text-amber-900">
+              Running out soon: {runningLow.map((b) => `${b.name} (${b.schedule!.remaining} kg)`).join(', ')}
+            </Text>
+          </View>
+        ) : null}
         <View className="flex-row items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
           <Search size={16} color="#94a3b8" />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search feed batches..."
-            placeholderTextColor="#94a3b8"
-            className="flex-1 text-sm text-slate-900"
-          />
+          <TextInput value={search} onChangeText={setSearch} placeholder="Search feed or supplier..." placeholderTextColor="#94a3b8" className="flex-1 text-sm text-slate-900" />
         </View>
       </View>
 
@@ -146,34 +121,48 @@ export default function FeedScreen() {
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        contentContainerClassName="gap-3 p-4"
+        contentContainerClassName="gap-3 p-4 pb-24"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-        ListEmptyComponent={<EmptyState message="No feed batches recorded." />}
+        ListEmptyComponent={<EmptyState message="No feed bought yet." />}
         renderItem={({ item }) => {
-          const lowStock = isLowStock(item);
-          const pct = stockPercentage(item);
+          const s = item.schedule;
+          const total = item.quantity * item.unitPrice;
+          const due = item.supplierId ? Math.max(0, total - (item.paidAmount ?? 0)) : 0;
+          const low = s ? s.remaining > 0 && s.daysLeft <= 1 : isLowStock(item);
+          const finished = s ? s.remaining <= 0 : item.remainingQuantity <= 0;
+          const pct = s ? Math.round((s.daysLeft / s.coverDays) * 100) : stockPercentage(item);
           return (
-            <View className="rounded-2xl border border-slate-200 bg-white p-4">
+            <View className={`rounded-2xl border border-slate-200 bg-white p-4 ${finished ? 'opacity-60' : ''}`}>
               <View className="flex-row items-start justify-between">
-                <View className="flex-1">
+                <View className="flex-1 gap-1">
                   <Text className="text-sm font-bold text-slate-900">{item.name}</Text>
-                  <View className="mt-1.5 h-1.5 w-32 overflow-hidden rounded-full bg-slate-100">
-                    <View className={`h-full rounded-full ${lowStock ? 'bg-red-400' : 'bg-emerald-400'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                  <Text className="text-[11px] text-slate-400">
+                    {fmtDate(item.purchasedAt ?? item.createdAt)}
+                    {item.supplier ? ` · ${item.supplier.name}` : ''}
+                  </Text>
+                  <View className="flex-row items-center gap-2">
+                    <Text className="text-xs text-slate-600">
+                      {item.quantity} kg × {tk(item.unitPrice)} = <Text className="font-bold text-slate-900">{tk(total)}</Text>
+                    </Text>
                   </View>
-                  <View className="mt-1 flex-row items-center gap-2">
-                    <Text className="text-[11px] text-slate-400">{pct}% remaining ({item.remainingQuantity}/{item.quantity} kg)</Text>
-                    {lowStock ? (
-                      <View className="flex-row items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5">
-                        <AlertTriangle size={10} color="#b45309" />
-                        <Text className="text-[10px] font-bold text-amber-700">Low Stock</Text>
-                      </View>
-                    ) : null}
+                  <View className="flex-row items-center gap-2">
+                    <StatusPill status={payStatus(item)} />
+                    {due > 0 ? <Text className="text-[11px] font-semibold text-red-600">{tk(due)} due</Text> : null}
                   </View>
-                  <Text className="mt-1 text-xs text-slate-500">৳{item.unitPrice.toFixed(2)}/kg</Text>
+                  <View className="mt-1 h-1.5 w-32 overflow-hidden rounded-full bg-slate-100">
+                    <View className={`h-full rounded-full ${low ? 'bg-red-400' : 'bg-emerald-400'}`} style={{ width: `${Math.max(0, Math.min(pct, 100))}%` }} />
+                  </View>
+                  <Text className={`text-[11px] ${low ? 'font-semibold text-red-600' : 'text-slate-500'}`}>
+                    {s
+                      ? finished
+                        ? `Finished ${fmtDate(s.runsOutOn)}`
+                        : `${item.remainingQuantity} kg left · ${s.daysLeft} day${s.daysLeft === 1 ? '' : 's'} left · ${s.perDayQty} kg/day (${tk(s.perDayCost)}/day)`
+                      : `${pct}% remaining (${item.remainingQuantity}/${item.quantity} kg)`}
+                  </Text>
                 </View>
                 <View className="flex-row gap-2">
                   <IconButton icon={Droplets} onPress={() => openUsage(item)} />
-                  <IconButton icon={Edit3} onPress={() => openEdit(item)} />
+                  <IconButton icon={Edit3} onPress={() => setPurchase({ batch: item })} />
                   <IconButton icon={Trash2} variant="danger" onPress={() => handleDelete(item)} />
                 </View>
               </View>
@@ -182,50 +171,33 @@ export default function FeedScreen() {
         }}
       />
 
-      <Pressable
-        onPress={openCreate}
-        className="absolute bottom-6 right-6 flex-row items-center gap-2 rounded-full bg-slate-900 px-5 py-3.5 shadow-lg"
-      >
+      <Pressable onPress={() => setPurchase({ batch: null })} className="absolute bottom-6 right-6 flex-row items-center gap-2 rounded-full bg-slate-900 px-5 py-3.5 shadow-lg">
         <Plus size={18} color="white" />
-        <Text className="font-semibold text-white">Add Feed Batch</Text>
+        <Text className="font-semibold text-white">Buy feed</Text>
       </Pressable>
 
-      <FormModal visible={modalOpen} title={editing ? 'Edit Feed Batch' : 'Add New Feed Batch'} onClose={() => setModalOpen(false)}>
-        {error ? (
-          <View className="rounded-xl border border-red-100 bg-red-50 p-3">
-            <Text className="text-xs font-medium text-red-700">{error}</Text>
-          </View>
-        ) : null}
-        <TextField label="Feed / Grain Name" placeholder="e.g. Bushi, Butta, Gom" value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} />
-        <View className="flex-row flex-wrap gap-1.5">
-          {PRESET_NAMES.map((n) => (
-            <Pressable
-              key={n}
-              onPress={() => setForm({ ...form, name: n })}
-              className={`rounded-full border px-2.5 py-1 ${form.name === n ? 'border-amber-600 bg-amber-600' : 'border-amber-200 bg-amber-50'}`}
-            >
-              <Text className={`text-[11px] font-semibold ${form.name === n ? 'text-white' : 'text-amber-800'}`}>{n}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <TextField
-          label="Total Quantity (kg)"
-          placeholder="e.g. 500"
-          keyboardType="decimal-pad"
-          value={form.quantity}
-          onChangeText={(v) => setForm({ ...form, quantity: v, remainingQuantity: editing ? form.remainingQuantity : v })}
-        />
-        <TextField label="Unit Price (৳ per kg)" placeholder="e.g. 35.00" keyboardType="decimal-pad" value={form.unitPrice} onChangeText={(v) => setForm({ ...form, unitPrice: v })} />
-        <TextField label="Remaining Quantity (kg)" placeholder="Defaults to initial quantity" keyboardType="decimal-pad" value={form.remainingQuantity} onChangeText={(v) => setForm({ ...form, remainingQuantity: v })} />
-        <PrimaryButton label="Save Feed Batch" loading={saving} onPress={handleSubmit} />
-      </FormModal>
+      <FeedPurchaseModal
+        open={!!purchase}
+        batch={purchase?.batch}
+        suppliers={suppliers}
+        onClose={() => setPurchase(null)}
+        onSaved={async () => {
+          setPurchase(null);
+          await afterChange();
+        }}
+      />
 
-      <FormModal visible={usageOpen} title="Record Feed Usage" subtitle={usageFeed?.name} onClose={() => setUsageOpen(false)}>
+      <FormModal visible={!!usageFeed} title={usageFeed?.schedule ? 'Record extra use' : 'Record Feed Usage'} subtitle={usageFeed?.name} onClose={() => setUsageFeed(null)}>
         {usageFeed ? (
           <View className="rounded-xl border border-amber-100 bg-amber-50 p-3">
             <Text className="text-xs text-amber-800">
               Available stock: <Text className="font-bold">{usageFeed.remainingQuantity.toLocaleString()} kg</Text>
             </Text>
+            {usageFeed.schedule ? (
+              <Text className="mt-1 text-xs text-amber-800">
+                {usageFeed.schedule.perDayQty} kg/day is taken off automatically. Record only extra use here — it lowers stock, not cost.
+              </Text>
+            ) : null}
           </View>
         ) : null}
         {usageError ? (

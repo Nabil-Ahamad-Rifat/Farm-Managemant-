@@ -1,9 +1,15 @@
 import { View, Text, Pressable, Linking } from 'react-native';
 import { router } from 'expo-router';
-import { Users, Coins, PackageOpen, TrendingUp, Sprout, FileText, Trash2, ChevronRight } from 'lucide-react-native';
+import {
+  Users, Coins, PackageOpen, TrendingUp, Sprout, FileText, Trash2, ChevronRight, HandCoins, Store, CalendarRange, Milk,
+} from 'lucide-react-native';
 import { API_URL } from '@/src/lib/apiClient';
 
 const ITEMS = [
+  { href: '/(tabs)/more/customers', label: 'Customers & Dues', icon: HandCoins },
+  { href: '/(tabs)/more/suppliers', label: 'Suppliers & Payables', icon: Store },
+  { href: '/(tabs)/more/report', label: 'Monthly Report', icon: CalendarRange },
+  { href: '/(tabs)/more/milk-price', label: 'Default Milk Price', icon: Milk },
   { href: '/(tabs)/more/employees', label: 'Employees', icon: Users },
   { href: '/(tabs)/more/income', label: 'Other Income', icon: Coins },
   { href: '/(tabs)/more/expenses', label: 'Other Expenses', icon: PackageOpen },

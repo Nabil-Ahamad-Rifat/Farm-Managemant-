@@ -1,142 +1,64 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState } from 'react';
 import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
-import { Plus, Search, Edit3, Trash2, DollarSign, Clock, CheckCircle, FileText, Tag } from 'lucide-react-native';
-import type { Sale, Cow } from '@farm/shared-types';
-import { daysAgo, sumAmounts, calculateSaleAmount, formatCurrency } from '@farm/business-logic';
+import { Plus, Search, Edit3, Trash2, Wallet, AlertCircle, Tag, FileText } from 'lucide-react-native';
+import type { Sale } from '@farm/shared-types';
+import { daysAgo } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';
-import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { useCrudList } from '@/src/hooks/useCrudList';
-import { FormModal, TextField, ChipGroup, DateField, SelectField, PrimaryButton, IconButton, EmptyState, StatCard, useConfirm } from '@/src/components/ui';
+import { useSaleOptions } from '@/src/hooks/useSaleOptions';
+import { tk, fmtDate } from '@/src/lib/format';
+import { ChipGroup, IconButton, EmptyState, StatCard, useConfirm } from '@/src/components/ui';
+import { StatusPill } from '@/src/components/StatusPill';
+import { SaleFormModal } from '@/src/components/SaleFormModal';
 
-const SALE_TYPES = [
-  { value: 'general', label: 'General' },
-  { value: 'cow_sale', label: 'Cow Sale' },
-  { value: 'milk', label: 'Milk' },
-  { value: 'products', label: 'Products' },
-  { value: 'other', label: 'Other' },
-];
+const PRODUCT_LABELS: Record<string, string> = { milk: 'Milk', cow_sale: 'Cow', other: 'Other', general: 'General', products: 'Products' };
 
 const PERIOD_FILTERS = [
   { value: '1', label: 'Today' },
-  { value: '3', label: '3 Days' },
-  { value: '5', label: '5 Days' },
   { value: '7', label: '7 Days' },
-  { value: '15', label: '15 Days' },
   { value: '30', label: '30 Days' },
   { value: '0', label: 'All' },
 ];
 
-const today = () => new Date().toISOString().slice(0, 10);
-const emptyForm = { customerName: '', amount: '', status: 'paid', cowId: '', saleType: 'general', quantity: '', unitPrice: '', notes: '', saleDate: today() };
+/** Paid amount for any sale: derived for customer sales, hand-set status for older ones. */
+const salePaid = (s: Sale) => (s.customerId ? s.paidAmount ?? 0 : s.status === 'paid' ? s.amount : 0);
+const saleStatus = (s: Sale) => (s.customerId ? s.status : s.status === 'paid' ? 'paid' : 'pending');
 
 export default function SalesScreen() {
   const { items: sales, loading, refreshing, refresh, reload } = useCrudList<Sale>('/api/sales');
+  const options = useSaleOptions();
   const confirm = useConfirm();
-
-  const [activeCows, setActiveCows] = useState<Cow[]>([]);
-  useEffect(() => {
-    mobileApiClient
-      .get<Cow[]>('/api/cows')
-      .then((cows) => setActiveCows(cows.filter((c) => c.status === 'active')))
-      .catch(() => {
-        // Non-fatal — the cow-linking field just shows no options.
-      });
-  }, []);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [periodDays, setPeriodDays] = useState('1');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<Sale | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [modal, setModal] = useState<{ sale: Sale | null } | null>(null);
   const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [createKey, setCreateKey] = useState(generateIdempotencyKey);
 
-  const calculatedAmount = useMemo(() => {
-    const result = calculateSaleAmount(form.quantity, form.unitPrice);
-    return result !== null ? result.toFixed(2) : '';
-  }, [form.quantity, form.unitPrice]);
-  const displayAmount = calculatedAmount !== '' ? calculatedAmount : form.amount;
-
-  function openCreate() {
-    setEditing(null);
-    setForm(emptyForm);
-    setError('');
-    setCreateKey(generateIdempotencyKey());
-    setModalOpen(true);
-  }
-
-  function openEdit(sale: Sale) {
-    setEditing(sale);
-    setForm({
-      customerName: sale.customerName,
-      amount: String(sale.amount),
-      status: sale.status,
-      cowId: sale.cowId || '',
-      saleType: sale.saleType || 'general',
-      quantity: sale.quantity?.toString() || '',
-      unitPrice: sale.unitPrice?.toString() || '',
-      notes: sale.notes || '',
-      saleDate: new Date(sale.createdAt).toISOString().slice(0, 10),
-    });
-    setError('');
-    setModalOpen(true);
-  }
-
-  async function handleSubmit() {
-    setError('');
-    if (!form.customerName.trim()) {
-      setError('Customer / buyer name is required.');
-      return;
-    }
-    const finalAmount = calculatedAmount !== '' ? calculatedAmount : form.amount;
-    if (!finalAmount || parseFloat(finalAmount) <= 0) {
-      setError('Please enter a valid amount, or fill in Quantity and Unit Price.');
-      return;
-    }
-
-    setSaving(true);
-    const payload = { ...form, amount: finalAmount, quantity: form.quantity || null, unitPrice: form.unitPrice || null };
-    try {
-      if (editing) {
-        await mobileApiClient.put(`/api/sales/${editing.id}`, payload, 'Failed to save sale record');
-      } else {
-        await mobileApiClient.post('/api/sales', payload, 'Failed to save sale record', { idempotencyKey: createKey });
-      }
-      setModalOpen(false);
-      await reload();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
+  async function afterChange() {
+    await Promise.all([reload(), options.reload()]);
   }
 
   async function handleDelete(sale: Sale) {
-    if (!(await confirm(`Delete this sale to ${sale.customerName}?`))) return;
+    if (!(await confirm(`Delete the ${tk(sale.amount)} sale to ${sale.customerName}?`))) return;
     try {
       await mobileApiClient.delete(`/api/sales/${sale.id}`);
-      await reload();
+      await afterChange();
     } catch (err) {
       setError((err as Error).message);
     }
   }
 
-  const periodDaysNum = Number(periodDays);
-  const filtered = sales.filter((sale) => {
-    const q = search.toLowerCase();
-    const matchesSearch =
-      sale.customerName.toLowerCase().includes(q) ||
-      (sale.cow ? sale.cow.name.toLowerCase().includes(q) || sale.cow.tagNumber.toLowerCase().includes(q) : false);
-    const matchesStatus = statusFilter === 'all' || sale.status === statusFilter;
-    const matchesPeriod = periodDaysNum === 0 || new Date(sale.createdAt) >= daysAgo(periodDaysNum);
-    return matchesSearch && matchesStatus && matchesPeriod;
-  });
-
-  const totalRevenue = sumAmounts(filtered.filter((s) => s.status === 'paid'));
-  const pendingRevenue = sumAmounts(filtered.filter((s) => s.status === 'pending'));
-  const saleTypeLabel = (val: string) => SALE_TYPES.find((t) => t.value === val)?.label || val;
+  const q = search.toLowerCase();
+  const period = Number(periodDays);
+  const filtered = sales.filter(
+    (s) =>
+      (s.customerName.toLowerCase().includes(q) || (s.cow ? `${s.cow.name} ${s.cow.tagNumber}`.toLowerCase().includes(q) : false)) &&
+      (statusFilter === 'all' || saleStatus(s) === statusFilter) &&
+      (period === 0 || new Date(s.createdAt) >= daysAgo(period)),
+  );
+  const received = filtered.reduce((sum, s) => sum + salePaid(s), 0);
+  const due = filtered.reduce((sum, s) => sum + Math.max(0, s.amount - salePaid(s)), 0);
 
   if (loading) {
     return (
@@ -150,8 +72,8 @@ export default function SalesScreen() {
     <View className="flex-1 bg-slate-50">
       <View className="gap-3 border-b border-slate-100 bg-white p-4">
         <View className="flex-row gap-3">
-          <StatCard label="Collected" value={formatCurrency(totalRevenue)} icon={DollarSign} color="#059669" />
-          <StatCard label="Pending" value={formatCurrency(pendingRevenue)} icon={Clock} color="#d97706" />
+          <StatCard label="Received" value={tk(received)} icon={Wallet} color="#059669" />
+          <StatCard label="Unpaid" value={tk(due)} icon={AlertCircle} color="#dc2626" />
         </View>
         <ChipGroup options={PERIOD_FILTERS} value={periodDays} onChange={setPeriodDays} />
         <View className="flex-row items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
@@ -162,7 +84,8 @@ export default function SalesScreen() {
           options={[
             { value: 'all', label: 'All' },
             { value: 'paid', label: 'Paid' },
-            { value: 'pending', label: 'Pending' },
+            { value: 'partial', label: 'Partial' },
+            { value: 'pending', label: 'Due' },
           ]}
           value={statusFilter}
           onChange={setStatusFilter}
@@ -178,92 +101,68 @@ export default function SalesScreen() {
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        contentContainerClassName="gap-3 p-4"
+        contentContainerClassName="gap-3 p-4 pb-24"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-        ListEmptyComponent={<EmptyState message="No sales transactions found." />}
-        renderItem={({ item }) => (
-          <View className="rounded-2xl border border-slate-200 bg-white p-4">
-            <View className="flex-row items-start justify-between">
-              <View className="flex-1">
-                <Text className="text-sm font-bold text-slate-900">{item.customerName}</Text>
-                {item.cow ? <Text className="text-[11px] text-slate-400">{item.cow.name} ({item.cow.tagNumber})</Text> : null}
-                <View className="mt-1.5 flex-row items-center gap-1.5">
-                  <View className="flex-row items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
-                    <Tag size={9} color="#475569" />
-                    <Text className="text-[10px] font-semibold uppercase text-slate-600">{saleTypeLabel(item.saleType)}</Text>
+        ListEmptyComponent={<EmptyState message="No sales found." />}
+        renderItem={({ item }) => {
+          const paid = salePaid(item);
+          const left = Math.max(0, item.amount - paid);
+          return (
+            <View className="rounded-2xl border border-slate-200 bg-white p-4">
+              <View className="flex-row items-start justify-between">
+                <View className="flex-1 gap-1">
+                  <Text className="text-sm font-bold text-slate-900">{item.customerName}</Text>
+                  {item.cow ? <Text className="text-[11px] text-slate-400">{item.cow.name} ({item.cow.tagNumber})</Text> : null}
+                  <View className="flex-row items-center gap-1.5">
+                    <View className="flex-row items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
+                      <Tag size={9} color="#475569" />
+                      <Text className="text-[10px] font-semibold uppercase text-slate-600">{PRODUCT_LABELS[item.saleType] ?? item.saleType}</Text>
+                    </View>
+                    <StatusPill status={saleStatus(item)} />
                   </View>
-                  <View className={`flex-row items-center gap-1 rounded-full px-2 py-0.5 ${item.status === 'paid' ? 'bg-emerald-50' : 'bg-amber-50'}`}>
-                    {item.status === 'paid' ? <CheckCircle size={9} color="#047857" /> : <Clock size={9} color="#b45309" />}
-                    <Text className={`text-[10px] font-semibold uppercase ${item.status === 'paid' ? 'text-emerald-700' : 'text-amber-700'}`}>{item.status}</Text>
-                  </View>
+                  {item.quantity != null && item.unitPrice != null ? (
+                    <Text className="text-[11px] text-slate-500">
+                      {item.quantity}
+                      {item.saleType === 'milk' ? ' L' : ''} × {tk(item.unitPrice)}
+                    </Text>
+                  ) : null}
+                  {item.notes ? (
+                    <View className="flex-row items-center gap-1">
+                      <FileText size={10} color="#94a3b8" />
+                      <Text className="text-[11px] text-slate-400">{item.notes}</Text>
+                    </View>
+                  ) : null}
+                  <Text className="text-sm font-bold text-slate-900">{tk(item.amount)}</Text>
+                  {left > 0 && paid > 0 ? <Text className="text-[11px] font-semibold text-red-600">{tk(paid)} paid · {tk(left)} due</Text> : null}
+                  <Text className="text-[11px] text-slate-400">{fmtDate(item.createdAt)}</Text>
                 </View>
-                {item.notes ? (
-                  <View className="mt-1 flex-row items-center gap-1">
-                    <FileText size={10} color="#94a3b8" />
-                    <Text className="text-[11px] text-slate-400">{item.notes}</Text>
-                  </View>
-                ) : null}
-                <Text className="mt-1.5 text-sm font-bold text-slate-900">{formatCurrency(item.amount)}</Text>
-                <Text className="text-[11px] text-slate-400">{new Date(item.createdAt).toLocaleDateString()}</Text>
-              </View>
-              <View className="flex-row gap-2">
-                <IconButton icon={Edit3} onPress={() => openEdit(item)} />
-                <IconButton icon={Trash2} variant="danger" onPress={() => handleDelete(item)} />
+                <View className="flex-row gap-2">
+                  <IconButton icon={Edit3} onPress={() => setModal({ sale: item })} />
+                  <IconButton icon={Trash2} variant="danger" onPress={() => handleDelete(item)} />
+                </View>
               </View>
             </View>
-          </View>
-        )}
+          );
+        }}
       />
 
-      <Pressable onPress={openCreate} className="absolute bottom-6 right-6 flex-row items-center gap-2 rounded-full bg-slate-900 px-5 py-3.5 shadow-lg">
+      <Pressable onPress={() => setModal({ sale: null })} className="absolute bottom-6 right-6 flex-row items-center gap-2 rounded-full bg-slate-900 px-5 py-3.5 shadow-lg">
         <Plus size={18} color="white" />
         <Text className="font-semibold text-white">Record Sale</Text>
       </Pressable>
 
-      <FormModal visible={modalOpen} title={editing ? 'Edit Transaction' : 'Record New Sale'} onClose={() => setModalOpen(false)}>
-        {error ? (
-          <View className="rounded-xl border border-red-100 bg-red-50 p-3">
-            <Text className="text-xs font-medium text-red-700">{error}</Text>
-          </View>
-        ) : null}
-        <TextField label="Customer / Buyer Name" placeholder="e.g. Abdul Karim" value={form.customerName} onChangeText={(v) => setForm({ ...form, customerName: v })} />
-        <ChipGroup label="Sale Type" options={SALE_TYPES} value={form.saleType} onChange={(v) => setForm({ ...form, saleType: v })} />
-        <View className="flex-row gap-3">
-          <View className="flex-1">
-            <TextField label="Quantity" keyboardType="decimal-pad" placeholder="e.g. 10" value={form.quantity} onChangeText={(v) => setForm({ ...form, quantity: v })} />
-          </View>
-          <View className="flex-1">
-            <TextField label="Unit Price (৳)" keyboardType="decimal-pad" placeholder="e.g. 85.00" value={form.unitPrice} onChangeText={(v) => setForm({ ...form, unitPrice: v })} />
-          </View>
-        </View>
-        <TextField
-          label={calculatedAmount ? `Total Amount (Auto: ৳${calculatedAmount})` : 'Total Amount (৳)'}
-          placeholder="e.g. 850.00"
-          keyboardType="decimal-pad"
-          editable={!calculatedAmount}
-          value={displayAmount}
-          onChangeText={(v) => setForm({ ...form, amount: v })}
-        />
-        <DateField label="Sale Date" value={form.saleDate} onChange={(v) => setForm({ ...form, saleDate: v })} maxDate={new Date()} />
-        <SelectField
-          label="Link Livestock (Optional)"
-          placeholder="None"
-          value={form.cowId}
-          options={activeCows.map((c) => ({ value: c.id, label: c.name, sublabel: c.tagNumber }))}
-          onChange={(v) => setForm({ ...form, cowId: v })}
-        />
-        <ChipGroup
-          label="Payment Status"
-          options={[
-            { value: 'paid', label: 'Paid' },
-            { value: 'pending', label: 'Pending' },
-          ]}
-          value={form.status}
-          onChange={(v) => setForm({ ...form, status: v })}
-        />
-        <TextField label="Notes (Optional)" placeholder="e.g. Morning milk delivery" value={form.notes} onChangeText={(v) => setForm({ ...form, notes: v })} />
-        <PrimaryButton label="Save Transaction" loading={saving} onPress={handleSubmit} />
-      </FormModal>
+      <SaleFormModal
+        open={!!modal}
+        sale={modal?.sale}
+        customers={options.customers}
+        activeCows={options.activeCows}
+        defaultMilkPrice={options.defaultMilkPrice}
+        onClose={() => setModal(null)}
+        onSaved={async () => {
+          setModal(null);
+          await afterChange();
+        }}
+      />
     </View>
   );
 }
