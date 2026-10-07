@@ -134,7 +134,7 @@ export default function SaleFormModal({
         <div>
           <span className={labelCls}>Customer</span>
           {presetCustomer ? (
-            <p className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-900">
+            <p className="rounded-control border border-line bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-ink">
               {presetCustomer.name}
             </p>
           ) : (
@@ -149,7 +149,7 @@ export default function SaleFormModal({
                   type="button"
                   onClick={() => setCustomer({ ...customer, type: t })}
                   className={`rounded-lg px-3 py-1.5 font-semibold capitalize transition ${
-                    customer.type === t ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    customer.type === t ? 'bg-ink text-white' : 'border border-line bg-white text-slate-600 hover:bg-slate-50'
                   }`}
                 >
                   {t}
@@ -169,10 +169,10 @@ export default function SaleFormModal({
                 role="radio"
                 aria-checked={form.saleType === value}
                 onClick={() => chooseProduct(value)}
-                className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
+                className={`flex items-center justify-center gap-2 rounded-control border px-3 py-2.5 text-sm font-semibold transition ${
                   form.saleType === value
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    ? 'border-slate-900 bg-ink text-white'
+                    : 'border-line bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 <Icon className="h-4 w-4" aria-hidden="true" />
@@ -236,7 +236,7 @@ export default function SaleFormModal({
 
         <div>
           <label htmlFor="sale-total" className={labelCls}>
-            Total (৳){auto !== null && <span className="ml-2 font-normal normal-case text-emerald-600">= quantity × price</span>}
+            Total (৳){auto !== null && <span className="ml-2 font-normal normal-case text-brand-600">= quantity × price</span>}
           </label>
           <input
             id="sale-total"
@@ -248,12 +248,12 @@ export default function SaleFormModal({
             placeholder="e.g. 850"
             value={auto !== null ? auto.toFixed(2) : form.amount}
             onChange={(e) => setForm({ ...form, amount: e.target.value })}
-            className={`${inputCls} ${auto !== null ? 'border-emerald-200 bg-emerald-50 font-semibold' : ''}`}
+            className={`${inputCls} ${auto !== null ? 'border-brand-200 bg-brand-50 font-semibold' : ''}`}
           />
         </div>
 
         {!editing && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+          <div className="rounded-control border border-line bg-slate-50/60 p-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label htmlFor="sale-paid" className={labelCls}>Paid now (৳)</label>
@@ -287,26 +287,26 @@ export default function SaleFormModal({
               <button
                 type="button"
                 onClick={() => setForm({ ...form, paidNow: '', paidTouched: false })}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                className="rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               >
                 Fully paid
               </button>
               <button
                 type="button"
                 onClick={() => setForm({ ...form, paidNow: '0', paidTouched: true })}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                className="rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               >
                 On credit (baki)
               </button>
             </div>
-            <p className={`mt-3 text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-emerald-700'}`} aria-live="polite">
+            <p className={`mt-3 text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-brand-700'}`} aria-live="polite">
               {due > 0 ? `${tk(due)} will be added to this customer's due` : 'Fully paid'}
             </p>
           </div>
         )}
 
         {editing && sale && (
-          <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          <p className="rounded-control border border-line bg-slate-50 p-3 text-xs text-slate-600">
             Paid so far on this sale: <strong>{tk(salePaid(sale))}</strong>. To change payments, open the customer&apos;s page.
           </p>
         )}

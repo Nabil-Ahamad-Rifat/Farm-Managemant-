@@ -9,9 +9,15 @@ import { loadFinanceData, summaryFor } from '@/lib/finance';
 import { listWorkers } from '@/lib/payroll';
 import { getDueSoon } from '@/lib/animals';
 import DueSoonPanel from '@/components/animals/DueSoonPanel';
-import { PaymentStatusPill, CustomerTypeBadge, tk } from '@/components/sales/shared';
+import { PaymentStatusPill, CustomerTypeBadge, tk, fmtDate } from '@/components/sales/shared';
 import CollectButton from '@/components/sales/CollectButton';
-import { Users, BadgeCheck, Wheat, DollarSign, ArrowRight, TrendingUp, PackageOpen, Banknote, HandCoins, Phone, Store, AlertTriangle } from 'lucide-react';
+import IncomeCostChart from '@/components/IncomeCostChart';
+import { StatusBadge } from '@/components/animals/shared';
+import { Card, CardHeader, PageHeader } from '@/components/ui/Card';
+import { ButtonLink } from '@/components/ui/Button';
+import { StatCard } from '@/components/ui/StatCard';
+import { EmptyState } from '@/components/ui/Empty';
+import { Users, Wheat, ArrowRight, TrendingUp, Banknote, HandCoins, Phone, Store, AlertTriangle, PawPrint, ShoppingCart } from 'lucide-react';
 
 export default async function DashboardPage() {
   const session = await getSession();
@@ -74,85 +80,82 @@ export default async function DashboardPage() {
   const signed = (n: number) => (n < 0 ? '− ' + tk(-n) : tk(n));
 
   // Money received per day over the last 30 days (customers + other income).
-  const chartDays = daysBetween(chartFrom, today).map((date) => ({ date, revenue: summaryFor(money, date, date, now).cash.moneyIn }));
-  const maxRevenue = Math.max(...chartDays.map(d => d.revenue), 1);
+  const chartDays = daysBetween(chartFrom, today).map((date) => {
+    const s = summaryFor(money, date, date, now).profit;
+    return { key: date, income: s.income, costs: s.costs, profit: s.profit };
+  });
 
-  const cards = [
-    {
-      label: 'Animals',
-      value: cowCount.toString(),
-      subtext: `${activeCowsCount} active in herd`,
-      href: '/dashboard/cows',
-      icon: BadgeCheck,
-      color: 'text-blue-600 bg-blue-50 border-blue-100',
-    },
-    {
-      label: 'Workers',
-      value: activeEmployeeCount.toString(),
-      subtext: `working now · ${workers.length} in total`,
-      href: '/dashboard/employees',
-      icon: Users,
-      color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
-    },
-    {
-      label: 'Feed Stock',
-      value: `${totalRemainingFeed.toLocaleString()} kg`,
-      subtext: `৳${totalFeedValue.toLocaleString(undefined, { maximumFractionDigits: 0 })} stock value`,
-      href: '/dashboard/feed',
-      icon: Wheat,
-      color: 'text-amber-600 bg-amber-50 border-amber-100',
-    },
-    {
-      label: 'Profit this month',
-      value: signed(month.profit.profit),
-      subtext: `Sales ${tk(month.profit.salesMade)} · received ${tk(month.cash.moneyIn)}`,
-      href: '/dashboard/revenue',
-      icon: DollarSign,
-      color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
-    },
+  const greeting = (() => {
+    const h = (now.getUTCHours() + 6) % 24;
+    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  })();
+  const costRows = [
+    { label: 'Feed bought', value: month.profit.feed, href: '/dashboard/feed' },
+    { label: "Workers' pay earned", value: month.profit.labour + month.profit.writtenOff, href: '/dashboard/employees' },
+    { label: 'Animal care', value: month.profit.animalCare, href: '/dashboard/history?type=animal' },
+    { label: 'Other expenses', value: month.profit.otherExpenses, href: '/dashboard/expenses' },
   ];
+  const maxCost = Math.max(1, ...costRows.map((r) => r.value));
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Farm Overview</h1>
-        <p className="mt-1 text-sm text-slate-500 sm:text-base">Live operational metrics and management summaries for your farm.</p>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow={greeting}
+        title="Farm overview"
+        subtitle="What needs attention today and how this month is going."
+        actions={
+          <>
+            <ButtonLink href="/dashboard/revenue" variant="secondary">
+              <TrendingUp className="h-4 w-4" aria-hidden="true" /> Revenue Portal
+            </ButtonLink>
+            <ButtonLink href="/dashboard/sales">
+              <ShoppingCart className="h-4 w-4" aria-hidden="true" /> Record sale
+            </ButtonLink>
+          </>
+        }
+      />
+
+      {/* This month */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <StatCard
+          label="Profit this month"
+          value={signed(month.profit.profit)}
+          Icon={TrendingUp}
+          tone={month.profit.profit < 0 ? 'danger' : 'brand'}
+          hint={`Sales ${tk(month.profit.salesMade)} · costs ${tk(month.profit.costs)}`}
+          href="/dashboard/revenue"
+        />
+        <StatCard label="Received this month" value={tk(month.cash.moneyIn)} Icon={Banknote} tone="brand" hint={`Paid out ${tk(month.cash.moneyOut)}`} href="/dashboard/revenue" />
+        <StatCard label="Customers owe you" value={tk(totalDue)} Icon={HandCoins} tone={totalDue > 0 ? 'danger' : 'neutral'} hint={`${owing.length} customer${owing.length === 1 ? '' : 's'}`} href="/dashboard/customers" />
+        <StatCard label="You owe suppliers" value={tk(totalPayable)} Icon={Store} tone={totalPayable > 0 ? 'warning' : 'neutral'} hint={`${owedSuppliers.length} supplier${owedSuppliers.length === 1 ? '' : 's'}`} href="/dashboard/suppliers" />
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Link
-              key={card.label}
-              href={card.href}
-              className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-slate-300 sm:p-6"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">{card.label}</span>
-                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border sm:h-9 sm:w-9 ${card.color}`}>
-                  <Icon className="h-5 w-5" />
-                </div>
-              </div>
-              <div className="mt-3 sm:mt-4">
-                <p className="truncate text-xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">{card.value}</p>
-                <p className="mt-1 line-clamp-2 text-xs text-slate-500">{card.subtext}</p>
-              </div>
-              <div className="mt-4 hidden items-center gap-1 sm:flex text-xs font-semibold text-emerald-600 transition group-hover:translate-x-0.5">
-                Manage section <ArrowRight className="h-3.5 w-3.5" />
-              </div>
-            </Link>
-          );
-        })}
+      {/* Farm at a glance */}
+      <div className="grid grid-cols-3 divide-x divide-line rounded-card border border-line bg-white shadow-card">
+        {[
+          { label: 'Animals', value: String(cowCount), hint: `${activeCowsCount} in herd`, href: '/dashboard/cows', Icon: PawPrint },
+          { label: 'Workers', value: String(activeEmployeeCount), hint: `${workers.length} in total`, href: '/dashboard/employees', Icon: Users },
+          { label: 'Feed stock', value: `${totalRemainingFeed.toLocaleString('en-IN')} kg`, hint: `${tk(Math.round(totalFeedValue))} value`, href: '/dashboard/feed', Icon: Wheat },
+        ].map((f) => (
+          <Link key={f.label} href={f.href} className="group flex items-center gap-3 px-4 py-4 transition-colors first:rounded-l-card last:rounded-r-card hover:bg-slate-50 sm:px-5">
+            <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-control bg-slate-100 text-slate-600 sm:flex">
+              <f.Icon className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-500">{f.label}</p>
+              <p className="truncate text-lg font-bold tabular-nums text-ink">{f.value}</p>
+              <p className="truncate text-xs text-slate-500">{f.hint}</p>
+            </div>
+          </Link>
+        ))}
       </div>
 
       {feedRunningOut.length > 0 && (
         <Link
           href="/dashboard/feed"
-          className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 transition hover:bg-amber-100"
+          className="flex items-start gap-3 rounded-card border border-amber-200 bg-amber-50/70 px-4 py-3.5 text-sm text-amber-900 transition-colors hover:bg-amber-50"
         >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
           <span>
             <span className="font-semibold">Feed running out:</span>{' '}
             {feedRunningOut.map((b) => `${b.name} (${b.schedule!.remaining.toLocaleString()} kg left)`).join(', ')}. Buy more soon →
@@ -162,237 +165,152 @@ export default async function DashboardPage() {
 
       {animalsDue.length > 0 && <DueSoonPanel items={animalsDue} />}
 
+      {/* Dues */}
       <div className="grid gap-6 xl:grid-cols-2">
-      {/* Who owes me */}
-      <div className="rounded-2xl border border-red-100 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600">
-              <HandCoins className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Who owes me</h2>
-              <p className="text-xs text-slate-500">
-                {owing.length === 0 ? 'Nobody owes you right now.' : `${owing.length} customer${owing.length === 1 ? '' : 's'} with unpaid sales`}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-red-700">Total due</p>
-              <p className="text-2xl font-extrabold text-slate-900">{tk(totalDue)}</p>
-            </div>
-            <Link href="/dashboard/customers" className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">
-              All customers <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-        </div>
-        {owing.length > 0 && (
-          <ul className="mt-2 divide-y divide-slate-100">
-            {owing.slice(0, 6).map((c) => (
-              <li key={c.id} className="flex items-center gap-3 rounded-lg px-2 py-3 transition hover:bg-slate-50">
-                <Link href={`/dashboard/customers/${c.id}`} className="flex min-w-0 flex-1 items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-semibold text-slate-900">{c.name}</p>
-                      <CustomerTypeBadge type={c.type} />
+        <Card>
+          <CardHeader
+            Icon={HandCoins}
+            title="Who owes me"
+            subtitle={owing.length === 0 ? 'Nobody owes you right now.' : `${owing.length} customer${owing.length === 1 ? '' : 's'} with unpaid sales · ${tk(totalDue)}`}
+            actions={<ButtonLink href="/dashboard/customers" variant="secondary" size="sm">All customers <ArrowRight className="h-3.5 w-3.5" /></ButtonLink>}
+          />
+          {owing.length > 0 && (
+            <ul className="divide-y divide-slate-100">
+              {owing.slice(0, 6).map((c) => (
+                <li key={c.id} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-slate-50/70 sm:px-6">
+                  <Link href={`/dashboard/customers/${c.id}`} className="flex min-w-0 flex-1 items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-ink">{c.name}</p>
+                        <CustomerTypeBadge type={c.type} />
+                      </div>
+                      <p className="flex items-center gap-1 truncate text-xs text-slate-500">
+                        {c.phone ? <><Phone className="h-3 w-3" /> {c.phone} · </> : null}
+                        Bought {tk(c.totalSold)} · paid {tk(c.totalPaid)}
+                      </p>
                     </div>
-                    <p className="flex items-center gap-1 text-xs text-slate-500">
-                      {c.phone ? <><Phone className="h-3 w-3" /> {c.phone} · </> : null}
-                      Bought {tk(c.totalSold)} · paid {tk(c.totalPaid)}
-                    </p>
-                  </div>
-                  <p className="shrink-0 text-base font-bold text-red-600">{tk(c.totalDue)}</p>
-                </Link>
-                <CollectButton party={{ id: c.id, name: c.name, totalDue: c.totalDue }} />
-              </li>
-            ))}
-          </ul>
-        )}
-        {owing.length > 6 && (
-          <Link href="/dashboard/customers" className="mt-2 block text-center text-xs font-semibold text-slate-500 hover:text-slate-900">
-            + {owing.length - 6} more
-          </Link>
-        )}
-      </div>
-
-      {/* Who I owe */}
-      <div className="rounded-2xl border border-amber-100 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
-              <Store className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Who I owe</h2>
-              <p className="text-xs text-slate-500">
-                {owedSuppliers.length === 0
-                  ? 'You owe no suppliers right now.'
-                  : `${owedSuppliers.length} supplier${owedSuppliers.length === 1 ? '' : 's'} with unpaid feed`}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">Total owed</p>
-              <p className="text-2xl font-extrabold text-slate-900">{tk(totalPayable)}</p>
-            </div>
-            <Link href="/dashboard/suppliers" className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">
-              All suppliers <ArrowRight className="h-3.5 w-3.5" />
+                    <p className="shrink-0 text-sm font-bold tabular-nums text-red-600">{tk(c.totalDue)}</p>
+                  </Link>
+                  <CollectButton party={{ id: c.id, name: c.name, totalDue: c.totalDue }} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {owing.length > 6 && (
+            <Link href="/dashboard/customers" className="block border-t border-slate-100 py-3 text-center text-xs font-semibold text-slate-500 hover:text-ink">
+              + {owing.length - 6} more
             </Link>
-          </div>
-        </div>
-        {owedSuppliers.length > 0 && (
-          <ul className="mt-2 divide-y divide-slate-100">
-            {owedSuppliers.slice(0, 6).map((s) => (
-              <li key={s.id} className="flex items-center gap-3 rounded-lg px-2 py-3 transition hover:bg-slate-50">
-                <Link href={`/dashboard/suppliers/${s.id}`} className="flex min-w-0 flex-1 items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{s.name}</p>
-                    <p className="flex items-center gap-1 text-xs text-slate-500">
-                      {s.phone ? <><Phone className="h-3 w-3" /> {s.phone} · </> : null}
-                      Bought {tk(s.totalBought)} · paid {tk(s.totalPaid)}
-                    </p>
+          )}
+        </Card>
+
+        <Card>
+          <CardHeader
+            Icon={Store}
+            title="Who I owe"
+            subtitle={owedSuppliers.length === 0 ? 'You owe no suppliers right now.' : `${owedSuppliers.length} supplier${owedSuppliers.length === 1 ? '' : 's'} with unpaid feed · ${tk(totalPayable)}`}
+            actions={<ButtonLink href="/dashboard/suppliers" variant="secondary" size="sm">All suppliers <ArrowRight className="h-3.5 w-3.5" /></ButtonLink>}
+          />
+          {owedSuppliers.length > 0 && (
+            <ul className="divide-y divide-slate-100">
+              {owedSuppliers.slice(0, 6).map((s) => (
+                <li key={s.id} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-slate-50/70 sm:px-6">
+                  <Link href={`/dashboard/suppliers/${s.id}`} className="flex min-w-0 flex-1 items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-ink">{s.name}</p>
+                      <p className="flex items-center gap-1 truncate text-xs text-slate-500">
+                        {s.phone ? <><Phone className="h-3 w-3" /> {s.phone} · </> : null}
+                        Bought {tk(s.totalBought)} · paid {tk(s.totalPaid)}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-sm font-bold tabular-nums text-red-600">{tk(s.totalDue)}</p>
+                  </Link>
+                  <CollectButton mode="pay" party={{ id: s.id, name: s.name, totalDue: s.totalDue }} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {owedSuppliers.length > 6 && (
+            <Link href="/dashboard/suppliers" className="block border-t border-slate-100 py-3 text-center text-xs font-semibold text-slate-500 hover:text-ink">
+              + {owedSuppliers.length - 6} more
+            </Link>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <IncomeCostChart
+          chart={chartDays}
+          title="Last 30 days"
+          action={<ButtonLink href="/dashboard/revenue" variant="secondary" size="sm">Details <ArrowRight className="h-3.5 w-3.5" /></ButtonLink>}
+        />
+
+        {/* This month's costs */}
+        <Card>
+          <CardHeader title="This month's costs" subtitle={`${tk(month.profit.costs)} so far`} />
+          <ul className="space-y-4 px-5 py-5 sm:px-6">
+            {costRows.map((r) => (
+              <li key={r.label}>
+                <Link href={r.href} className="group block">
+                  <div className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="text-slate-600 group-hover:text-ink">{r.label}</span>
+                    <span className="font-semibold tabular-nums text-ink">{tk(r.value)}</span>
                   </div>
-                  <p className="shrink-0 text-base font-bold text-red-600">{tk(s.totalDue)}</p>
+                  <div className="mt-1.5 h-1.5 rounded-full bg-slate-100">
+                    <div className="h-1.5 rounded-full bg-slate-400 transition-colors group-hover:bg-ink" style={{ width: `${(r.value / maxCost) * 100}%` }} />
+                  </div>
                 </Link>
-                <CollectButton mode="pay" party={{ id: s.id, name: s.name, totalDue: s.totalDue }} />
               </li>
             ))}
           </ul>
-        )}
-        {owedSuppliers.length > 6 && (
-          <Link href="/dashboard/suppliers" className="mt-2 block text-center text-xs font-semibold text-slate-500 hover:text-slate-900">
-            + {owedSuppliers.length - 6} more
-          </Link>
-        )}
-      </div>
+        </Card>
       </div>
 
-      {/* Monthly Cost Summary */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-wider text-indigo-700">Workers&apos; pay (this month)</p>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
-              <Banknote className="h-4 w-4" />
-            </div>
-          </div>
-          <p className="mt-2 text-xl font-extrabold text-slate-900">{tk(month.profit.labour + month.profit.writtenOff)}</p>
-          <p className="text-[11px] text-slate-500">Earned so far · paid {tk(month.cash.toWorkers)}</p>
-          <Link href="/dashboard/employees" className="text-[11px] text-indigo-600 hover:underline">View workers →</Link>
-        </div>
-        <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Feed Cost (This Month)</p>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-              <Wheat className="h-4 w-4" />
-            </div>
-          </div>
-          <p className="mt-2 text-xl font-extrabold text-slate-900">{tk(month.profit.feed)}</p>
-          <Link href="/dashboard/feed" className="text-[11px] text-amber-600 hover:underline">View feed →</Link>
-        </div>
-        <div className="rounded-2xl border border-red-100 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-wider text-red-700">Other Expenses</p>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-100 text-red-700">
-              <PackageOpen className="h-4 w-4" />
-            </div>
-          </div>
-          <p className="mt-2 text-xl font-extrabold text-slate-900">{tk(month.profit.otherExpenses + month.profit.animalCare)}</p>
-          {month.profit.animalCare > 0 && <p className="text-[11px] text-slate-500">Includes animal care {tk(month.profit.animalCare)}</p>}
-          <Link href="/dashboard/expenses" className="text-[11px] text-red-600 hover:underline">View expenses →</Link>
-        </div>
-      </div>
-
-      {/* 30-day Revenue Chart */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">30-Day Revenue Trend</h2>
-            <p className="text-xs text-slate-500">Money received per day over the last 30 days</p>
-          </div>
-          <Link href="/dashboard/revenue" className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition">
-            <TrendingUp className="h-3.5 w-3.5" /> Revenue Portal
-          </Link>
-        </div>
-        <div className="flex items-end gap-1 h-24">
-          {chartDays.map((d, i) => (
-            <div
-              key={i}
-              className="flex-1 rounded-t bg-emerald-400/70 hover:bg-emerald-500 transition-colors cursor-default"
-              style={{ height: `${Math.max((d.revenue / maxRevenue) * 88, d.revenue > 0 ? 4 : 1)}px` }}
-              title={`${d.date}: ৳${d.revenue.toLocaleString()}`}
-            />
-          ))}
-        </div>
-        <div className="mt-2 flex justify-between text-[10px] text-slate-400">
-          <span>{chartDays[0]?.date.slice(5)}</span>
-          <span>{chartDays[chartDays.length - 1]?.date.slice(5)}</span>
-        </div>
-      </div>
-
-      {/* Bottom two panels */}
+      {/* Recent */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Recent Sales */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Recent Sales</h2>
-              <p className="text-xs text-slate-500">Latest revenue transactions recorded</p>
-            </div>
-            <Link href="/dashboard/sales" className="text-xs font-semibold text-emerald-600 hover:text-emerald-700">View all</Link>
-          </div>
-          <div className="mt-4 divide-y divide-slate-100">
-            {recentSales.length === 0 ? (
-              <p className="py-6 text-center text-sm text-slate-500">No sales transactions recorded yet.</p>
-            ) : (
-              recentSales.map((sale) => (
-                <div key={sale.id} className="flex items-center justify-between py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{sale.customerName}</p>
-                    <p className="text-xs text-slate-500">{new Date(sale.createdAt).toLocaleDateString()}</p>
+        <Card>
+          <CardHeader title="Recent sales" subtitle="The last five sales recorded" actions={<Link href="/dashboard/sales" className="text-xs font-semibold text-brand-700 hover:underline">View all</Link>} />
+          {recentSales.length === 0 ? (
+            <EmptyState Icon={ShoppingCart} title="No sales yet" body="Record your first sale to see it here." />
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {recentSales.map((sale) => (
+                <li key={sale.id} className="flex items-center justify-between gap-3 px-5 py-3 sm:px-6">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-ink">{sale.customerName}</p>
+                    <p className="text-xs text-slate-500">{fmtDate(sale.createdAt)}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="mb-1 text-sm font-bold text-slate-900">{tk(sale.amount)}</p>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <p className="text-sm font-semibold tabular-nums text-ink">{tk(sale.amount)}</p>
                     <PaymentStatusPill status={sale.customerId ? sale.status : sale.status === 'paid' ? 'paid' : 'pending'} />
                   </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
 
-        {/* Recently Added Herd */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Recently Added Livestock</h2>
-              <p className="text-xs text-slate-500">Latest cows registered in herd</p>
-            </div>
-            <Link href="/dashboard/cows" className="text-xs font-semibold text-emerald-600 hover:text-emerald-700">View all</Link>
-          </div>
-          <div className="mt-4 divide-y divide-slate-100">
-            {recentCows.length === 0 ? (
-              <p className="py-6 text-center text-sm text-slate-500">No cows registered in herd yet.</p>
-            ) : (
-              recentCows.map((cow) => (
-                <Link key={cow.id} href={`/dashboard/cows/${cow.id}`} className="flex items-center justify-between rounded-lg px-2 py-3 transition hover:bg-slate-50">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{cow.name} <span className="text-xs font-normal text-slate-500">({cow.tagNumber})</span></p>
-                    <p className="text-xs text-slate-500">{cow.breed || 'Breed unspecified'}</p>
-                  </div>
-                  <span className={`inline-block text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${
-                    cow.status === 'active' ? 'bg-emerald-50 text-emerald-700' :
-                    cow.status === 'sold' ? 'bg-slate-100 text-slate-700' : 'bg-red-50 text-red-700'
-                  }`}>
-                    {cow.status}
-                  </span>
-                </Link>
-              ))
-            )}
-          </div>
-        </div>
+        <Card>
+          <CardHeader title="Recently added animals" subtitle="The last five animals registered" actions={<Link href="/dashboard/cows" className="text-xs font-semibold text-brand-700 hover:underline">View all</Link>} />
+          {recentCows.length === 0 ? (
+            <EmptyState Icon={PawPrint} title="No animals yet" body="Add your animals with a photo and Cow ID." />
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {recentCows.map((cow) => (
+                <li key={cow.id}>
+                  <Link href={`/dashboard/cows/${cow.id}`} className="flex items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-slate-50/70 sm:px-6">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-ink">
+                        {cow.name} <span className="text-xs font-normal text-slate-500">({cow.tagNumber})</span>
+                      </p>
+                      <p className="text-xs text-slate-500">{cow.breed || 'Breed not set'}</p>
+                    </div>
+                    <StatusBadge status={cow.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       </div>
     </div>
   );

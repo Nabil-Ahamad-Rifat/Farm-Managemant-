@@ -2,7 +2,8 @@
 
 import { useState, FormEvent } from 'react';
 import Link from 'next/link';
-import { Sprout, ArrowLeft, Mail, CheckCircle2 } from 'lucide-react';
+import AuthShell from '@/components/auth/AuthShell';
+import { ArrowLeft, Mail, CheckCircle2 } from 'lucide-react';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -34,49 +35,41 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 font-sans">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900/80 p-8 shadow-2xl backdrop-blur-xl">
-        {/* Logo */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/30">
-            <Sprout className="h-5 w-5" />
-          </div>
-          <span className="text-xl font-extrabold text-white tracking-tight">Farm Manager</span>
-        </div>
+    <AuthShell>
 
         {submitted && devResetUrl ? (
           <div className="mt-8 text-center">
-            <h1 className="text-xl font-bold text-white">Set a new password</h1>
-            <p className="mt-2 text-sm text-slate-400">
+            <h1 className="text-xl font-bold text-ink">Set a new password</h1>
+            <p className="mt-2 text-sm text-slate-500">
               Email is not set up on this computer, so no email was sent. Use this link for{' '}
-              <span className="font-medium text-white">{email}</span> (valid for 30 minutes):
+              <span className="font-medium text-ink">{email}</span> (valid for 30 minutes):
             </p>
             <a
               href={devResetUrl}
-              className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-500"
+              className="mt-5 inline-flex w-full items-center justify-center h-11 rounded-control bg-ink px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-navy-700"
             >
               Set new password →
             </a>
-            <Link href="/login" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-white">
+            <Link href="/login" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-ink">
               <ArrowLeft className="h-4 w-4" /> Back to sign in
             </Link>
           </div>
         ) : submitted ? (
           /* Success state */
           <div className="mt-8 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-500/30">
-              <CheckCircle2 className="h-7 w-7 text-emerald-400" />
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-50 border border-brand-200">
+              <CheckCircle2 className="h-7 w-7 text-brand-700" />
             </div>
-            <h1 className="mt-4 text-xl font-bold text-white">Check your email</h1>
-            <p className="mt-2 text-sm text-slate-400">
-              If <span className="text-white font-medium">{email}</span> is registered, you&apos;ll receive a password reset link within a few minutes.
+            <h1 className="mt-4 text-xl font-bold text-ink">Check your email</h1>
+            <p className="mt-2 text-sm text-slate-500">
+              If <span className="font-medium text-ink">{email}</span> is registered, you&apos;ll receive a password reset link within a few minutes.
             </p>
             <p className="mt-3 text-xs text-slate-500">
               Don&apos;t see it? Check your spam folder. The link expires in 30 minutes.
             </p>
             <Link
               href="/login"
-              className="mt-6 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10 transition"
+              className="mt-6 inline-flex items-center gap-2 rounded-control border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm hover:bg-slate-50 transition"
             >
               <ArrowLeft className="h-4 w-4" /> Back to sign in
             </Link>
@@ -84,20 +77,20 @@ export default function ForgotPasswordPage() {
         ) : (
           /* Form state */
           <>
-            <h1 className="mt-6 text-2xl font-bold tracking-tight text-white">Forgot your password?</h1>
-            <p className="mt-1 text-sm text-slate-400">
+            <h1 className="mt-6 text-2xl font-bold tracking-tight text-ink">Forgot your password?</h1>
+            <p className="mt-1 text-sm text-slate-500">
               Enter your email and we&apos;ll send you a reset link.
             </p>
 
             {error && (
-              <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs font-medium text-red-400">
+              <div className="mt-4 rounded-control border border-red-200 bg-red-50 px-3.5 py-3 text-sm font-medium text-red-700">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <div>
-                <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                <label htmlFor="email" className="mb-1.5 block text-[13px] font-medium text-slate-700">
                   Email Address
                 </label>
                 <div className="relative">
@@ -112,7 +105,7 @@ export default function ForgotPasswordPage() {
                     placeholder="owner@farm.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-white/5 pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                    className="w-full rounded-control border border-line bg-white pl-10 pr-3.5 py-2.5 text-base text-ink shadow-sm placeholder:text-slate-500 transition-colors focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/10 sm:text-sm"
                   />
                 </div>
               </div>
@@ -120,21 +113,20 @@ export default function ForgotPasswordPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-500 disabled:opacity-50 mt-2"
+                className="flex w-full items-center justify-center gap-2 h-11 rounded-control bg-ink px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-navy-700 disabled:opacity-50 mt-2"
               >
                 {loading ? 'Sending...' : 'Send Reset Link'}
               </button>
             </form>
 
-            <p className="mt-6 text-center text-xs text-slate-400">
+            <p className="mt-6 text-center text-xs text-slate-500">
               Remember your password?{' '}
-              <Link href="/login" className="font-semibold text-emerald-400 hover:underline">
+              <Link href="/login" className="font-semibold text-brand-700 hover:underline">
                 Back to sign in
               </Link>
             </p>
           </>
         )}
-      </div>
-    </main>
+      </AuthShell>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirm, useToast } from '@/components/ui/Feedback';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -28,8 +29,8 @@ const STATUS_FILTERS = [
 ];
 
 const chip = (active: boolean) =>
-  `rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-    active ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+  `rounded-control px-3.5 py-2 text-xs font-semibold transition ${
+    active ? 'bg-ink text-white shadow-card' : 'border border-line bg-white text-slate-600 hover:bg-slate-50'
   }`;
 
 export default function SalesManager({
@@ -47,6 +48,8 @@ export default function SalesManager({
   defaultMilkPrice: number;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -58,12 +61,12 @@ export default function SalesManager({
     const msg = paid > 0 && sale.customerId
       ? `Delete this sale of ${tk(sale.amount)}? The ${tk(paid)} paid on it stays with ${sale.customerName} and will cover their other dues (or become advance).`
       : `Delete this sale of ${tk(sale.amount)}?`;
-    if (!confirm(msg)) return;
+    if (!(await confirm({ title: msg, tone: 'danger' }))) return;
     try {
       await webApiClient.delete(`/api/sales/${sale.id}`);
       router.refresh();
     } catch {
-      alert('Failed to delete sale.');
+      toast('Failed to delete sale.', 'error');
     }
   }
 
@@ -91,20 +94,20 @@ export default function SalesManager({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Sales</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-[28px]">Sales</h1>
           <p className="mt-1 text-slate-500">Every sale with who bought, what, how much, and what is still due.</p>
         </div>
         <div className="flex gap-2">
           <Link
             href="/dashboard/customers"
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            className="inline-flex items-center gap-2 rounded-control border border-line bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
             <Users className="h-4 w-4" />
             Customers & dues
           </Link>
           <button
             onClick={() => setModal({ sale: null })}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+            className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-navy-700"
           >
             <Plus className="h-4 w-4" />
             Record sale
@@ -155,11 +158,54 @@ export default function SalesManager({
           placeholder="Search by customer name or cow tag..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-slate-400 focus:outline-none"
+          className="w-full rounded-control border border-line bg-white py-2.5 pl-10 pr-4 text-sm text-ink placeholder-slate-400 shadow-sm focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/10"
         />
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* Phones: one card per sale, so amount, due and status are always visible. */}
+      <ul className="divide-y divide-slate-100 overflow-hidden rounded-card border border-line bg-white shadow-card sm:hidden">
+        {filtered.length === 0 ? (
+          <li className="py-12 text-center text-sm text-slate-500">No sales match these filters.</li>
+        ) : (
+          filtered.map((sale) => {
+            const info = productTypeInfo(sale.saleType);
+            const due = Math.max(0, sale.amount - salePaid(sale));
+            const status = sale.customerId ? sale.status : sale.status === 'paid' ? 'paid' : 'pending';
+            return (
+              <li key={sale.id} className="flex items-start gap-3 px-4 py-3.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    {sale.customerId ? (
+                      <Link href={`/dashboard/customers/${sale.customerId}`} className="truncate text-sm font-semibold text-ink">{sale.customerName}</Link>
+                    ) : (
+                      <span className="truncate text-sm font-semibold text-ink">{sale.customerName}</span>
+                    )}
+                    <PaymentStatusPill status={status} />
+                  </div>
+                  <p className="mt-0.5 truncate text-xs text-slate-500">
+                    {info.label}
+                    {sale.quantity != null && sale.unitPrice != null ? ` · ${sale.quantity}${info.unit ? ` ${info.unit}` : ''} × ${tk(sale.unitPrice)}` : ''} · {fmtDate(sale.createdAt)}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-bold tabular-nums text-ink">{tk(sale.amount)}</p>
+                  {due > 0 && <p className="text-xs font-semibold tabular-nums text-red-600">Due {tk(due)}</p>}
+                  <div className="mt-1 flex justify-end gap-1">
+                    <button onClick={() => setModal({ sale })} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-ink" aria-label={`Edit sale to ${sale.customerName}`}>
+                      <Edit3 className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => handleDelete(sale)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`Delete sale to ${sale.customerName}`}>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </li>
+            );
+          })
+        )}
+      </ul>
+
+      <div className="hidden overflow-x-auto rounded-card border border-line bg-white shadow-card sm:block">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
@@ -189,11 +235,11 @@ export default function SalesManager({
                     <td className="whitespace-nowrap px-5 py-4">
                       <div className="flex items-center gap-2">
                         {sale.customerId ? (
-                          <Link href={`/dashboard/customers/${sale.customerId}`} className="text-sm font-semibold text-slate-900 hover:underline">
+                          <Link href={`/dashboard/customers/${sale.customerId}`} className="text-sm font-semibold text-ink hover:underline">
                             {sale.customerName}
                           </Link>
                         ) : (
-                          <span className="text-sm font-semibold text-slate-900">{sale.customerName}</span>
+                          <span className="text-sm font-semibold text-ink">{sale.customerName}</span>
                         )}
                         {sale.customer && <CustomerTypeBadge type={sale.customer.type} />}
                       </div>
@@ -218,8 +264,8 @@ export default function SalesManager({
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-5 py-4 text-sm font-bold text-slate-900">{tk(sale.amount)}</td>
-                    <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-emerald-700">{tk(salePaidAmt)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-sm font-bold text-ink">{tk(sale.amount)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-brand-700">{tk(salePaidAmt)}</td>
                     <td className={`whitespace-nowrap px-5 py-4 text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-slate-300'}`}>
                       {due > 0 ? tk(due) : '—'}
                     </td>
@@ -229,7 +275,7 @@ export default function SalesManager({
                       <div className="flex justify-end gap-1">
                         <button
                           onClick={() => setModal({ sale })}
-                          className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                          className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-ink"
                           aria-label={`Edit sale to ${sale.customerName}`}
                         >
                           <Edit3 className="h-4 w-4" />

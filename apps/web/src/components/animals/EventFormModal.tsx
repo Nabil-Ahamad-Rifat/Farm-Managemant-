@@ -105,8 +105,8 @@ export default function EventFormModal({
                 role="radio"
                 aria-checked={form.type === t.value}
                 onClick={() => set({ type: t.value })}
-                className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-2.5 text-xs font-semibold transition ${
-                  form.type === t.value ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                className={`flex flex-col items-center gap-1 rounded-control border px-2 py-2.5 text-xs font-semibold transition ${
+                  form.type === t.value ? 'border-slate-900 bg-ink text-white' : 'border-line bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 <t.Icon className="h-4 w-4" aria-hidden="true" />
@@ -149,8 +149,8 @@ export default function EventFormModal({
                     key={n.days}
                     type="button"
                     onClick={() => set({ nextDueDate: d })}
-                    className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
-                      form.nextDueDate === d ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    className={`rounded-control border px-3 py-1.5 text-xs font-semibold transition ${
+                      form.nextDueDate === d ? 'border-slate-900 bg-ink text-white' : 'border-line bg-white text-slate-600 hover:bg-slate-50'
                     }`}
                   >
                     {n.label}
@@ -164,7 +164,7 @@ export default function EventFormModal({
         )}
 
         {form.type === 'insemination' && form.date && (
-          <p className="rounded-xl border border-violet-100 bg-violet-50 px-3.5 py-2.5 text-sm text-violet-800">
+          <p className="rounded-control border border-violet-100 bg-violet-50 px-3.5 py-2.5 text-sm text-violet-800">
             If she is pregnant, calving is expected around <strong>{fmtDate(expectedCalving(form.date + 'T12:00:00Z'))}</strong>. Check pregnancy after about 60 days.
           </p>
         )}
@@ -184,7 +184,7 @@ export default function EventFormModal({
         )}
 
         {form.type === 'calving' && !editing && (
-          <div className="space-y-3 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3.5">
+          <div className="space-y-3 rounded-control border border-brand-100 bg-brand-50/50 p-3.5">
             <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
               <input type="checkbox" checked={addCalf} onChange={(e) => setAddCalf(e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
               Add the calf as a new animal

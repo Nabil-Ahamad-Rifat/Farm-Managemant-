@@ -48,9 +48,9 @@ export default function CustomerPicker({
 
   if (value) {
     return (
-      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
+      <div className="flex items-center justify-between rounded-control border border-line bg-slate-50 px-3.5 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-semibold text-slate-900">{value.name}</span>
+          <span className="truncate text-sm font-semibold text-ink">{value.name}</span>
           {value.kind === 'existing' ? (
             value.type && <CustomerTypeBadge type={value.type} />
           ) : (
@@ -90,7 +90,7 @@ export default function CustomerPicker({
         aria-label={noun === 'supplier' ? 'Supplier' : 'Customer'}
       />
       {open && (
-        <ul className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+        <ul className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-control border border-line bg-white py-1 shadow-lg">
           {matches.map((c) => (
             <li key={c.id}>
               <button
@@ -100,7 +100,7 @@ export default function CustomerPicker({
                 className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left hover:bg-slate-50"
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className="truncate text-sm font-medium text-slate-900">{c.name}</span>
+                  <span className="truncate text-sm font-medium text-ink">{c.name}</span>
                   {c.type && <CustomerTypeBadge type={c.type} />}
                 </span>
                 {c.totalDue ? (
@@ -117,7 +117,7 @@ export default function CustomerPicker({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onChange({ kind: 'new', name: query.trim(), type: 'new' })}
-                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm font-semibold text-brand-700 hover:bg-brand-50"
               >
                 <UserPlus className="h-4 w-4" />
                 Add &ldquo;{query.trim()}&rdquo; as a new {noun}

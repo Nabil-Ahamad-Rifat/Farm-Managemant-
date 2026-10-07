@@ -6,11 +6,11 @@ import { CheckCircle, Clock, CircleDashed, Milk, Beef, Package, type LucideIcon 
 export const PRODUCT_TYPES = [
   { value: 'milk', label: 'Milk', unit: 'L', icon: Milk, color: 'bg-sky-50 text-sky-700 border-sky-200' },
   { value: 'cow_sale', label: 'Cow', unit: 'head', icon: Beef, color: 'bg-blue-50 text-blue-700 border-blue-200' },
-  { value: 'other', label: 'Other', unit: '', icon: Package, color: 'bg-slate-50 text-slate-700 border-slate-200' },
+  { value: 'other', label: 'Other', unit: '', icon: Package, color: 'bg-slate-50 text-slate-700 border-line' },
 ] as const;
 
 const LEGACY_TYPES: Record<string, { label: string; color: string }> = {
-  general: { label: 'General', color: 'bg-slate-50 text-slate-700 border-slate-200' },
+  general: { label: 'General', color: 'bg-slate-50 text-slate-700 border-line' },
   products: { label: 'Farm Products', color: 'bg-violet-50 text-violet-700 border-violet-200' },
 };
 
@@ -55,7 +55,7 @@ export function salePaid(sale: { amount: number; status: string; paidAmount?: nu
 
 export function PaymentStatusPill({ status }: { status: string }) {
   const map: Record<string, { cls: string; label: string; Icon: typeof CheckCircle }> = {
-    paid: { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Paid', Icon: CheckCircle },
+    paid: { cls: 'bg-brand-50 text-brand-700 border-brand-200', label: 'Paid', Icon: CheckCircle },
     partial: { cls: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Partial', Icon: CircleDashed },
     pending: { cls: 'bg-red-50 text-red-700 border-red-200', label: 'Due', Icon: Clock },
   };
@@ -70,7 +70,7 @@ export function PaymentStatusPill({ status }: { status: string }) {
 
 export function CustomerTypeBadge({ type }: { type: string }) {
   return type === 'regular' ? (
-    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+    <span className="inline-flex items-center rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
       Regular
     </span>
   ) : (

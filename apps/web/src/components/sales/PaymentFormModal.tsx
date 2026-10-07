@@ -100,12 +100,12 @@ export default function PaymentFormModal({
             <button
               type="button"
               onClick={() => setForm({ ...form, amount: String(dueBefore) })}
-              className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              className="mt-2 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
             >
               Full due {tk(dueBefore)}
             </button>
           )}
-          <p className={`mt-2 text-sm font-semibold ${after > 0 ? 'text-red-600' : 'text-emerald-700'}`} aria-live="polite">
+          <p className={`mt-2 text-sm font-semibold ${after > 0 ? 'text-red-600' : 'text-brand-700'}`} aria-live="polite">
             {after > 0
               ? `Still due after this: ${tk(after)}`
               : after < 0

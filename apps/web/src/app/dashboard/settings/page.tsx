@@ -47,24 +47,24 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
+        <h1 className="text-2xl font-bold text-ink">Settings</h1>
         <p className="mt-1 text-sm text-slate-500">Farm preferences and your account.</p>
       </div>
 
       <SalesDefaultsCard />
 
-      <div className="rounded-3xl border border-red-200 bg-white p-8 shadow-sm">
+      <div className="rounded-card border border-red-200 bg-white p-8 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-600 text-white">
+          <div className="flex h-11 w-11 items-center justify-center rounded-card bg-red-600 text-white">
             <ShieldAlert className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Delete My Account</h2>
+            <h2 className="text-xl font-bold text-ink">Delete My Account</h2>
             <p className="text-sm text-slate-500">Permanently delete your account and all of your farm&apos;s data.</p>
           </div>
         </div>
 
-        <div className="mt-6 flex gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+        <div className="mt-6 flex gap-3 rounded-control border border-red-200 bg-red-50 p-4">
           <AlertTriangle className="h-5 w-5 flex-shrink-0 text-red-600" />
           <p className="text-sm text-red-800">
             This permanently deletes your account, your ranch, and every record in it — cows, employees, feed,
@@ -80,7 +80,7 @@ export default function SettingsPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Leave blank if you signed in with Google"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 outline-none focus:border-red-500"
+              className="w-full rounded-control border border-slate-300 px-4 py-3 text-sm text-ink outline-none focus:border-red-500"
             />
           </div>
 
@@ -99,7 +99,7 @@ export default function SettingsPage() {
           <button
             type="submit"
             disabled={loading || !confirmed}
-            className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-control bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-60"
           >
             <Trash2 className="h-4 w-4" />
             {loading ? 'Deleting Account...' : 'Delete My Account'}

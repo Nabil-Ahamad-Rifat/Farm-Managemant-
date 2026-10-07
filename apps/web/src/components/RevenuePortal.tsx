@@ -7,10 +7,7 @@ import { TrendingUp, TrendingDown, Wallet, Scale, ArrowRight, CalendarRange, Lis
 import { farmMonth } from '@farm/business-logic';
 import type { FinanceReport } from '@/lib/finance';
 import { fmtDate, monthLabel, tk } from '@/components/sales/shared';
-
-// Chart colours (validated for colour-blind separation): income blue, costs orange.
-const INCOME = '#2a78d6';
-const COSTS = '#eb6834';
+import IncomeCostChart from '@/components/IncomeCostChart';
 
 const PRESETS = [
   { value: 'today', label: 'Today' },
@@ -21,12 +18,6 @@ const PRESETS = [
 ] as const;
 
 const signed = (n: number) => (n < 0 ? '− ' + tk(-n) : tk(n));
-
-/** Short label of a chart bucket: "7 Oct" for a day, "Oct 26" for a month. */
-const bucketLabel = (key: string) =>
-  key.length === 7
-    ? new Date(key + '-01T00:00:00Z').toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' })
-    : new Date(key + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 export default function RevenuePortal({ report }: { report: FinanceReport }) {
   const router = useRouter();
@@ -47,18 +38,18 @@ export default function RevenuePortal({ report }: { report: FinanceReport }) {
 
   const chip = (active: boolean) =>
     `shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-semibold transition sm:py-2 sm:text-xs ${
-      active ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+      active ? 'bg-ink text-white shadow-card' : 'border border-line bg-white text-slate-600 hover:bg-slate-50'
     }`;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Revenue Portal</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-[28px]">Revenue Portal</h1>
         <p className="mt-1 text-sm text-slate-500 sm:text-base">Profit, cash and dues for any period. Every number links to the entries behind it.</p>
       </div>
 
       {/* Period */}
-      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="space-y-3 rounded-card border border-line bg-white p-4 shadow-sm">
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
           {PRESETS.map((pr) => (
             <button key={pr.value} onClick={() => go(`range=${pr.value}`)} aria-pressed={range.preset === pr.value} className={chip(range.preset === pr.value)}>
@@ -80,7 +71,7 @@ export default function RevenuePortal({ report }: { report: FinanceReport }) {
                 max={farmMonth()}
                 defaultValue={range.month ?? ''}
                 onChange={(e) => e.target.value && go(`month=${e.target.value}`)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base sm:text-sm"
+                className="w-full rounded-control border border-line px-3 py-2.5 text-base sm:text-sm"
               />
             </div>
             <form
@@ -92,13 +83,13 @@ export default function RevenuePortal({ report }: { report: FinanceReport }) {
             >
               <div className="min-w-[140px] flex-1">
                 <label htmlFor="rev-from" className="mb-1 block text-xs font-semibold uppercase text-slate-600">From</label>
-                <input id="rev-from" type="date" required value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base sm:text-sm" />
+                <input id="rev-from" type="date" required value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} className="w-full rounded-control border border-line px-3 py-2.5 text-base sm:text-sm" />
               </div>
               <div className="min-w-[140px] flex-1">
                 <label htmlFor="rev-to" className="mb-1 block text-xs font-semibold uppercase text-slate-600">To</label>
-                <input id="rev-to" type="date" required min={custom.from} value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base sm:text-sm" />
+                <input id="rev-to" type="date" required min={custom.from} value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} className="w-full rounded-control border border-line px-3 py-2.5 text-base sm:text-sm" />
               </div>
-              <button type="submit" className="h-11 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800">Show</button>
+              <button type="submit" className="h-11 rounded-control bg-ink px-4 text-sm font-semibold text-white hover:bg-navy-700">Show</button>
             </form>
           </div>
         )}
@@ -109,14 +100,14 @@ export default function RevenuePortal({ report }: { report: FinanceReport }) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Profit */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="profit-h">
+        <section className="rounded-card border border-line bg-white p-5 shadow-sm sm:p-6" aria-labelledby="profit-h">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 id="profit-h" className="text-xs font-bold uppercase tracking-wider text-slate-500">Profit</h2>
-              <p className={`mt-1 text-3xl font-extrabold ${p.profit < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{signed(p.profit)}</p>
+              <p className={`mt-1 text-3xl font-extrabold ${p.profit < 0 ? 'text-red-600' : 'text-brand-700'}`}>{signed(p.profit)}</p>
               <p className="mt-1 text-xs text-slate-500">What the farm earned minus what it cost, whether paid yet or not.</p>
             </div>
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white ${p.profit < 0 ? 'bg-red-600' : 'bg-emerald-600'}`}>
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-card text-white ${p.profit < 0 ? 'bg-red-600' : 'bg-brand-600'}`}>
               {p.profit < 0 ? <TrendingDown className="h-5 w-5" aria-label="Loss" /> : <TrendingUp className="h-5 w-5" aria-label="Profit" />}
             </div>
           </div>
@@ -133,14 +124,14 @@ export default function RevenuePortal({ report }: { report: FinanceReport }) {
         </section>
 
         {/* Cash */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="cash-h">
+        <section className="rounded-card border border-line bg-white p-5 shadow-sm sm:p-6" aria-labelledby="cash-h">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 id="cash-h" className="text-xs font-bold uppercase tracking-wider text-slate-500">Cash flow</h2>
-              <p className={`mt-1 text-3xl font-extrabold ${c.net < 0 ? 'text-red-600' : 'text-slate-900'}`}>{signed(c.net)}</p>
+              <p className={`mt-1 text-3xl font-extrabold ${c.net < 0 ? 'text-red-600' : 'text-ink'}`}>{signed(c.net)}</p>
               <p className="mt-1 text-xs text-slate-500">Money that actually came in minus money that went out.</p>
             </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card bg-ink text-white">
               <Wallet className="h-5 w-5" aria-hidden="true" />
             </div>
           </div>
@@ -159,10 +150,10 @@ export default function RevenuePortal({ report }: { report: FinanceReport }) {
       </div>
 
       {/* Dues */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="dues-h">
+      <section className="rounded-card border border-line bg-white p-5 shadow-sm sm:p-6" aria-labelledby="dues-h">
         <div className="flex items-center gap-2">
           <Scale className="h-4 w-4 text-slate-400" aria-hidden="true" />
-          <h2 id="dues-h" className="text-base font-bold text-slate-900">Dues right now</h2>
+          <h2 id="dues-h" className="text-base font-bold text-ink">Dues right now</h2>
         </div>
         <p className="text-xs text-slate-500">Why profit and cash differ: sales not yet paid for, and bills not yet paid.</p>
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -176,13 +167,13 @@ export default function RevenuePortal({ report }: { report: FinanceReport }) {
       <IncomeCostChart chart={chart} />
 
       {/* Months */}
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm" aria-labelledby="months-h">
+      <section className="rounded-card border border-line bg-white shadow-card" aria-labelledby="months-h">
         <div className="flex items-center justify-between gap-3 p-5 sm:p-6">
           <div>
-            <h2 id="months-h" className="text-base font-bold text-slate-900">Month by month</h2>
+            <h2 id="months-h" className="text-base font-bold text-ink">Month by month</h2>
             <p className="text-xs text-slate-500">Tap a month to see it in full.</p>
           </div>
-          <Link href="/dashboard/history" className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+          <Link href="/dashboard/history" className="inline-flex shrink-0 items-center gap-1.5 rounded-control border border-line px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
             <ListChecks className="h-4 w-4" /> All entries
           </Link>
         </div>
@@ -201,12 +192,12 @@ export default function RevenuePortal({ report }: { report: FinanceReport }) {
             <tbody className="divide-y divide-slate-100">
               {months.map((m) => (
                 <tr key={m.month} className={`cursor-pointer hover:bg-slate-50 ${range.month === m.month ? 'bg-sky-50/60' : ''}`} onClick={() => go(`month=${m.month}`)}>
-                  <td className="whitespace-nowrap px-5 py-3 font-semibold text-slate-900">
+                  <td className="whitespace-nowrap px-5 py-3 font-semibold text-ink">
                     <Link href={`/dashboard/revenue?month=${m.month}`} onClick={(e) => e.stopPropagation()} className="hover:underline">{monthLabel(m.month)}</Link>
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right text-slate-700">{tk(m.income)}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-right text-slate-700">{tk(m.costs)}</td>
-                  <td className={`whitespace-nowrap px-3 py-3 text-right font-semibold ${m.profit < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{signed(m.profit)}</td>
+                  <td className={`whitespace-nowrap px-3 py-3 text-right font-semibold ${m.profit < 0 ? 'text-red-600' : 'text-brand-700'}`}>{signed(m.profit)}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-right text-slate-700">{tk(m.moneyIn)}</td>
                   <td className="whitespace-nowrap px-5 py-3 text-right text-slate-700">{tk(m.moneyOut)}</td>
                 </tr>
@@ -222,11 +213,11 @@ export default function RevenuePortal({ report }: { report: FinanceReport }) {
 function Row({ label, value, href, hint, strong }: { label: string; value: string; href?: string; hint?: string; strong?: boolean }) {
   const body = (
     <>
-      <dt className={`min-w-0 ${strong ? 'font-bold text-slate-900' : 'text-slate-600'}`}>
+      <dt className={`min-w-0 ${strong ? 'font-bold text-ink' : 'text-slate-600'}`}>
         {label}
         {hint && <span className="block text-[11px] font-normal text-slate-400">{hint}</span>}
       </dt>
-      <dd className={`flex shrink-0 items-center gap-1 ${strong ? 'font-extrabold text-slate-900' : 'font-semibold text-slate-900'}`}>
+      <dd className={`flex shrink-0 items-center gap-1 ${strong ? 'font-extrabold text-ink' : 'font-semibold text-ink'}`}>
         {value}
         {href && <ArrowRight className="h-3.5 w-3.5 text-slate-300" aria-hidden="true" />}
       </dd>
@@ -241,79 +232,9 @@ function Row({ label, value, href, hint, strong }: { label: string; value: strin
 
 function Due({ label, value, href }: { label: string; value: number; href: string }) {
   return (
-    <Link href={href} className="rounded-xl border border-slate-100 bg-slate-50/60 p-3 transition hover:border-slate-200 hover:bg-slate-50">
+    <Link href={href} className="rounded-control border border-slate-100 bg-slate-50/60 p-3 transition hover:border-line hover:bg-slate-50">
       <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-extrabold text-slate-900">{tk(value)}</p>
+      <p className="mt-1 text-lg font-extrabold text-ink">{tk(value)}</p>
     </Link>
-  );
-}
-
-/** Income vs costs per day (or per month for long ranges), with a tooltip per pair. */
-function IncomeCostChart({ chart }: { chart: FinanceReport['chart'] }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const max = Math.max(1, ...chart.flatMap((b) => [b.income, b.costs]));
-  const H = 160;
-  const h = (v: number) => (v > 0 ? Math.max(2, (v / max) * H) : 0);
-  const active = hover !== null ? chart[hover] : null;
-  const ticks = chart.length <= 1 ? [0] : [0, Math.floor((chart.length - 1) / 2), chart.length - 1];
-
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="chart-h">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id="chart-h" className="text-base font-bold text-slate-900">Income and costs</h2>
-          <p className="text-xs text-slate-500">{chart[0]?.key.length === 7 ? 'Per month' : 'Per day'} · profit view</p>
-        </div>
-        <div className="flex gap-4 text-xs font-semibold text-slate-600">
-          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: INCOME }} /> Income</span>
-          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: COSTS }} /> Costs</span>
-        </div>
-      </div>
-
-      <div className="mt-3 h-12 text-sm" aria-live="polite">
-        {active ? (
-          <div className="inline-flex flex-wrap gap-x-4 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-            <span className="font-semibold text-slate-900">{active.key.length === 7 ? monthLabel(active.key) : fmtDate(active.key)}</span>
-            <span className="text-slate-600">Income <b className="text-slate-900">{tk(active.income)}</b></span>
-            <span className="text-slate-600">Costs <b className="text-slate-900">{tk(active.costs)}</b></span>
-            <span className="text-slate-600">Profit <b className={active.profit < 0 ? 'text-red-600' : 'text-emerald-700'}>{signed(active.profit)}</b></span>
-          </div>
-        ) : (
-          <p className="pt-2 text-xs text-slate-400">Point at or tap a bar to see its numbers. Highest: {tk(max)}</p>
-        )}
-      </div>
-
-      <div className="relative border-b border-slate-200" style={{ height: H }} onMouseLeave={() => setHover(null)}>
-        <div className="absolute inset-x-0 top-0 border-t border-dashed border-slate-100" aria-hidden="true" />
-        <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-slate-100" aria-hidden="true" />
-        <div className="relative flex h-full items-end gap-[2px]">
-          {chart.map((b, i) => (
-            <button
-              key={b.key}
-              type="button"
-              onMouseEnter={() => setHover(i)}
-              onFocus={() => setHover(i)}
-              onClick={() => setHover(i)}
-              aria-label={`${b.key}: income ${tk(b.income)}, costs ${tk(b.costs)}`}
-              className={`flex h-full min-w-0 flex-1 items-end justify-center gap-[2px] rounded-t px-[1px] ${hover === i ? 'bg-slate-100' : ''}`}
-            >
-              <span className="w-full max-w-[14px] rounded-t-[4px]" style={{ height: h(b.income), background: INCOME }} />
-              <span className="w-full max-w-[14px] rounded-t-[4px]" style={{ height: h(b.costs), background: COSTS }} />
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="relative mt-1.5 h-4 text-[11px] text-slate-400">
-        {ticks.map((t, i) => (
-          <span
-            key={t}
-            className="absolute whitespace-nowrap"
-            style={i === 0 ? { left: 0 } : i === ticks.length - 1 ? { right: 0 } : { left: `${((t + 0.5) / chart.length) * 100}%`, transform: 'translateX(-50%)' }}
-          >
-            {bucketLabel(chart[t].key)}
-          </span>
-        ))}
-      </div>
-    </section>
   );
 }

@@ -48,12 +48,12 @@ export default function EmployeeManager({ workers }: { workers: WorkerListItem[]
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Workers</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-[28px]">Workers</h1>
           <p className="mt-1 text-sm text-slate-500 sm:text-base">Pay, advances and absences of every worker. Monthly pay is salary ÷ 30 per day.</p>
         </div>
         <button
           onClick={() => setAdding(true)}
-          className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 sm:py-2.5"
+          className="inline-flex shrink-0 items-center gap-2 rounded-control bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 sm:py-2.5"
         >
           <Plus className="h-4 w-4" /> Add worker
         </button>
@@ -75,7 +75,7 @@ export default function EmployeeManager({ workers }: { workers: WorkerListItem[]
             placeholder="Search by name, work or phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-base text-slate-900 placeholder-slate-400 shadow-sm focus:border-slate-400 focus:outline-none sm:py-2.5 sm:text-sm"
+            className="w-full rounded-control border border-line bg-white py-3 pl-10 pr-4 text-base text-ink placeholder-slate-400 shadow-sm focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/10 sm:py-2.5 sm:text-sm"
           />
         </div>
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
@@ -85,7 +85,7 @@ export default function EmployeeManager({ workers }: { workers: WorkerListItem[]
               onClick={() => setFilter(f.value)}
               aria-pressed={filter === f.value}
               className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-semibold transition sm:py-2 sm:text-xs ${
-                filter === f.value ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                filter === f.value ? 'bg-ink text-white shadow-card' : 'border border-line bg-white text-slate-600 hover:bg-slate-50'
               }`}
             >
               {f.label} <span className={filter === f.value ? 'text-slate-300' : 'text-slate-400'}>{workers.filter(matches[f.value]).length}</span>
@@ -95,20 +95,20 @@ export default function EmployeeManager({ workers }: { workers: WorkerListItem[]
       </div>
 
       {shown.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-14 text-center">
+        <div className="rounded-card border border-dashed border-slate-300 bg-white py-14 text-center">
           <p className="text-sm text-slate-500">{workers.length === 0 ? 'No workers yet. Add your first worker.' : 'No workers match this search or filter.'}</p>
         </div>
       ) : (
-        <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <ul className="divide-y divide-slate-100 overflow-hidden rounded-card border border-line bg-white shadow-card">
           {shown.map((w) => (
             <li key={w.id} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-slate-50 sm:px-5">
               <Link href={`/dashboard/employees/${w.id}`} className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-base font-bold text-white">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card bg-ink text-base font-bold text-white">
                   {w.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <p className="truncate text-sm font-bold text-slate-900 sm:text-base">{w.name}</p>
+                    <p className="truncate text-sm font-bold text-ink sm:text-base">{w.name}</p>
                     {w.status === 'left' && <WorkerStatusBadge status="left" />}
                   </div>
                   <p className="truncate text-xs text-slate-500">
@@ -133,7 +133,7 @@ export default function EmployeeManager({ workers }: { workers: WorkerListItem[]
                   type="button"
                   onClick={() => setPaying(w)}
                   aria-label={`Pay ${w.name}`}
-                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                  className="inline-flex h-10 items-center gap-1.5 rounded-control border border-brand-200 bg-brand-50 px-3.5 text-sm font-semibold text-brand-700 transition hover:bg-brand-100"
                 >
                   <Wallet className="h-4 w-4" /> Pay
                 </button>

@@ -3,7 +3,8 @@
 import { useState, FormEvent, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Sprout, Eye, EyeOff, CheckCircle2, ArrowRight } from 'lucide-react';
+import AuthShell from '@/components/auth/AuthShell';
+import { Eye, EyeOff, CheckCircle2, ArrowRight } from 'lucide-react';
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -49,7 +50,7 @@ function ResetPasswordForm() {
     return (
       <div className="mt-8 text-center">
         <p className="text-red-400 text-sm">Invalid or missing reset token.</p>
-        <Link href="/forgot-password" className="mt-4 inline-block text-emerald-400 hover:underline text-sm font-semibold">
+        <Link href="/forgot-password" className="mt-4 inline-block text-brand-700 hover:underline text-sm font-semibold">
           Request a new reset link
         </Link>
       </div>
@@ -60,26 +61,26 @@ function ResetPasswordForm() {
     <>
       {success ? (
         <div className="mt-8 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-500/30">
-            <CheckCircle2 className="h-7 w-7 text-emerald-400" />
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-50 border border-brand-200">
+            <CheckCircle2 className="h-7 w-7 text-brand-700" />
           </div>
-          <h1 className="mt-4 text-xl font-bold text-white">Password updated!</h1>
-          <p className="mt-2 text-sm text-slate-400">Redirecting you to sign in...</p>
+          <h1 className="mt-4 text-xl font-bold text-ink">Password updated!</h1>
+          <p className="mt-2 text-sm text-slate-500">Redirecting you to sign in...</p>
         </div>
       ) : (
         <>
-          <h1 className="mt-6 text-2xl font-bold tracking-tight text-white">Set a new password</h1>
-          <p className="mt-1 text-sm text-slate-400">Choose a strong password for your farm account.</p>
+          <h1 className="mt-6 text-2xl font-bold tracking-tight text-ink">Set a new password</h1>
+          <p className="mt-1 text-sm text-slate-500">Choose a strong password for your farm account.</p>
 
           {error && (
-            <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs font-medium text-red-400">
+            <div className="mt-4 rounded-control border border-red-200 bg-red-50 px-3.5 py-3 text-sm font-medium text-red-700">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              <label className="mb-1.5 block text-[13px] font-medium text-slate-700">
                 New Password
               </label>
               <div className="relative">
@@ -90,7 +91,7 @@ function ResetPasswordForm() {
                   placeholder="At least 8 characters"
                   value={form.newPassword}
                   onChange={(e) => setForm({ ...form, newPassword: e.target.value })}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 pr-10 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                  className="w-full rounded-control border border-line bg-white px-3.5 py-2.5 pr-10 text-base text-ink shadow-sm placeholder:text-slate-400 sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/10 transition"
                 />
                 <button
                   type="button"
@@ -104,7 +105,7 @@ function ResetPasswordForm() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              <label className="mb-1.5 block text-[13px] font-medium text-slate-700">
                 Confirm Password
               </label>
               <input
@@ -113,10 +114,10 @@ function ResetPasswordForm() {
                 placeholder="Repeat your new password"
                 value={form.confirmPassword}
                 onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-                className={`w-full rounded-xl border bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 transition ${
+                className={`w-full rounded-control border bg-white px-3.5 py-2.5 text-base text-ink shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-4 transition-colors sm:text-sm ${
                   form.confirmPassword && form.confirmPassword !== form.newPassword
                     ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500'
-                    : 'border-white/10 focus:border-emerald-500 focus:ring-emerald-500'
+                    : 'border-line focus:border-brand-600 focus:ring-brand-600/10'
                 }`}
               />
               {form.confirmPassword && form.confirmPassword !== form.newPassword && (
@@ -135,8 +136,8 @@ function ResetPasswordForm() {
                         form.newPassword.length >= i * 3
                           ? form.newPassword.length < 8
                             ? 'bg-amber-400'
-                            : 'bg-emerald-400'
-                          : 'bg-white/10'
+                            : 'bg-brand-400'
+                          : 'bg-slate-200'
                       }`}
                     />
                   ))}
@@ -152,7 +153,7 @@ function ResetPasswordForm() {
             <button
               type="submit"
               disabled={loading || form.newPassword !== form.confirmPassword || form.newPassword.length < 8}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-500 disabled:opacity-50 mt-2"
+              className="flex w-full items-center justify-center gap-2 h-11 rounded-control bg-ink px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-navy-700 disabled:opacity-50 mt-2"
             >
               {loading ? 'Updating...' : 'Update Password'}
               {!loading && <ArrowRight className="h-4 w-4" />}
@@ -166,18 +167,10 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 font-sans">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900/80 p-8 shadow-2xl backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/30">
-            <Sprout className="h-5 w-5" />
-          </div>
-          <span className="text-xl font-extrabold text-white tracking-tight">Farm Manager</span>
-        </div>
-        <Suspense fallback={<div className="mt-8 text-slate-400 text-sm">Loading...</div>}>
+    <AuthShell>
+        <Suspense fallback={<div className="mt-8 text-slate-500 text-sm">Loading...</div>}>
           <ResetPasswordForm />
         </Suspense>
-      </div>
-    </main>
+      </AuthShell>
   );
 }

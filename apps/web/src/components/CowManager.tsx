@@ -62,12 +62,12 @@ export default function CowManager({
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Animals</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-[28px]">Animals</h1>
           <p className="mt-1 text-sm text-slate-500 sm:text-base">Photo, Cow ID, breeding and health records of every animal.</p>
         </div>
         <button
           onClick={() => setAdding(true)}
-          className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 sm:py-2.5"
+          className="inline-flex shrink-0 items-center gap-2 rounded-control bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 sm:py-2.5"
         >
           <Plus className="h-4 w-4" />
           Add animal
@@ -83,7 +83,7 @@ export default function CowManager({
             placeholder="Search by Cow ID, name or breed..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-base sm:py-2.5 sm:text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-slate-400 focus:outline-none"
+            className="w-full rounded-control border border-line bg-white py-3 pl-10 pr-4 text-base sm:py-2.5 sm:text-sm text-ink placeholder-slate-400 shadow-sm focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/10"
           />
         </div>
         {/* One swipeable row on phones. */}
@@ -94,7 +94,7 @@ export default function CowManager({
               onClick={() => setFilter(f.value)}
               aria-pressed={filter === f.value}
               className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-semibold transition sm:py-2 sm:text-xs ${
-                filter === f.value ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                filter === f.value ? 'bg-ink text-white shadow-card' : 'border border-line bg-white text-slate-600 hover:bg-slate-50'
               }`}
             >
               {f.label} <span className={filter === f.value ? 'text-slate-300' : 'text-slate-400'}>{counts[f.value]}</span>
@@ -104,12 +104,12 @@ export default function CowManager({
       </div>
 
       {shown.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-14 text-center">
+        <div className="rounded-card border border-dashed border-slate-300 bg-white py-14 text-center">
           <p className="text-sm text-slate-500">
             {initialCows.length === 0 ? 'No animals yet. Add your first animal with a photo.' : 'No animals match this search or filter.'}
           </p>
           {initialCows.length === 0 && (
-            <button onClick={() => setAdding(true)} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+            <button onClick={() => setAdding(true)} className="mt-4 inline-flex items-center gap-2 rounded-control bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-navy-700">
               <Plus className="h-4 w-4" /> Add animal
             </button>
           )}
@@ -123,18 +123,18 @@ export default function CowManager({
               <li key={c.id}>
                 <Link
                   href={`/dashboard/cows/${c.id}`}
-                  className="group block overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md"
+                  className="group block overflow-hidden rounded-card border border-line bg-white shadow-card transition hover:border-slate-300 hover:shadow-md"
                 >
                   <div className="relative">
                     <AnimalPhoto src={c.photoUrl} alt={`${c.tagNumber} ${c.name}`} className="aspect-[4/3] w-full" />
-                    <span className="absolute left-2 top-2 sm:left-3 sm:top-3 rounded-lg bg-slate-900/85 px-2 py-1 font-mono text-xs font-bold text-white">{c.tagNumber}</span>
+                    <span className="absolute left-2 top-2 sm:left-3 sm:top-3 rounded-lg bg-ink/85 px-2 py-1 font-mono text-xs font-bold text-white">{c.tagNumber}</span>
                     {c.status !== 'active' && (
                       <span className="absolute right-2 top-2 sm:right-3 sm:top-3"><StatusBadge status={c.status} /></span>
                     )}
                   </div>
                   <div className="space-y-2 p-3 sm:p-4">
                     <div>
-                      <p className="truncate text-sm font-bold sm:text-base text-slate-900 group-hover:underline">{c.name}</p>
+                      <p className="truncate text-sm font-bold sm:text-base text-ink group-hover:underline">{c.name}</p>
                       <p className="truncate text-xs text-slate-500">{details || 'No details yet'}</p>
                     </div>
                     <div className="flex flex-wrap gap-1.5">

@@ -18,18 +18,18 @@ export const EVENT_TYPES: {
   { value: 'vaccine', label: 'Vaccine', Icon: Syringe, color: 'bg-sky-50 text-sky-700 border-sky-200', titleLabel: 'Vaccine name', titlePlaceholder: 'e.g. FMD, LSD, Anthrax' },
   { value: 'insemination', label: 'Semen / AI', Icon: Dna, color: 'bg-violet-50 text-violet-700 border-violet-200', titleLabel: 'Bull / semen straw', titlePlaceholder: 'e.g. Holstein straw #A12', breeding: true },
   { value: 'pregnancy_check', label: 'Pregnancy check', Icon: Stethoscope, color: 'bg-pink-50 text-pink-700 border-pink-200', titleLabel: 'Checked by', titlePlaceholder: 'e.g. Dr. Rahim', breeding: true },
-  { value: 'calving', label: 'Calving', Icon: Baby, color: 'bg-emerald-50 text-emerald-700 border-emerald-200', titleLabel: 'Note', titlePlaceholder: 'e.g. Normal delivery', breeding: true },
+  { value: 'calving', label: 'Calving', Icon: Baby, color: 'bg-brand-50 text-brand-700 border-brand-200', titleLabel: 'Note', titlePlaceholder: 'e.g. Normal delivery', breeding: true },
   { value: 'treatment', label: 'Treatment', Icon: Pill, color: 'bg-red-50 text-red-700 border-red-200', titleLabel: 'Illness / medicine', titlePlaceholder: 'e.g. Fever, antibiotic' },
   { value: 'deworming', label: 'Deworming', Icon: Bug, color: 'bg-amber-50 text-amber-700 border-amber-200', titleLabel: 'Medicine', titlePlaceholder: 'e.g. Albendazole' },
-  { value: 'weight', label: 'Weight', Icon: Scale, color: 'bg-slate-50 text-slate-700 border-slate-200' },
-  { value: 'other', label: 'Other', Icon: StickyNote, color: 'bg-slate-50 text-slate-700 border-slate-200', titleLabel: 'What happened', titlePlaceholder: 'e.g. Hoof trimming' },
+  { value: 'weight', label: 'Weight', Icon: Scale, color: 'bg-slate-50 text-slate-700 border-line' },
+  { value: 'other', label: 'Other', Icon: StickyNote, color: 'bg-slate-50 text-slate-700 border-line', titleLabel: 'What happened', titlePlaceholder: 'e.g. Hoof trimming' },
 ];
 
 export const eventTypeInfo = (type: string) => EVENT_TYPES.find((t) => t.value === type) ?? EVENT_TYPES[EVENT_TYPES.length - 1];
 
 export const STATUSES = [
-  { value: 'active', label: 'In herd', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  { value: 'sold', label: 'Sold', color: 'bg-slate-100 text-slate-700 border-slate-200' },
+  { value: 'active', label: 'In herd', color: 'bg-brand-50 text-brand-700 border-brand-200' },
+  { value: 'sold', label: 'Sold', color: 'bg-slate-100 text-slate-700 border-line' },
   { value: 'dead', label: 'Dead', color: 'bg-red-50 text-red-700 border-red-200' },
 ] as const;
 
@@ -51,7 +51,7 @@ export const categoryLabel = (c?: string | null) => CATEGORIES.find((x) => x.val
 const PREGNANCY: Record<string, { label: string; color: string }> = {
   pregnant: { label: 'Pregnant', color: 'bg-pink-50 text-pink-700 border-pink-200' },
   inseminated: { label: 'AI done', color: 'bg-violet-50 text-violet-700 border-violet-200' },
-  open: { label: 'Not pregnant', color: 'bg-slate-50 text-slate-600 border-slate-200' },
+  open: { label: 'Not pregnant', color: 'bg-slate-50 text-slate-600 border-line' },
 };
 
 export function PregnancyBadge({ status }: { status: string }) {
@@ -69,7 +69,7 @@ export function dueText(daysLeft: number) {
 }
 
 export const dueTone = (daysLeft: number) =>
-  daysLeft < 0 ? 'bg-red-50 text-red-700 border-red-200' : daysLeft <= 3 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200';
+  daysLeft < 0 ? 'bg-red-50 text-red-700 border-red-200' : daysLeft <= 3 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-600 border-line';
 
 /** Days from today (UTC calendar days, like the server) to a "YYYY-MM-DD" day. */
 export function daysUntil(day: string) {
@@ -157,14 +157,14 @@ export function PhotoPicker({
     }
   }
 
-  const btn = 'inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50';
+  const btn = 'inline-flex items-center gap-1.5 rounded-control border border-line bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50';
   return (
     <div>
       <span className="mb-1 block text-xs font-semibold uppercase text-slate-600">
         {label} {required && <span className="text-red-600">*</span>}
       </span>
       <div className="flex items-center gap-4">
-        <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+        <div className="h-24 w-24 shrink-0 overflow-hidden rounded-card border border-line bg-slate-50">
           {value ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={value.preview} alt="Chosen photo" className="h-full w-full object-cover" />
@@ -214,8 +214,8 @@ export function ChoiceChips<T extends string>({
           role="radio"
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
-            value === o.value ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+          className={`rounded-control border px-3 py-1.5 text-xs font-semibold transition ${
+            value === o.value ? 'border-slate-900 bg-ink text-white' : 'border-line bg-white text-slate-600 hover:bg-slate-50'
           }`}
         >
           {o.label}

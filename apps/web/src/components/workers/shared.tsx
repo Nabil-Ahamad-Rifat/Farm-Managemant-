@@ -13,7 +13,7 @@ export function payLabel(w: Pick<Employee, 'payType' | 'salary' | 'dailyRate'>) 
 export function balanceInfo(balance: number) {
   if (balance > 0.004) return { label: `You owe ${tk(balance)}`, text: 'text-red-600', cls: 'border-red-200 bg-red-50 text-red-700' };
   if (balance < -0.004) return { label: `Advance ${tk(-balance)}`, text: 'text-amber-700', cls: 'border-amber-200 bg-amber-50 text-amber-800' };
-  return { label: 'Settled', text: 'text-emerald-700', cls: 'border-emerald-200 bg-emerald-50 text-emerald-700' };
+  return { label: 'Settled', text: 'text-brand-700', cls: 'border-brand-200 bg-brand-50 text-brand-700' };
 }
 
 export function BalancePill({ account }: { account: Pick<WorkerAccountInfo, 'balance'> }) {
@@ -23,8 +23,8 @@ export function BalancePill({ account }: { account: Pick<WorkerAccountInfo, 'bal
 
 export function WorkerStatusBadge({ status }: { status: string }) {
   return status === 'left' ? (
-    <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Left</span>
+    <span className="inline-flex rounded-full border border-line bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Left</span>
   ) : (
-    <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">Working</span>
+    <span className="inline-flex rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700">Working</span>
   );
 }

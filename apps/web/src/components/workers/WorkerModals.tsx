@@ -104,7 +104,7 @@ export function WorkerFormModal({ worker, onClose, onSaved }: { worker?: Employe
         )}
 
         {rateChanged && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <div className="rounded-control border border-amber-200 bg-amber-50 p-3">
             <label htmlFor="w-ratefrom" className={labelCls}>New pay applies from</label>
             <input id="w-ratefrom" type="date" required max={todayStr()} min={form.joinDate} value={form.rateFrom} onChange={(e) => set({ rateFrom: e.target.value })} className={inputCls} />
             <p className="mt-1 text-xs text-amber-800">Days before this keep the old pay.</p>
@@ -174,8 +174,8 @@ export function WorkerPaymentModal({
                   key={i}
                   type="button"
                   onClick={() => setForm({ ...form, amount: String(c) })}
-                  className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
-                    amount === c ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  className={`rounded-control border px-3 py-1.5 text-xs font-semibold transition ${
+                    amount === c ? 'border-slate-900 bg-ink text-white' : 'border-line bg-white text-slate-600 hover:bg-slate-50'
                   }`}
                 >
                   {i === chips.length - 1 && owed > 0 ? `All due ${tk(c)}` : tk(c)}
@@ -280,8 +280,8 @@ export function WorkModal({
                 key={d}
                 type="button"
                 onClick={() => setForm({ ...form, days: String(d) })}
-                className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
-                  parseFloat(form.days) === d ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                className={`rounded-control border px-3 py-1.5 text-xs font-semibold transition ${
+                  parseFloat(form.days) === d ? 'border-slate-900 bg-ink text-white' : 'border-line bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 {d === 0.5 ? 'Half day' : `${d} day${d === 1 ? '' : 's'}`}

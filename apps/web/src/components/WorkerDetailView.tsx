@@ -12,6 +12,7 @@ import { webApiClient } from '@farm/api-client';
 import { fmtDate, monthLabel, tk } from '@/components/sales/shared';
 import { AbsenceModal, LeaveModal, WorkModal, WorkerFormModal, WorkerPaymentModal } from '@/components/workers/WorkerModals';
 import { WorkerStatusBadge, balanceInfo, payLabel } from '@/components/workers/shared';
+import { useConfirm, useToast } from '@/components/ui/Feedback';
 
 type WorkRow = WorkerDetail['work'][number];
 type ModalState =
@@ -37,6 +38,8 @@ type HistoryRow = {
 
 export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [modal, setModal] = useState<ModalState>(null);
   const [busy, setBusy] = useState(false);
   const done = () => {
@@ -48,14 +51,15 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
   const a = worker.account;
   const bal = balanceInfo(a.balance);
 
-  async function act(fn: () => Promise<unknown>, confirmText?: string) {
-    if (confirmText && !confirm(confirmText)) return;
+  /** Run an action after an optional confirm; `label` names the confirm button (deletes default to red "Delete"). */
+  async function act(fn: () => Promise<unknown>, confirmText?: string, label?: string) {
+    if (confirmText && !(await confirm({ title: confirmText, tone: label ? 'default' : 'danger', confirmLabel: label }))) return;
     setBusy(true);
     try {
       await fn();
       router.refresh();
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message, 'error');
     } finally {
       setBusy(false);
     }
@@ -74,20 +78,20 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
             key: 'p' + p.id,
             date: p.paidAt,
             Icon: Ban,
-            tone: 'bg-slate-100 text-slate-600 border-slate-200',
+            tone: 'bg-slate-100 text-slate-600 border-line',
             title: 'Advance written off',
             detail: p.note === 'Advance written off' ? null : p.note,
             amount: { text: tk(p.amount), cls: 'text-slate-600' },
-            onDelete: () => act(() => webApiClient.delete(`/api/salary-payments/${p.id}`), 'Undo this write-off? The advance will show as owed again.'),
+            onDelete: () => act(() => webApiClient.delete(`/api/salary-payments/${p.id}`), 'Undo this write-off? The advance will show as owed again.', 'Undo write-off'),
           }
         : {
             key: 'p' + p.id,
             date: p.paidAt,
             Icon: Wallet,
-            tone: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            tone: 'bg-brand-50 text-brand-700 border-brand-200',
             title: 'Paid',
             detail: p.note,
-            amount: { text: '− ' + tk(p.amount), cls: 'text-emerald-700' },
+            amount: { text: '− ' + tk(p.amount), cls: 'text-brand-700' },
             onEdit: () => setModal({ kind: 'pay', payment: p }),
             onDelete: () => act(() => webApiClient.delete(`/api/salary-payments/${p.id}`), `Delete the ${tk(p.amount)} payment from ${fmtDate(p.paidAt)}?`),
           },
@@ -100,7 +104,7 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
       title: 'Absent (unpaid)',
       detail: x.note,
       amount: { text: '− ' + tk(dayRate(worker.salary)), cls: 'text-red-600' },
-      onDelete: () => act(() => webApiClient.delete(`/api/employee-absences/${x.id}`), `Remove the absence on ${fmtDate(x.date)}? That day will be paid.`),
+      onDelete: () => act(() => webApiClient.delete(`/api/employee-absences/${x.id}`), `Remove the absence on ${fmtDate(x.date)}? That day will be paid.`, 'Remove absence'),
     })),
     ...worker.work.map((w): HistoryRow => ({
       key: 'w' + w.id,
@@ -109,7 +113,7 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
       tone: 'bg-sky-50 text-sky-700 border-sky-200',
       title: `Worked ${w.days === 0.5 ? 'half a day' : `${w.days} day${w.days === 1 ? '' : 's'}`} × ${tk(w.rate)}`,
       detail: w.note,
-      amount: { text: '+ ' + tk(w.days * w.rate), cls: 'text-slate-900' },
+      amount: { text: '+ ' + tk(w.days * w.rate), cls: 'text-ink' },
       onEdit: () => setModal({ kind: 'work', entry: w }),
       onDelete: () => act(() => webApiClient.delete(`/api/work-entries/${w.id}`), `Delete this work from ${fmtDate(w.date)}?`),
     })),
@@ -122,27 +126,27 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
       detail: r.monthlySalary != null ? `Monthly ${tk(r.monthlySalary)} (${tk(dayRate(r.monthlySalary))}/day)` : `Day rate ${tk(r.dailyRate ?? 0)}`,
     })),
     ...(worker.leftDate
-      ? [{ key: 'left', date: worker.leftDate, Icon: LogOut, tone: 'bg-slate-100 text-slate-600 border-slate-200', title: 'Left work' } as HistoryRow]
+      ? [{ key: 'left', date: worker.leftDate, Icon: LogOut, tone: 'bg-slate-100 text-slate-600 border-line', title: 'Left work' } as HistoryRow]
       : []),
   ].sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime());
 
-  const btn = 'inline-flex h-11 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-semibold transition disabled:opacity-50';
+  const btn = 'inline-flex h-11 items-center justify-center gap-1.5 rounded-control px-4 text-sm font-semibold transition disabled:opacity-50';
 
   return (
     <div className="space-y-6">
-      <Link href="/dashboard/employees" className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900">
+      <Link href="/dashboard/employees" className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-ink">
         <ArrowLeft className="h-4 w-4" /> All workers
       </Link>
 
       {/* Who and what */}
-      <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="space-y-4 rounded-card border border-line bg-white p-5 shadow-sm sm:p-6">
         <div className="flex items-start gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-lg font-bold text-white">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-card bg-ink text-lg font-bold text-white">
             {worker.name.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">{worker.name}</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-ink">{worker.name}</h1>
               <WorkerStatusBadge status={worker.status} />
             </div>
             <p className="text-sm text-slate-500">{worker.role} · {payLabel(worker)}</p>
@@ -150,38 +154,38 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
               <span>Started {worker.joinDate ? fmtDate(worker.joinDate) : '—'}</span>
               {worker.leftDate && <span>Left {fmtDate(worker.leftDate)}</span>}
               {worker.phone && (
-                <a href={`tel:${worker.phone}`} className="inline-flex items-center gap-1 hover:text-slate-900"><Phone className="h-3.5 w-3.5" /> {worker.phone}</a>
+                <a href={`tel:${worker.phone}`} className="inline-flex items-center gap-1 hover:text-ink"><Phone className="h-3.5 w-3.5" /> {worker.phone}</a>
               )}
             </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => setModal({ kind: 'pay', payment: null })} className={`${btn} flex-1 bg-emerald-600 text-white hover:bg-emerald-700 sm:flex-none`}>
+          <button onClick={() => setModal({ kind: 'pay', payment: null })} className={`${btn} flex-1 bg-brand-600 text-white hover:bg-brand-700 sm:flex-none`}>
             <Wallet className="h-4 w-4" /> Pay money
           </button>
           {!left &&
             (daily ? (
-              <button onClick={() => setModal({ kind: 'work', entry: null })} className={`${btn} flex-1 bg-slate-900 text-white hover:bg-slate-800 sm:flex-none`}>
+              <button onClick={() => setModal({ kind: 'work', entry: null })} className={`${btn} flex-1 bg-ink text-white hover:bg-navy-700 sm:flex-none`}>
                 <Hammer className="h-4 w-4" /> Add work
               </button>
             ) : (
-              <button onClick={() => setModal({ kind: 'absent' })} className={`${btn} flex-1 border border-slate-200 text-slate-700 hover:bg-slate-50 sm:flex-none`}>
+              <button onClick={() => setModal({ kind: 'absent' })} className={`${btn} flex-1 border border-line text-slate-700 hover:bg-slate-50 sm:flex-none`}>
                 <CalendarX className="h-4 w-4" /> Mark absent
               </button>
             ))}
-          <button onClick={() => setModal({ kind: 'edit' })} className={`${btn} border border-slate-200 text-slate-700 hover:bg-slate-50`}>
+          <button onClick={() => setModal({ kind: 'edit' })} className={`${btn} border border-line text-slate-700 hover:bg-slate-50`}>
             <Edit3 className="h-4 w-4" /> Edit
           </button>
           {left ? (
             <button
               disabled={busy}
-              onClick={() => act(() => webApiClient.post(`/api/employees/${worker.id}/leave`, { leftDate: '' }), `Mark ${worker.name} as working again? The days since they left will be paid too; mark them absent if they did not work.`)}
-              className={`${btn} border border-slate-200 text-slate-700 hover:bg-slate-50`}
+              onClick={() => act(() => webApiClient.post(`/api/employees/${worker.id}/leave`, { leftDate: '' }), `Mark ${worker.name} as working again? The days since they left will be paid too; mark them absent if they did not work.`, 'Yes, working again')}
+              className={`${btn} border border-line text-slate-700 hover:bg-slate-50`}
             >
               <Undo2 className="h-4 w-4" /> Came back
             </button>
           ) : (
-            <button onClick={() => setModal({ kind: 'leave' })} className={`${btn} border border-slate-200 text-slate-700 hover:bg-slate-50`}>
+            <button onClick={() => setModal({ kind: 'leave' })} className={`${btn} border border-line text-slate-700 hover:bg-slate-50`}>
               <LogOut className="h-4 w-4" /> Left work
             </button>
           )}
@@ -194,9 +198,9 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
       </div>
 
       {/* Balance */}
-      <div className={`rounded-2xl border bg-white p-5 shadow-sm sm:p-6 ${a.balance > 0.004 ? 'border-red-200' : a.balance < -0.004 ? 'border-amber-200' : 'border-emerald-200'}`}>
+      <div className={`rounded-card border bg-white p-5 shadow-sm sm:p-6 ${a.balance > 0.004 ? 'border-red-200' : a.balance < -0.004 ? 'border-amber-200' : 'border-brand-200'}`}>
         <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Balance now</p>
-        <p className={`mt-1 text-3xl font-extrabold ${a.balance > 0.004 ? 'text-red-600' : a.balance < -0.004 ? 'text-amber-700' : 'text-emerald-700'}`}>{bal.label}</p>
+        <p className={`mt-1 text-3xl font-extrabold ${a.balance > 0.004 ? 'text-red-600' : a.balance < -0.004 ? 'text-amber-700' : 'text-brand-700'}`}>{bal.label}</p>
         <p className="mt-1 text-sm text-slate-600">
           {a.balance > 0.004
             ? `${worker.name} has earned ${tk(a.balance)} more than you paid.`
@@ -207,7 +211,7 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
         <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-slate-100 pt-4 text-sm">
           <div>
             <dt className="text-xs text-slate-500">Earned</dt>
-            <dd className="font-bold text-slate-900">{tk(a.earned)}</dd>
+            <dd className="font-bold text-ink">{tk(a.earned)}</dd>
             <dd className="text-xs text-slate-500">
               {a.daysWorked} day{a.daysWorked === 1 ? '' : 's'}
               {a.daysAbsent ? ` · ${a.daysAbsent} absent` : ''}
@@ -215,21 +219,21 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
           </div>
           <div>
             <dt className="text-xs text-slate-500">Paid</dt>
-            <dd className="font-bold text-slate-900">{tk(a.paid)}</dd>
+            <dd className="font-bold text-ink">{tk(a.paid)}</dd>
           </div>
           <div>
             <dt className="text-xs text-slate-500">Written off</dt>
-            <dd className="font-bold text-slate-900">{tk(a.writtenOff)}</dd>
+            <dd className="font-bold text-ink">{tk(a.writtenOff)}</dd>
           </div>
         </dl>
         {left && a.balance < -0.004 && (
-          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-4 flex flex-col gap-3 rounded-control border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-amber-900">
               {worker.name} left owing {tk(-a.balance)}. If it will not be paid back, write it off: it counts as a loss.
             </p>
             <button
               disabled={busy}
-              onClick={() => act(() => webApiClient.post(`/api/employees/${worker.id}/writeoff`, {}), `Write off ${tk(-a.balance)} as a loss?`)}
+              onClick={() => act(() => webApiClient.post(`/api/employees/${worker.id}/writeoff`, {}), `Write off ${tk(-a.balance)} as a loss?`, 'Write off')}
               className={`${btn} shrink-0 bg-amber-600 text-white hover:bg-amber-700`}
             >
               <Ban className="h-4 w-4" /> Write off {tk(-a.balance)}
@@ -237,16 +241,16 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
           </div>
         )}
         {left && a.balance > 0.004 && (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+          <div className="mt-4 rounded-control border border-red-200 bg-red-50 p-4 text-sm text-red-900">
             Final settlement: pay {worker.name} {tk(a.balance)} to close the account.
           </div>
         )}
       </div>
 
       {/* Month by month */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="rounded-card border border-line bg-white shadow-card">
         <div className="border-b border-slate-100 p-5 sm:p-6">
-          <h2 className="text-base font-bold text-slate-900">Month by month</h2>
+          <h2 className="text-base font-bold text-ink">Month by month</h2>
           <p className="text-xs text-slate-500">{daily ? 'Days worked × rate.' : `Every day counts at ${tk(dayRate(worker.salary))} except absent days.`}</p>
         </div>
         <div className="overflow-x-auto">
@@ -267,10 +271,10 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
               ) : (
                 worker.months.map((m) => (
                   <tr key={m.month}>
-                    <td className="whitespace-nowrap px-5 py-3 font-semibold text-slate-900">{monthLabel(m.month)}</td>
+                    <td className="whitespace-nowrap px-5 py-3 font-semibold text-ink">{monthLabel(m.month)}</td>
                     <td className="px-3 py-3 text-right text-slate-700">{m.daysWorked}</td>
                     {!daily && <td className={`px-3 py-3 text-right ${m.daysAbsent ? 'font-semibold text-red-600' : 'text-slate-400'}`}>{m.daysAbsent}</td>}
-                    <td className="whitespace-nowrap px-3 py-3 text-right text-slate-900">{tk(m.earned)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right text-ink">{tk(m.earned)}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-right text-slate-700">
                       {tk(m.paid)}
                       {m.writtenOff > 0 && <span className="block text-xs text-slate-500">+ {tk(m.writtenOff)} written off</span>}
@@ -287,16 +291,16 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
       </div>
 
       {/* History */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <h2 className="border-b border-slate-100 pb-4 text-base font-bold text-slate-900">History</h2>
+      <div className="rounded-card border border-line bg-white p-5 shadow-sm sm:p-6">
+        <h2 className="border-b border-slate-100 pb-4 text-base font-bold text-ink">History</h2>
         <ol className="mt-2 space-y-1">
           {history.map((h) => (
-            <li key={h.key} className="flex items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-slate-50">
-              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${h.tone}`}>
+            <li key={h.key} className="flex items-center gap-3 rounded-control px-2 py-2.5 hover:bg-slate-50">
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-control border ${h.tone}`}>
                 <h.Icon className="h-4 w-4" aria-hidden="true" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900">
+                <p className="text-sm font-semibold text-ink">
                   {h.title} <span className="ml-1 text-xs font-normal text-slate-500">{fmtDate(h.date)}</span>
                 </p>
                 {h.detail && <p className="truncate text-xs text-slate-500">{h.detail}</p>}
@@ -304,7 +308,7 @@ export default function WorkerDetailView({ worker }: { worker: WorkerDetail }) {
               {h.amount && <p className={`shrink-0 text-sm font-bold ${h.amount.cls}`}>{h.amount.text}</p>}
               <div className="flex shrink-0">
                 {h.onEdit && (
-                  <button onClick={h.onEdit} aria-label="Edit" className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-900">
+                  <button onClick={h.onEdit} aria-label="Edit" className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-ink">
                     <Edit3 className="h-4 w-4" />
                   </button>
                 )}

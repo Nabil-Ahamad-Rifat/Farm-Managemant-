@@ -3,7 +3,8 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, useState, Suspense } from 'react';
 import Link from 'next/link';
-import { Sprout, ArrowRight } from 'lucide-react';
+import AuthShell from '@/components/auth/AuthShell';
+import { ArrowRight } from 'lucide-react';
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   google_cancelled: 'Google sign-in was cancelled.',
@@ -61,11 +62,11 @@ function LoginForm() {
 
   return (
     <>
-      <h1 className="mt-6 text-2xl font-bold tracking-tight text-white">Welcome back</h1>
-      <p className="mt-1 text-sm text-slate-400">Sign in to your farm management account.</p>
+      <h1 className="mt-6 text-2xl font-bold tracking-tight text-ink">Welcome back</h1>
+      <p className="mt-1 text-sm text-slate-500">Sign in to your farm management account.</p>
 
       {error && (
-        <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs font-medium text-red-400">
+        <div className="mt-4 rounded-control border border-red-200 bg-red-50 px-3.5 py-3 text-sm font-medium text-red-700">
           {error}
         </div>
       )}
@@ -73,7 +74,7 @@ function LoginForm() {
       {/* Google Sign-In Button */}
       <a
         href="/api/auth/google"
-        className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+        className="mt-6 flex w-full items-center justify-center gap-3 h-11 rounded-control border border-line bg-white px-4 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-slate-50"
       >
         <GoogleIcon />
         Continue with Google
@@ -81,18 +82,18 @@ function LoginForm() {
 
       {/* Divider */}
       <div className="relative my-5 flex items-center">
-        <div className="flex-grow border-t border-white/10" />
+        <div className="flex-grow border-t border-line" />
         <span className="mx-3 flex-shrink text-xs font-medium text-slate-500">or sign in with email</span>
-        <div className="flex-grow border-t border-white/10" />
+        <div className="flex-grow border-t border-line" />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+          <label htmlFor="email" className="mb-1.5 block text-[13px] font-medium text-slate-700">
             Email Address
           </label>
           <input
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+            className="w-full rounded-control border border-line bg-white px-3.5 py-2.5 text-base text-ink shadow-sm placeholder:text-slate-500 transition-colors focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/10 sm:text-sm"
             id="email"
             name="email"
             autoComplete="email"
@@ -107,13 +108,13 @@ function LoginForm() {
 
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Password</label>
-            <Link href="/forgot-password" className="text-[11px] font-semibold text-emerald-400 hover:underline">
+            <label htmlFor="password" className="mb-1.5 block text-[13px] font-medium text-slate-700">Password</label>
+            <Link href="/forgot-password" className="text-[11px] font-semibold text-brand-700 hover:underline">
               Forgot password?
             </Link>
           </div>
           <input
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+            className="w-full rounded-control border border-line bg-white px-3.5 py-2.5 text-base text-ink shadow-sm placeholder:text-slate-500 transition-colors focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/10 sm:text-sm"
             id="password"
             name="password"
             autoComplete="current-password"
@@ -126,7 +127,7 @@ function LoginForm() {
         </div>
 
         <button
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-500 disabled:opacity-50 mt-2"
+          className="flex w-full items-center justify-center gap-2 h-11 rounded-control bg-ink px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-navy-700 disabled:opacity-50 mt-2"
           type="submit"
           disabled={loading}
         >
@@ -135,9 +136,9 @@ function LoginForm() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-xs text-slate-400">
+      <p className="mt-6 text-center text-xs text-slate-500">
         Don&apos;t have an account?{' '}
-        <Link href="/register" className="font-semibold text-emerald-400 hover:underline">
+        <Link href="/register" className="font-semibold text-brand-700 hover:underline">
           Create farm account
         </Link>
       </p>
@@ -147,18 +148,10 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 font-sans text-slate-900">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900/80 p-8 shadow-2xl backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/30">
-            <Sprout className="h-5 w-5" />
-          </div>
-          <span className="text-xl font-extrabold text-white tracking-tight">Farm Manager</span>
-        </div>
-        <Suspense fallback={<div className="mt-8 text-slate-400 text-sm animate-pulse">Loading...</div>}>
+    <AuthShell>
+        <Suspense fallback={<div className="mt-8 text-slate-500 text-sm animate-pulse">Loading...</div>}>
           <LoginForm />
         </Suspense>
-      </div>
-    </main>
+      </AuthShell>
   );
 }

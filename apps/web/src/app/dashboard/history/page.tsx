@@ -22,11 +22,11 @@ const TYPES: { value: LedgerType | null; label: string }[] = [
 ];
 
 const FLOW: Record<LedgerFlow, { Icon: typeof ArrowDownLeft; tone: string; sign: string; amount: string; note: string }> = {
-  in: { Icon: ArrowDownLeft, tone: 'border-emerald-200 bg-emerald-50 text-emerald-700', sign: '+ ', amount: 'text-emerald-700', note: 'Money in' },
+  in: { Icon: ArrowDownLeft, tone: 'border-brand-200 bg-brand-50 text-brand-700', sign: '+ ', amount: 'text-brand-700', note: 'Money in' },
   out: { Icon: ArrowUpRight, tone: 'border-red-200 bg-red-50 text-red-700', sign: '− ', amount: 'text-red-600', note: 'Money out' },
-  sale: { Icon: ShoppingBag, tone: 'border-sky-200 bg-sky-50 text-sky-700', sign: '', amount: 'text-slate-900', note: 'Sale' },
-  purchase: { Icon: PackagePlus, tone: 'border-amber-200 bg-amber-50 text-amber-800', sign: '', amount: 'text-slate-900', note: 'Bought on credit' },
-  loss: { Icon: Ban, tone: 'border-slate-200 bg-slate-100 text-slate-600', sign: '', amount: 'text-slate-600', note: 'Loss' },
+  sale: { Icon: ShoppingBag, tone: 'border-sky-200 bg-sky-50 text-sky-700', sign: '', amount: 'text-ink', note: 'Sale' },
+  purchase: { Icon: PackagePlus, tone: 'border-amber-200 bg-amber-50 text-amber-800', sign: '', amount: 'text-ink', note: 'Bought on credit' },
+  loss: { Icon: Ban, tone: 'border-line bg-slate-100 text-slate-600', sign: '', amount: 'text-slate-600', note: 'Loss' },
 };
 
 export default async function HistoryPage({ searchParams }: { searchParams: Search }) {
@@ -59,28 +59,28 @@ export default async function HistoryPage({ searchParams }: { searchParams: Sear
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">History</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-[28px]">History</h1>
         <p className="mt-1 text-sm text-slate-500 sm:text-base">Every sale, payment, purchase and expense in one list.</p>
       </div>
 
       {/* Filters: a plain form, so every view has its own link. */}
-      <form method="get" className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <form method="get" className="space-y-3 rounded-card border border-line bg-white p-4 shadow-sm">
         {query.type && <input type="hidden" name="type" value={query.type} />}
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_2fr_auto] sm:items-end">
           <div>
             <label htmlFor="h-from" className="mb-1 block text-xs font-semibold uppercase text-slate-600">From</label>
-            <input id="h-from" name="from" type="date" required defaultValue={query.from} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base sm:text-sm" />
+            <input id="h-from" name="from" type="date" required defaultValue={query.from} className="w-full rounded-control border border-line px-3 py-2.5 text-base sm:text-sm" />
           </div>
           <div>
             <label htmlFor="h-to" className="mb-1 block text-xs font-semibold uppercase text-slate-600">To</label>
-            <input id="h-to" name="to" type="date" required defaultValue={query.to} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base sm:text-sm" />
+            <input id="h-to" name="to" type="date" required defaultValue={query.to} className="w-full rounded-control border border-line px-3 py-2.5 text-base sm:text-sm" />
           </div>
           <div className="relative">
             <label htmlFor="h-q" className="mb-1 block text-xs font-semibold uppercase text-slate-600">Search</label>
             <Search className="absolute bottom-3.5 left-3 h-4 w-4 text-slate-400" aria-hidden="true" />
-            <input id="h-q" name="q" type="search" placeholder="Name, feed, note..." defaultValue={query.q ?? ''} className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-base sm:text-sm" />
+            <input id="h-q" name="q" type="search" placeholder="Name, feed, note..." defaultValue={query.q ?? ''} className="w-full rounded-control border border-line py-2.5 pl-9 pr-3 text-base sm:text-sm" />
           </div>
-          <button type="submit" className="h-11 rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white hover:bg-slate-800">Show</button>
+          <button type="submit" className="h-11 rounded-control bg-ink px-5 text-sm font-semibold text-white hover:bg-navy-700">Show</button>
         </div>
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
           {TYPES.map((ty) => {
@@ -91,7 +91,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Sear
                 href={link({ type: ty.value, limit: null })}
                 aria-current={active ? 'page' : undefined}
                 className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-semibold transition sm:py-2 sm:text-xs ${
-                  active ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  active ? 'bg-ink text-white shadow-card' : 'border border-line bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 {ty.label}
@@ -102,13 +102,13 @@ export default async function HistoryPage({ searchParams }: { searchParams: Sear
       </form>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Total label="Money in" value={tk(t.moneyIn)} cls="text-emerald-700" />
+        <Total label="Money in" value={tk(t.moneyIn)} cls="text-brand-700" />
         <Total label="Money out" value={tk(t.moneyOut)} cls="text-red-600" />
-        <Total label="Sales made" value={tk(t.salesMade)} cls="text-slate-900" />
-        <Total label="Bought on credit" value={tk(t.boughtOnCredit)} cls="text-slate-900" />
+        <Total label="Sales made" value={tk(t.salesMade)} cls="text-ink" />
+        <Total label="Bought on credit" value={tk(t.boughtOnCredit)} cls="text-ink" />
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm" aria-label="Entries">
+      <section className="rounded-card border border-line bg-white shadow-card" aria-label="Entries">
         <p className="border-b border-slate-100 px-5 py-3 text-xs text-slate-500">
           {fmtDate(query.from)} – {fmtDate(query.to)} · {ledger.total} entr{ledger.total === 1 ? 'y' : 'ies'}
           {t.writtenOff > 0 ? ` · ${tk(t.writtenOff)} written off` : ''}
@@ -126,11 +126,11 @@ export default async function HistoryPage({ searchParams }: { searchParams: Sear
                     return (
                       <li key={e.id}>
                         <Link href={e.href} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50">
-                          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${f.tone}`} title={f.note}>
+                          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-control border ${f.tone}`} title={f.note}>
                             <f.Icon className="h-4 w-4" aria-hidden="true" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-slate-900">{e.title}</p>
+                            <p className="truncate text-sm font-semibold text-ink">{e.title}</p>
                             <p className="truncate text-xs text-slate-500">
                               <span className="sr-only">{f.note}. </span>
                               {e.detail}
@@ -151,7 +151,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Sear
         )}
         {ledger.total > ledger.entries.length && (
           <div className="border-t border-slate-100 p-4 text-center">
-            <Link href={link({ limit: String(query.limit + 100) })} className="inline-flex h-11 items-center rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <Link href={link({ limit: String(query.limit + 100) })} className="inline-flex h-11 items-center rounded-control border border-line px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
               Show more ({ledger.total - ledger.entries.length} left)
             </Link>
           </div>
@@ -163,7 +163,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Sear
 
 function Total({ label, value, cls }: { label: string; value: string; cls: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-card border border-line bg-white p-4 shadow-sm">
       <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
       <p className={`mt-1 text-xl font-extrabold ${cls}`}>{value}</p>
     </div>

@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import OtherIncomeManager from '@/components/OtherIncomeManager';
 
 export const metadata = {
-  title: 'Other Income | Farm Management',
+  title: 'Other income',
   description: 'Track grants, subsidies, insurance payouts, donations, and other income sources.',
 };
 

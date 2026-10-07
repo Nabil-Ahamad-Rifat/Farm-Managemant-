@@ -9,7 +9,7 @@ import { SummaryCard, CustomerTypeBadge, tk, monthLabel, litres } from '@/compon
 /** A balance: due in red, advance in green, or "Clear". */
 function Balance({ value, strong }: { value: number; strong?: boolean }) {
   if (value > 0) return <span className={`${strong ? 'font-bold' : 'font-semibold'} text-red-600`}>{tk(value)}</span>;
-  if (value < 0) return <span className="font-semibold text-emerald-700">Advance {tk(-value)}</span>;
+  if (value < 0) return <span className="font-semibold text-brand-700">Advance {tk(-value)}</span>;
   return <span className="font-semibold text-slate-400">Clear</span>;
 }
 
@@ -31,21 +31,21 @@ export default function MonthlyReport({
   const current = farmMonth();
   const p = money.profit;
   const signed = (n: number) => (n < 0 ? '− ' + tk(-n) : tk(n));
-  const navBtn = 'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50';
+  const navBtn = 'inline-flex h-10 w-10 items-center justify-center rounded-control border border-line bg-white text-slate-600 transition hover:bg-slate-50';
   const owing = lines.filter((l) => l.closing > 0).length;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Monthly Report</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-[28px]">Monthly Report</h1>
           <p className="mt-1 text-slate-500">Milk sold, money received and what is still due, month by month.</p>
         </div>
         <nav aria-label="Choose month" className="flex items-center gap-2">
           <Link href={`/dashboard/reports?month=${shiftMonth(month, -1)}`} className={navBtn} aria-label="Previous month">
             <ChevronLeft className="h-4 w-4" />
           </Link>
-          <p className="min-w-40 text-center text-lg font-bold text-slate-900" aria-live="polite">{monthLabel(month)}</p>
+          <p className="min-w-40 text-center text-lg font-bold text-ink" aria-live="polite">{monthLabel(month)}</p>
           {month < current ? (
             <Link href={`/dashboard/reports?month=${shiftMonth(month, 1)}`} className={navBtn} aria-label="Next month">
               <ChevronRight className="h-4 w-4" />
@@ -56,14 +56,14 @@ export default function MonthlyReport({
             </span>
           )}
           {month !== current && (
-            <Link href="/dashboard/reports" className="ml-1 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">
+            <Link href="/dashboard/reports" className="ml-1 rounded-control px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">
               This month
             </Link>
           )}
         </nav>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-5">
         <SummaryCard label="Milk sold" value={litres(totals.milkLitres)} Icon={Milk} tone="slate" />
         <SummaryCard label="Total sales" value={tk(totals.sold)} Icon={ShoppingBag} tone="slate" hint="All products" />
         <SummaryCard label="Money received" value={tk(totals.collected)} Icon={Wallet} tone="emerald" />
@@ -79,14 +79,14 @@ export default function MonthlyReport({
 
       <Link
         href={`/dashboard/feed?month=${month}`}
-        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-white p-4 shadow-sm transition hover:bg-amber-50/40"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-amber-100 bg-white p-4 shadow-sm transition hover:bg-amber-50/40"
       >
         <span className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+          <span className="flex h-9 w-9 items-center justify-center rounded-control bg-amber-100 text-amber-700">
             <Wheat className="h-4 w-4" />
           </span>
           <span>
-            <span className="block text-sm font-bold text-slate-900">Feed bought: {tk(feed.spent)}</span>
+            <span className="block text-sm font-bold text-ink">Feed bought: {tk(feed.spent)}</span>
             <span className="block text-xs text-slate-500">
               {feed.kg.toLocaleString('en-IN')} kg in {feed.count} purchase{feed.count === 1 ? '' : 's'} · paid {tk(feed.paid)}
               {feed.owed > 0 ? ` · still owed ${tk(feed.owed)}` : ''}
@@ -98,15 +98,15 @@ export default function MonthlyReport({
         </span>
       </Link>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="costs-h">
+      <section className="rounded-card border border-line bg-white p-5 shadow-sm" aria-labelledby="costs-h">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 id="costs-h" className="flex items-center gap-2 text-base font-bold text-slate-900">
+            <h2 id="costs-h" className="flex items-center gap-2 text-base font-bold text-ink">
               <TrendingUp className="h-4 w-4 text-slate-400" aria-hidden="true" /> Costs and profit
             </h2>
             <p className="text-xs text-slate-500">Earned and spent this month, whether paid yet or not.</p>
           </div>
-          <p className={`text-2xl font-extrabold ${p.profit < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{signed(p.profit)}</p>
+          <p className={`text-2xl font-extrabold ${p.profit < 0 ? 'text-red-600' : 'text-brand-700'}`}>{signed(p.profit)}</p>
         </div>
         <dl className="mt-3 grid gap-x-8 gap-y-1.5 text-sm sm:grid-cols-2">
           {[
@@ -120,7 +120,7 @@ export default function MonthlyReport({
           ].map(([k, v]) => (
             <div key={k} className="flex justify-between gap-3 border-b border-slate-50 py-1">
               <dt className="text-slate-600">{k}</dt>
-              <dd className="font-semibold text-slate-900">{v}</dd>
+              <dd className="font-semibold text-ink">{v}</dd>
             </div>
           ))}
         </dl>
@@ -129,7 +129,7 @@ export default function MonthlyReport({
         </Link>
       </section>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-card border border-line bg-white shadow-card">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
@@ -150,7 +150,7 @@ export default function MonthlyReport({
                   <td className="whitespace-nowrap px-5 py-4">
                     {l.customer ? (
                       <Link href={`/dashboard/customers/${l.customer.id}#m-${month}`} className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-900 hover:underline">{l.customer.name}</span>
+                        <span className="text-sm font-semibold text-ink hover:underline">{l.customer.name}</span>
                         <CustomerTypeBadge type={l.customer.type} />
                       </Link>
                     ) : (
@@ -161,8 +161,8 @@ export default function MonthlyReport({
                     </p>
                   </td>
                   <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-700">{l.milkLitres ? litres(l.milkLitres) : '—'}</td>
-                  <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-slate-900">{tk(l.sold)}</td>
-                  <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-emerald-700">{tk(l.paid)}</td>
+                  <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-ink">{tk(l.sold)}</td>
+                  <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-brand-700">{tk(l.paid)}</td>
                   <td className="whitespace-nowrap px-5 py-4 text-sm"><Balance value={l.carriedIn} /></td>
                   <td className="whitespace-nowrap px-5 py-4 text-sm"><Balance value={l.closing} strong /></td>
                   <td className="whitespace-nowrap px-5 py-4 text-right">
@@ -176,11 +176,11 @@ export default function MonthlyReport({
           </tbody>
           {lines.length > 0 && (
             <tfoot className="bg-slate-50">
-              <tr className="text-sm font-bold text-slate-900">
+              <tr className="text-sm font-bold text-ink">
                 <td className="px-5 py-3.5">Total</td>
                 <td className="whitespace-nowrap px-5 py-3.5">{litres(totals.milkLitres)}</td>
                 <td className="whitespace-nowrap px-5 py-3.5">{tk(totals.sold)}</td>
-                <td className="whitespace-nowrap px-5 py-3.5 text-emerald-700">{tk(totals.collected)}</td>
+                <td className="whitespace-nowrap px-5 py-3.5 text-brand-700">{tk(totals.collected)}</td>
                 <td className="whitespace-nowrap px-5 py-3.5">{tk(totals.carriedIn)}</td>
                 <td className="whitespace-nowrap px-5 py-3.5 text-red-600">{tk(totals.dueAtEnd)}</td>
                 <td />

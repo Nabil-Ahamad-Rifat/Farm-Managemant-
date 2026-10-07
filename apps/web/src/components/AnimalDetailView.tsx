@@ -13,6 +13,7 @@ import {
   AnimalPhoto, PregnancyBadge, StatusBadge, categoryLabel, daysUntil, dueText, dueTone, eventTypeInfo, resizePhoto,
 } from '@/components/animals/shared';
 import { fmtDate, tk } from '@/components/sales/shared';
+import { useConfirm, useToast } from '@/components/ui/Feedback';
 
 type ModalState = { kind: 'edit' } | { kind: 'event'; event: AnimalEvent | null; type?: string } | null;
 
@@ -42,6 +43,8 @@ export default function AnimalDetailView({
   suggestedId: string;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [modal, setModal] = useState<ModalState>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -90,7 +93,7 @@ export default function AnimalDetailView({
   }
 
   async function deletePhoto(photoId: string) {
-    if (!confirm('Delete this photo?')) return;
+    if (!(await confirm({ title: 'Delete this photo?', tone: 'danger' }))) return;
     setPhotoError('');
     try {
       await webApiClient.delete(`/api/cows/${animal.id}/photos/${photoId}`, 'Failed to delete photo');
@@ -103,23 +106,23 @@ export default function AnimalDetailView({
 
   async function deleteEvent(e: AnimalEvent) {
     const label = eventTypeInfo(e.type).label.toLowerCase();
-    if (!confirm(`Delete the ${label} record from ${fmtDate(e.date)}?${e.calfId ? ' The calf stays as its own animal.' : ''}`)) return;
+    if (!(await confirm({ title: `Delete the ${label} record from ${fmtDate(e.date)}?${e.calfId ? ' The calf stays as its own animal.' : ''}`, tone: 'danger' }))) return;
     try {
       await webApiClient.delete(`/api/animal-events/${e.id}`, 'Failed to delete record');
       router.refresh();
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message, 'error');
     }
   }
 
   async function deleteAnimal() {
-    if (!confirm(`Delete ${animal.tagNumber} (${animal.name}) with all its photos and records? This cannot be undone.`)) return;
+    if (!(await confirm({ title: `Delete ${animal.tagNumber} (${animal.name}) with all its photos and records? This cannot be undone.`, tone: 'danger' }))) return;
     try {
       await webApiClient.delete(`/api/cows/${animal.id}`, 'Failed to delete animal');
       router.push('/dashboard/cows');
       router.refresh();
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message, 'error');
     }
   }
 
@@ -140,7 +143,7 @@ export default function AnimalDetailView({
     [
       'Mother',
       animal.mother ? (
-        <Link href={`/dashboard/cows/${animal.mother.id}`} className="font-semibold text-emerald-700 hover:underline">
+        <Link href={`/dashboard/cows/${animal.mother.id}`} className="font-semibold text-brand-700 hover:underline">
           {animal.mother.tagNumber}{animal.mother.name !== animal.mother.tagNumber ? ` · ${animal.mother.name}` : ''}
         </Link>
       ) : null,
@@ -150,14 +153,14 @@ export default function AnimalDetailView({
 
   return (
     <div className="space-y-6">
-      <Link href="/dashboard/cows" className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900">
+      <Link href="/dashboard/cows" className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-ink">
         <ArrowLeft className="h-4 w-4" /> All animals
       </Link>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         {/* Photos */}
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <AnimalPhoto src={selected?.url} alt={`${animal.tagNumber} ${animal.name}`} className="aspect-[4/3] w-full rounded-xl" />
+        <div className="space-y-3 rounded-card border border-line bg-white p-4 shadow-sm">
+          <AnimalPhoto src={selected?.url} alt={`${animal.tagNumber} ${animal.name}`} className="aspect-[4/3] w-full rounded-control" />
           <div className="flex flex-wrap items-center gap-2">
             {animal.photos.map((p) => (
               <button
@@ -188,7 +191,7 @@ export default function AnimalDetailView({
           {selected && animal.photos.length > 1 && (
             <div className="flex gap-2">
               {selected.id !== animal.mainPhotoId && (
-                <button onClick={() => setMain(selected.id)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                <button onClick={() => setMain(selected.id)} className="inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
                   <Star className="h-3.5 w-3.5" /> Make main photo
                 </button>
               )}
@@ -201,22 +204,22 @@ export default function AnimalDetailView({
         </div>
 
         {/* Details */}
-        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="space-y-4 rounded-card border border-line bg-white p-5 shadow-card sm:p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-lg bg-slate-900 px-2 py-1 font-mono text-sm font-bold text-white">{animal.tagNumber}</span>
+                <span className="rounded-lg bg-ink px-2 py-1 font-mono text-sm font-bold text-white">{animal.tagNumber}</span>
                 <StatusBadge status={animal.status} />
                 {isFemale && <PregnancyBadge status={s.pregnancy} />}
               </div>
-              <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">{animal.name}</h1>
+              <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink">{animal.name}</h1>
               <p className="text-sm text-slate-500">Added {fmtDate(animal.createdAt)}</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setModal({ kind: 'edit' })} className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:flex-none">
+              <button onClick={() => setModal({ kind: 'edit' })} className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-control border border-line px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:flex-none">
                 <Edit3 className="h-4 w-4" /> Edit details
               </button>
-              <button onClick={deleteAnimal} aria-label="Delete animal" className="flex h-11 w-11 items-center justify-center rounded-xl border border-red-200 text-red-600 hover:bg-red-50">
+              <button onClick={deleteAnimal} aria-label="Delete animal" className="flex h-11 w-11 items-center justify-center rounded-control border border-red-200 text-red-600 hover:bg-red-50">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
@@ -226,12 +229,12 @@ export default function AnimalDetailView({
             {facts.filter(([, v]) => v).map(([k, v]) => (
               <div key={k} className="flex gap-2">
                 <dt className="w-24 shrink-0 text-slate-500">{k}</dt>
-                <dd className="font-medium text-slate-900">{v}</dd>
+                <dd className="font-medium text-ink">{v}</dd>
               </div>
             ))}
           </dl>
           {animal.notes && (
-            <p className="flex items-start gap-1.5 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <p className="flex items-start gap-1.5 rounded-control bg-slate-50 px-3 py-2 text-sm text-slate-700">
               <StickyNote className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" /> {animal.notes}
             </p>
           )}
@@ -240,7 +243,7 @@ export default function AnimalDetailView({
           <div className="grid grid-cols-2 gap-2 sm:gap-3">
             {isFemale && (
               <SummaryTile Icon={HeartPulse} label="Breeding">
-                <p className="font-bold text-slate-900">{PREGNANCY_TEXT[s.pregnancy]}</p>
+                <p className="font-bold text-ink">{PREGNANCY_TEXT[s.pregnancy]}</p>
                 {s.lastInsemination && <p className="text-xs text-slate-500">Last AI {fmtDate(s.lastInsemination.date)}</p>}
                 {s.pregnancyCheckDue && <p className="text-xs text-slate-500">Check due {fmtDate(s.pregnancyCheckDue)}</p>}
               </SummaryTile>
@@ -249,7 +252,7 @@ export default function AnimalDetailView({
               <SummaryTile Icon={Baby} label="Expected calving">
                 {s.expectedCalving ? (
                   <>
-                    <p className="font-bold text-slate-900">{fmtDate(s.expectedCalving)}</p>
+                    <p className="font-bold text-ink">{fmtDate(s.expectedCalving)}</p>
                     <p className="text-xs text-slate-500">{dueText(daysUntil(s.expectedCalving))}</p>
                   </>
                 ) : (
@@ -260,7 +263,7 @@ export default function AnimalDetailView({
             <SummaryTile Icon={Syringe} label="Next dose">
               {nextDose ? (
                 <>
-                  <p className="font-bold text-slate-900">{nextDose.title}</p>
+                  <p className="font-bold text-ink">{nextDose.title}</p>
                   <span className={`mt-0.5 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${dueTone(daysUntil(nextDose.dueDate))}`}>
                     {fmtDate(nextDose.dueDate)} · {dueText(daysUntil(nextDose.dueDate))}
                   </span>
@@ -270,22 +273,22 @@ export default function AnimalDetailView({
               )}
             </SummaryTile>
             <SummaryTile Icon={Wallet} label="Care cost (all records)">
-              <p className="font-bold text-slate-900">{tk(s.careCost)}</p>
+              <p className="font-bold text-ink">{tk(s.careCost)}</p>
             </SummaryTile>
           </div>
         </div>
       </div>
 
       {animal.calves.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-base font-bold text-slate-900">Calves</h2>
+        <div className="rounded-card border border-line bg-white p-5 shadow-card sm:p-6">
+          <h2 className="text-base font-bold text-ink">Calves</h2>
           <ul className="mt-3 flex flex-wrap gap-3">
             {animal.calves.map((c) => (
               <li key={c.id}>
-                <Link href={`/dashboard/cows/${c.id}`} className="flex items-center gap-3 rounded-xl border border-slate-200 p-2 pr-4 hover:bg-slate-50">
+                <Link href={`/dashboard/cows/${c.id}`} className="flex items-center gap-3 rounded-control border border-line p-2 pr-4 hover:bg-slate-50">
                   <AnimalPhoto src={c.photoUrl} alt={c.tagNumber} className="h-12 w-12 rounded-lg" />
                   <div>
-                    <p className="font-mono text-sm font-bold text-slate-900">{c.tagNumber}</p>
+                    <p className="font-mono text-sm font-bold text-ink">{c.tagNumber}</p>
                     <p className="text-xs text-slate-500">
                       {[c.name !== c.tagNumber ? c.name : null, c.gender === 'male' ? 'Male' : 'Female', c.birthDate ? `born ${fmtDate(c.birthDate)}` : null].filter(Boolean).join(' · ')}
                     </p>
@@ -298,15 +301,15 @@ export default function AnimalDetailView({
       )}
 
       {/* History */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-card border border-line bg-white p-5 shadow-card sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
           <div className="min-w-0">
-            <h2 className="text-base font-bold text-slate-900">History</h2>
+            <h2 className="text-base font-bold text-ink">History</h2>
             <p className="text-xs text-slate-500">Vaccines, AI, pregnancy checks, calvings, treatments and more</p>
           </div>
           <button
             onClick={() => setModal({ kind: 'event', event: null })}
-            className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+            className="inline-flex h-11 items-center gap-1.5 rounded-control bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-700"
           >
             <Plus className="h-4 w-4" /> Add record
           </button>
@@ -319,12 +322,12 @@ export default function AnimalDetailView({
               const t = eventTypeInfo(e.type);
               const detail = eventDetail(e);
               return (
-                <li key={e.id} className="group flex gap-3 rounded-xl px-2 py-3 hover:bg-slate-50">
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${t.color}`}>
+                <li key={e.id} className="group flex gap-3 rounded-control px-2 py-3 hover:bg-slate-50">
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-control border ${t.color}`}>
                     <t.Icon className="h-4 w-4" aria-hidden="true" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-slate-900">
+                    <p className="text-sm font-semibold text-ink">
                       {t.label}
                       <span className="ml-2 text-xs font-normal text-slate-500">{fmtDate(e.date)}</span>
                     </p>
@@ -335,13 +338,13 @@ export default function AnimalDetailView({
                       )}
                       {e.cost != null && e.cost > 0 && <span>Cost {tk(e.cost)}</span>}
                       {e.calfId && (
-                        <Link href={`/dashboard/cows/${e.calfId}`} className="font-semibold text-emerald-700 hover:underline">View calf →</Link>
+                        <Link href={`/dashboard/cows/${e.calfId}`} className="font-semibold text-brand-700 hover:underline">View calf →</Link>
                       )}
                     </div>
                     {e.notes && <p className="mt-0.5 text-xs italic text-slate-500">{e.notes}</p>}
                   </div>
                   <div className="flex shrink-0 items-start gap-1">
-                    <button onClick={() => setModal({ kind: 'event', event: e })} aria-label="Edit record" className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-900">
+                    <button onClick={() => setModal({ kind: 'event', event: e })} aria-label="Edit record" className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-ink">
                       <Edit3 className="h-4 w-4" />
                     </button>
                     <button onClick={() => deleteEvent(e)} aria-label="Delete record" className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-red-600">
@@ -373,7 +376,7 @@ export default function AnimalDetailView({
 
 function SummaryTile({ Icon, label, children }: { Icon: typeof Baby; label: string; children: React.ReactNode }) {
   return (
-    <div className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+    <div className="flex gap-3 rounded-control border border-slate-100 bg-slate-50/60 p-3">
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
       <div className="min-w-0 text-sm">
         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>

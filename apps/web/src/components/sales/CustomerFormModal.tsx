@@ -72,8 +72,8 @@ export default function CustomerFormModal({
                 role="radio"
                 aria-checked={form.type === t.value}
                 onClick={() => setForm({ ...form, type: t.value })}
-                className={`rounded-xl border px-3.5 py-2.5 text-left transition ${
-                  form.type === t.value ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                className={`rounded-control border px-3.5 py-2.5 text-left transition ${
+                  form.type === t.value ? 'border-slate-900 bg-ink text-white' : 'border-line bg-white text-slate-700 hover:bg-slate-50'
                 }`}
               >
                 <span className="block text-sm font-semibold">{t.label}</span>

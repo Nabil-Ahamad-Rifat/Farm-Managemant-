@@ -3,31 +3,29 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Trash2, Edit3, X, PackageOpen, PawPrint } from 'lucide-react';
+import { Plus, Trash2, Edit3, PackageOpen, PawPrint, Hash } from 'lucide-react';
 import type { OtherExpense } from '@farm/shared-types';
 import { webApiClient } from '@farm/api-client';
 import { LIST_PERIODS, inListPeriod, farmToday, type ListPeriod, sumAmounts } from '@farm/business-logic';
+import Modal, { FormError, FormFooter } from '@/components/sales/Modal';
+import { fmtDate, inputCls, labelCls, tk, toDay } from '@/components/sales/shared';
+import { PageHeader, Card } from '@/components/ui/Card';
+import { Button, buttonCls } from '@/components/ui/Button';
+import { StatCard } from '@/components/ui/StatCard';
+import { Badge, Chips, FilterBar, SearchInput } from '@/components/ui/Controls';
+import { Table, THead, TBody, Th, Td, TRow } from '@/components/ui/Table';
+import { EmptyState } from '@/components/ui/Empty';
+import { useConfirm, useToast } from '@/components/ui/Feedback';
 
 const CATEGORIES = [
   { value: 'vet', label: 'Veterinary' },
   { value: 'equipment', label: 'Equipment' },
   { value: 'medicine', label: 'Medicine' },
   { value: 'transport', label: 'Transport' },
-  { value: 'electricity', label: 'Electricity/Utilities' },
-  { value: 'repair', label: 'Repair & Maintenance' },
+  { value: 'electricity', label: 'Electricity / utilities' },
+  { value: 'repair', label: 'Repair & maintenance' },
   { value: 'other', label: 'Other' },
-];
-
-const CATEGORY_COLORS: Record<string, string> = {
-  vet: 'bg-blue-50 text-blue-700 border-blue-200',
-  equipment: 'bg-slate-50 text-slate-700 border-slate-200',
-  medicine: 'bg-purple-50 text-purple-700 border-purple-200',
-  transport: 'bg-orange-50 text-orange-700 border-orange-200',
-  electricity: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-  repair: 'bg-red-50 text-red-700 border-red-200',
-  other: 'bg-gray-50 text-gray-700 border-gray-200',
-  animal: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-};
+] as const;
 
 /** A cost written on an animal record (treatment, vaccine, AI...). Edited on the animal's page. */
 export interface AnimalCost {
@@ -55,68 +53,26 @@ const RECORD_LABELS: Record<string, string> = {
 /** One line in the list: an expense entered here, or an animal record's cost. */
 type Row = { key: string; description: string; detail?: string; category: string; amount: number; date: string | Date; expense?: OtherExpense; cowId?: string };
 
+const categoryLabel = (val: string) => (val === 'animal' ? 'Animal care' : CATEGORIES.find((c) => c.value === val)?.label ?? val);
+
 export default function ExpenseManager({ initialExpenses, animalCosts = [] }: { initialExpenses: OtherExpense[]; animalCosts?: AnimalCost[] }) {
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [period, setPeriod] = useState<ListPeriod>('month');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<OtherExpense | null>(null);
-  const [form, setForm] = useState({
-    description: '',
-    amount: '',
-    category: 'other',
-    expenseDate: farmToday(),
-  });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState<OtherExpense | null | undefined>(undefined);
 
-  function openCreateModal() {
-    setEditingExpense(null);
-    setForm({ description: '', amount: '', category: 'other', expenseDate: farmToday() });
-    setError('');
-    setIsModalOpen(true);
-  }
-
-  function openEditModal(exp: OtherExpense) {
-    setEditingExpense(exp);
-    setForm({
-      description: exp.description,
-      amount: exp.amount.toString(),
-      category: exp.category,
-      expenseDate: new Date(exp.expenseDate).toISOString().slice(0, 10),
-    });
-    setError('');
-    setIsModalOpen(true);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
+  async function handleDelete(exp: OtherExpense) {
+    const ok = await confirm({ title: 'Delete this expense?', body: `${exp.description} · ${tk(exp.amount)} on ${fmtDate(exp.expenseDate)}`, tone: 'danger' });
+    if (!ok) return;
     try {
-      if (editingExpense) {
-        await webApiClient.put(`/api/expenses/${editingExpense.id}`, form, 'Failed to save expense');
-      } else {
-        await webApiClient.post('/api/expenses', form, 'Failed to save expense');
-      }
-      setIsModalOpen(false);
+      await webApiClient.delete(`/api/expenses/${exp.id}`, 'Failed to delete expense');
+      toast('Expense deleted');
       router.refresh();
     } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm('Delete this expense?')) return;
-    try {
-      await webApiClient.delete(`/api/expenses/${id}`);
-      router.refresh();
-    } catch {
-      alert('Failed to delete expense.');
+      toast((err as Error).message, 'error');
     }
   }
 
@@ -134,236 +90,189 @@ export default function ExpenseManager({ initialExpenses, animalCosts = [] }: { 
   ].sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime());
 
   const q = search.trim().toLowerCase();
-  const filteredExpenses = rows.filter(row => {
-    const matchesSearch = !q || row.description.toLowerCase().includes(q) || (row.detail ?? '').toLowerCase().includes(q);
-    const matchesCategory = categoryFilter === 'all' || row.category === categoryFilter;
-    const matchesPeriod = inListPeriod(row.date, period);
-    return matchesSearch && matchesCategory && matchesPeriod;
-  });
-
-  const totalAmount = sumAmounts(filteredExpenses);
-  const animalTotal = sumAmounts(filteredExpenses.filter(r => r.category === 'animal'));
-  const categoryLabel = (val: string) => (val === 'animal' ? 'Animal care' : CATEGORIES.find(c => c.value === val)?.label || val);
+  const filtered = rows.filter(
+    (row) =>
+      (!q || row.description.toLowerCase().includes(q) || (row.detail ?? '').toLowerCase().includes(q)) &&
+      (categoryFilter === 'all' || row.category === categoryFilter) &&
+      inListPeriod(row.date, period),
+  );
+  const total = sumAmounts(filtered);
+  const animalTotal = sumAmounts(filtered.filter((r) => r.category === 'animal'));
+  const periodLabel = LIST_PERIODS.find((p) => p.value === period)?.label ?? '';
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Other Expenses</h1>
-          <p className="mt-1 text-slate-500">Vet fees, equipment, medicine, transport and other costs. Costs written on animal records show here as Animal care.</p>
-        </div>
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition"
-        >
-          <Plus className="h-4 w-4" />
-          Add Expense
-        </button>
+      <PageHeader
+        title="Other expenses"
+        subtitle="Vet, medicine, equipment, transport, electricity and other costs. Costs written on animal records show here as Animal care."
+        actions={
+          <Button onClick={() => setEditing(null)}>
+            <Plus className="h-4 w-4" aria-hidden="true" /> Add expense
+          </Button>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+        <StatCard label="Total costs" value={tk(total)} Icon={PackageOpen} tone="danger" hint={periodLabel} />
+        <StatCard label="Animal care" value={tk(animalTotal)} Icon={PawPrint} hint="From animal records" />
+        <StatCard label="Records" value={String(filtered.length)} Icon={Hash} hint={categoryFilter === 'all' ? 'All categories' : categoryLabel(categoryFilter)} />
       </div>
 
-      {/* Total Banner */}
-      <div className="rounded-2xl border border-red-100 bg-gradient-to-r from-red-500/10 via-red-500/5 to-transparent p-6 flex items-center justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-red-800">Total costs</p>
-          <p className="mt-1 text-3xl font-extrabold text-slate-900">
-            ৳{totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          <p className="text-xs text-red-700 mt-1">
-            {filteredExpenses.length} record{filteredExpenses.length === 1 ? '' : 's'}
-            {animalTotal > 0 ? ` · includes animal care ৳${animalTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : ''}
-          </p>
-        </div>
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-600 text-white shadow-md shadow-red-600/20">
-          <PackageOpen className="h-6 w-6" />
-        </div>
-      </div>
-
-      {/* Period Tabs */}
-      <div className="flex flex-wrap gap-2">
-        {LIST_PERIODS.map(({ value, label }) => (
-          <button
-            key={value}
-            onClick={() => setPeriod(value)}
-            aria-pressed={period === value}
-            className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-              period === value
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center justify-between">
-        <div className="relative max-w-md flex-1">
-          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search expenses..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-slate-400 focus:outline-none"
+      <Card>
+        <div className="space-y-3 border-b border-line p-4 sm:px-6">
+          <FilterBar>
+            <SearchInput value={search} onChange={setSearch} placeholder="Search expenses or animals..." label="Search expenses" className="lg:max-w-sm lg:flex-1" />
+            <Chips options={LIST_PERIODS} value={period} onChange={setPeriod} label="Period" />
+          </FilterBar>
+          <Chips
+            options={[{ value: 'all', label: 'All categories' }, ...CATEGORIES, { value: 'animal', label: 'Animal care' }]}
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+            label="Category"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
-          {[{ value: 'all', label: 'All' }, ...CATEGORIES, { value: 'animal', label: 'Animal care' }].map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setCategoryFilter(value)}
-              className={`rounded-xl px-3 py-2 text-xs font-semibold capitalize transition ${
-                categoryFilter === value
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Description</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Category</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Amount</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
-              <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
-            {filteredExpenses.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-10 text-center text-sm text-slate-500">No expenses recorded.</td>
-              </tr>
-            ) : (
-              filteredExpenses.map(exp => (
-                <tr key={exp.key} className="hover:bg-slate-50/50 transition">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-900">
-                    {exp.description}
-                    {exp.detail && <span className="block text-xs font-normal text-slate-500">{exp.detail}</span>}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center text-[11px] font-semibold uppercase px-2.5 py-1 rounded-full border ${CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.other}`}>
-                      {categoryLabel(exp.category)}
+        {filtered.length === 0 ? (
+          <EmptyState Icon={PackageOpen} title="No expenses in this view" body="Change the period or category, or add an expense." />
+        ) : (
+          <>
+          {/* Phones: one row per record with the amount always visible. */}
+          <ul className="divide-y divide-slate-100 sm:hidden">
+            {filtered.map((row) => (
+              <li key={row.key}>
+                {row.expense ? (
+                  <button type="button" onClick={() => setEditing(row.expense!)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-ink">{row.description}</span>
+                      <span className="block truncate text-xs text-slate-500">{categoryLabel(row.category)} · {fmtDate(row.date)}</span>
                     </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-red-600">
-                    ৳{exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                    {new Date(exp.date).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                    {exp.expense ? (
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => openEditModal(exp.expense!)} aria-label="Edit expense" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition">
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-ink">{tk(row.amount)}</span>
+                  </button>
+                ) : (
+                  <Link href={`/dashboard/cows/${row.cowId}`} className="flex items-center gap-3 px-4 py-3">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-ink">{row.description}</span>
+                      <span className="block truncate text-xs text-slate-500">Animal care · {row.detail} · {fmtDate(row.date)}</span>
+                    </span>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-ink">{tk(row.amount)}</span>
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+          <Table className="hidden sm:block">
+            <THead>
+              <tr>
+                <Th>Description</Th>
+                <Th>Category</Th>
+                <Th>Date</Th>
+                <Th align="right">Amount</Th>
+                <Th align="right"><span className="sr-only">Actions</span></Th>
+              </tr>
+            </THead>
+            <TBody>
+              {filtered.map((row) => (
+                <TRow key={row.key}>
+                  <Td>
+                    <p className="font-semibold text-ink">{row.description}</p>
+                    {row.detail && <p className="text-xs text-slate-500">{row.detail}</p>}
+                  </Td>
+                  <Td><Badge tone={row.category === 'animal' ? 'brand' : 'neutral'}>{categoryLabel(row.category)}</Badge></Td>
+                  <Td className="whitespace-nowrap text-slate-500">{fmtDate(row.date)}</Td>
+                  <Td align="right" className="whitespace-nowrap font-semibold text-ink">{tk(row.amount)}</Td>
+                  <Td align="right">
+                    {row.expense ? (
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => setEditing(row.expense!)} aria-label={`Edit ${row.description}`}>
                           <Edit3 className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => handleDelete(exp.expense!.id)} aria-label="Delete expense" className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 transition">
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(row.expense!)} aria-label={`Delete ${row.description}`} className="hover:text-red-600">
                           <Trash2 className="h-4 w-4" />
-                        </button>
+                        </Button>
                       </div>
                     ) : (
-                      <Link
-                        href={`/dashboard/cows/${exp.cowId}`}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-                        title="Edit this cost on the animal's record"
-                      >
-                        <PawPrint className="h-3.5 w-3.5" /> Open animal
+                      <Link href={`/dashboard/cows/${row.cowId}`} className={buttonCls('secondary', 'sm')} title="Edit this cost on the animal's record">
+                        <PawPrint className="h-3.5 w-3.5" aria-hidden="true" /> Open animal
                       </Link>
                     )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                  </Td>
+                </TRow>
+              ))}
+            </TBody>
+          </Table>
+          </>
+        )}
+      </Card>
 
-      {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
-          <div className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-slate-100 bg-white p-5 shadow-xl sm:rounded-2xl sm:p-6">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <h2 className="text-lg font-bold text-slate-900">
-                {editingExpense ? 'Edit Expense' : 'Add New Expense'}
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            {error && (
-              <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-medium text-red-700 border border-red-100">{error}</div>
-            )}
-            <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Description</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Vet visit for cow #5"
-                  value={form.description}
-                  onChange={e => setForm({ ...form, description: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Amount (৳)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                    placeholder="e.g. 500"
-                    value={form.amount}
-                    onChange={e => setForm({ ...form, amount: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Date</label>
-                  <input
-                    type="date"
-                    max={farmToday()}
-                    value={form.expenseDate}
-                    onChange={e => setForm({ ...form, expenseDate: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Category</label>
-                <select
-                  value={form.category}
-                  onChange={e => setForm({ ...form, category: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                >
-                  {CATEGORIES.map(c => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
-                  Cancel
-                </button>
-                <button type="submit" disabled={loading} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
-                  {loading ? 'Saving...' : 'Save Expense'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {editing !== undefined && (
+        <ExpenseFormModal
+          expense={editing}
+          onClose={() => setEditing(undefined)}
+          onSaved={() => {
+            setEditing(undefined);
+            toast(editing ? 'Expense updated' : 'Expense added');
+            router.refresh();
+          }}
+        />
       )}
     </div>
+  );
+}
+
+function ExpenseFormModal({ expense, onClose, onSaved }: { expense: OtherExpense | null; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState({
+    description: expense?.description ?? '',
+    amount: expense ? String(expense.amount) : '',
+    category: expense?.category ?? 'other',
+    expenseDate: expense ? toDay(expense.expenseDate) : farmToday(),
+  });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      if (expense) await webApiClient.put(`/api/expenses/${expense.id}`, form, 'Failed to save expense');
+      else await webApiClient.post('/api/expenses', form, 'Failed to save expense');
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal title={expense ? 'Edit expense' : 'Add expense'} onClose={onClose}>
+      <FormError message={error} />
+      <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <div>
+          <label htmlFor="exp-desc" className={labelCls}>Description</label>
+          <input id="exp-desc" required autoFocus maxLength={200} placeholder="e.g. Electricity bill" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className={inputCls} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="exp-amount" className={labelCls}>Amount (৳)</label>
+            <input id="exp-amount" type="number" step="any" min="0.01" required inputMode="decimal" placeholder="e.g. 1200" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputCls} />
+          </div>
+          <div>
+            <label htmlFor="exp-date" className={labelCls}>Date</label>
+            <input id="exp-date" type="date" required max={farmToday()} value={form.expenseDate} onChange={(e) => setForm({ ...form, expenseDate: e.target.value })} className={inputCls} />
+          </div>
+        </div>
+        <div>
+          <label htmlFor="exp-cat" className={labelCls}>Category</label>
+          <select id="exp-cat" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className={inputCls}>
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+        </div>
+        <p className="text-xs text-slate-500">Vet visits and medicine for one animal are better added on that animal&apos;s record, so they show in its history too.</p>
+        <FormFooter onCancel={onClose} loading={loading} label={expense ? 'Save changes' : 'Add expense'} />
+      </form>
+    </Modal>
   );
 }

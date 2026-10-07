@@ -149,7 +149,7 @@ export default function FeedPurchaseModal({
             Bought from{!editing && owed === 0 && <span className="ml-1 font-normal normal-case text-slate-400">(optional when fully paid)</span>}
           </span>
           {presetSupplier ? (
-            <p className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-900">{presetSupplier.name}</p>
+            <p className="rounded-control border border-line bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-ink">{presetSupplier.name}</p>
           ) : (
             <CustomerPicker noun="supplier" customers={suppliers} value={supplier} onChange={setSupplier} />
           )}
@@ -189,7 +189,7 @@ export default function FeedPurchaseModal({
         </div>
         {total > 0 && (
           <p className="-mt-2 text-sm text-slate-600">
-            Total: <span className="font-bold text-slate-900">{tk(total)}</span>
+            Total: <span className="font-bold text-ink">{tk(total)}</span>
           </p>
         )}
 
@@ -201,8 +201,8 @@ export default function FeedPurchaseModal({
               role="radio"
               aria-checked={form.coverDays === ''}
               onClick={() => set({ coverDays: '' })}
-              className={`rounded-xl border px-3.5 py-2 text-sm font-semibold transition ${
-                form.coverDays === '' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              className={`rounded-control border px-3.5 py-2 text-sm font-semibold transition ${
+                form.coverDays === '' ? 'border-slate-900 bg-ink text-white' : 'border-line bg-white text-slate-600 hover:bg-slate-50'
               }`}
             >
               Don&apos;t know
@@ -214,8 +214,8 @@ export default function FeedPurchaseModal({
                 role="radio"
                 aria-checked={days === d && !customDays}
                 onClick={() => set({ coverDays: String(d) })}
-                className={`rounded-xl border px-3.5 py-2 text-sm font-semibold transition ${
-                  days === d && !customDays ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                className={`rounded-control border px-3.5 py-2 text-sm font-semibold transition ${
+                  days === d && !customDays ? 'border-slate-900 bg-ink text-white' : 'border-line bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 {d} day{d === 1 ? '' : 's'}
@@ -231,16 +231,16 @@ export default function FeedPurchaseModal({
               placeholder="Other"
               value={customDays ? form.coverDays : ''}
               onChange={(e) => set({ coverDays: e.target.value })}
-              className={`w-24 rounded-xl border px-3 py-2 text-sm ${customDays ? 'border-slate-900 font-semibold' : 'border-slate-200'} focus:outline-none focus:ring-2 focus:ring-slate-200`}
+              className={`w-24 rounded-control border px-3 py-2 text-sm ${customDays ? 'border-slate-900 font-semibold' : 'border-line'} focus:outline-none focus:ring-2 focus:ring-slate-200`}
             />
           </div>
           {form.coverDays === '' && total > 0 && (
-            <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+            <p className="mt-2 rounded-control border border-line bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
               The full {tk(total)} counts as feed cost on the day you bought it.
             </p>
           )}
           {days >= 1 && qty > 0 && (
-            <p className="mt-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800" aria-live="polite">
+            <p className="mt-2 rounded-control border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800" aria-live="polite">
               ≈ {round2(qty / days).toLocaleString()} kg/day · {tk(round2(total / days))}/day · lasts until{' '}
               {fmtDate(addDays(form.purchasedAt || todayStr(), days - 1))}
             </p>
@@ -277,7 +277,7 @@ export default function FeedPurchaseModal({
         </div>
 
         {!editing && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+          <div className="rounded-control border border-line bg-slate-50/60 p-4">
             <span className={labelCls}>Payment</span>
             <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Payment">
               {PAY_MODES.map((m) => (
@@ -287,8 +287,8 @@ export default function FeedPurchaseModal({
                   role="radio"
                   aria-checked={form.payMode === m.value}
                   onClick={() => set({ payMode: m.value })}
-                  className={`rounded-xl border px-3 py-2 text-left transition ${
-                    form.payMode === m.value ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  className={`rounded-control border px-3 py-2 text-left transition ${
+                    form.payMode === m.value ? 'border-slate-900 bg-ink text-white' : 'border-line bg-white text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <span className="block text-sm font-semibold">{m.label}</span>
@@ -329,7 +329,7 @@ export default function FeedPurchaseModal({
               </div>
             )}
 
-            <p className={`mt-3 text-sm font-semibold ${owed > 0 ? 'text-red-600' : 'text-emerald-700'}`} aria-live="polite">
+            <p className={`mt-3 text-sm font-semibold ${owed > 0 ? 'text-red-600' : 'text-brand-700'}`} aria-live="polite">
               {owed > 0
                 ? `${tk(owed)} will be added to what you owe${supplier ? ` ${supplier.name}` : ''}`
                 : 'Fully paid — nothing owed'}
@@ -338,7 +338,7 @@ export default function FeedPurchaseModal({
         )}
 
         {editing && batch && batch.supplier && (
-          <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          <p className="rounded-control border border-line bg-slate-50 p-3 text-xs text-slate-600">
             Paid so far on this purchase: <strong>{tk(batch.paidAmount ?? 0)}</strong>. To change payments, open the supplier&apos;s page.
           </p>
         )}

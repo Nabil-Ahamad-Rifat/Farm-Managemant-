@@ -10,8 +10,8 @@ import PaymentFormModal from '@/components/sales/PaymentFormModal';
 import { SummaryCard, CustomerTypeBadge, tk, fmtDate } from '@/components/sales/shared';
 
 const chip = (active: boolean) =>
-  `rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-    active ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+  `rounded-control px-3.5 py-2 text-xs font-semibold transition ${
+    active ? 'bg-ink text-white shadow-card' : 'border border-line bg-white text-slate-600 hover:bg-slate-50'
   }`;
 
 export default function CustomerManager({ customers }: { customers: CustomerSummary[] }) {
@@ -38,19 +38,19 @@ export default function CustomerManager({ customers }: { customers: CustomerSumm
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Customers & Dues</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-[28px]">Customers & Dues</h1>
           <p className="mt-1 text-slate-500">Who buys from you, who owes you, and how much.</p>
         </div>
         <button
           onClick={() => setAdding(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-navy-700"
         >
           <Plus className="h-4 w-4" />
           Add customer
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
         <SummaryCard label="Total due to you" value={tk(totalDue)} Icon={AlertCircle} tone="red" />
         <SummaryCard label="Customers who owe" value={`${owing} of ${customers.length}`} Icon={Users} tone="slate" />
         <SummaryCard label="Advance held" value={tk(advance)} Icon={PiggyBank} tone="emerald" />
@@ -65,7 +65,7 @@ export default function CustomerManager({ customers }: { customers: CustomerSumm
             placeholder="Search by name or phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-slate-400 focus:outline-none"
+            className="w-full rounded-control border border-line bg-white py-2.5 pl-10 pr-4 text-sm text-ink placeholder-slate-400 shadow-sm focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/10"
           />
         </div>
         <div className="flex flex-wrap gap-2">
@@ -81,7 +81,31 @@ export default function CustomerManager({ customers }: { customers: CustomerSumm
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* Phones: one row per customer with what is owed always visible. */}
+      <ul className="divide-y divide-slate-100 overflow-hidden rounded-card border border-line bg-white shadow-card sm:hidden">
+        {filtered.length === 0 ? (
+          <li className="py-12 text-center text-sm text-slate-500">Nothing matches this search.</li>
+        ) : (
+          filtered.map((c) => (
+            <li key={c.id} className="flex items-center gap-3 px-4 py-3">
+              <Link href={`/dashboard/customers/${c.id}`} className="min-w-0 flex-1">
+                <span className="flex items-center gap-2"><span className="truncate text-sm font-semibold text-ink">{c.name}</span><CustomerTypeBadge type={c.type} /></span>
+                <span className="block truncate text-xs text-slate-500">Bought {tk(c.totalSold)} · paid {tk(c.totalPaid)}</span>
+              </Link>
+              <span className={`shrink-0 text-sm font-bold tabular-nums ${c.totalDue > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                {c.totalDue > 0 ? tk(c.totalDue) : 'Clear'}
+              </span>
+              {c.totalDue > 0 && (
+                <button onClick={() => setPaying(c)} aria-label={`Collect from ${c.name}`} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control border border-brand-200 bg-brand-50 text-brand-700">
+                  <HandCoins className="h-4 w-4" />
+                </button>
+              )}
+            </li>
+          ))
+        )}
+      </ul>
+
+      <div className="hidden overflow-x-auto rounded-card border border-line bg-white shadow-card sm:block">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
@@ -103,27 +127,27 @@ export default function CustomerManager({ customers }: { customers: CustomerSumm
                 <tr key={c.id} className="transition hover:bg-slate-50/60">
                   <td className="whitespace-nowrap px-5 py-4">
                     <Link href={`/dashboard/customers/${c.id}`} className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-900 hover:underline">{c.name}</span>
+                      <span className="text-sm font-semibold text-ink hover:underline">{c.name}</span>
                       <CustomerTypeBadge type={c.type} />
                     </Link>
                     <p className="text-[11px] text-slate-400">{c.salesCount} sale{c.salesCount === 1 ? '' : 's'}</p>
                   </td>
                   <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">
                     {c.phone ? (
-                      <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 hover:text-slate-900">
+                      <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 hover:text-ink">
                         <Phone className="h-3.5 w-3.5" /> {c.phone}
                       </a>
                     ) : (
                       <span className="text-slate-300">—</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-slate-900">{tk(c.totalSold)}</td>
-                  <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-emerald-700">{tk(c.totalPaid)}</td>
+                  <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-ink">{tk(c.totalSold)}</td>
+                  <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-brand-700">{tk(c.totalPaid)}</td>
                   <td className="whitespace-nowrap px-5 py-4 text-sm">
                     {c.totalDue > 0 ? (
                       <span className="font-bold text-red-600">{tk(c.totalDue)}</span>
                     ) : c.advance > 0 ? (
-                      <span className="font-semibold text-emerald-700">Advance {tk(c.advance)}</span>
+                      <span className="font-semibold text-brand-700">Advance {tk(c.advance)}</span>
                     ) : (
                       <span className="font-semibold text-slate-400">Clear</span>
                     )}
@@ -136,7 +160,7 @@ export default function CustomerManager({ customers }: { customers: CustomerSumm
                       {c.totalDue > 0 && (
                         <button
                           onClick={() => setPaying(c)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100"
                         >
                           <HandCoins className="h-3.5 w-3.5" /> Collect
                         </button>
