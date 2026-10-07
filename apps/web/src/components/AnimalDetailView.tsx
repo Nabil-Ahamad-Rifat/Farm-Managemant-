@@ -166,7 +166,7 @@ export default function AnimalDetailView({
                 onClick={() => setSelectedPhotoId(p.id)}
                 aria-label="Show photo"
                 aria-pressed={selected?.id === p.id}
-                className={`relative h-14 w-14 overflow-hidden rounded-lg border-2 ${selected?.id === p.id ? 'border-slate-900' : 'border-transparent'}`}
+                className={`relative h-16 w-16 overflow-hidden rounded-lg border-2 ${selected?.id === p.id ? 'border-slate-900' : 'border-transparent'}`}
               >
                 <AnimalPhoto src={p.url} alt="" className="h-full w-full" />
                 {p.id === animal.mainPhotoId && (
@@ -178,7 +178,7 @@ export default function AnimalDetailView({
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={photoBusy}
-              className="flex h-14 w-14 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 text-[10px] font-semibold text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+              className="flex h-16 w-16 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 text-[10px] font-semibold text-slate-500 hover:bg-slate-50 disabled:opacity-50"
             >
               <ImagePlus className="h-4 w-4" />
               {photoBusy ? '…' : 'Add'}
@@ -213,10 +213,10 @@ export default function AnimalDetailView({
               <p className="text-sm text-slate-500">Added {fmtDate(animal.createdAt)}</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setModal({ kind: 'edit' })} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                <Edit3 className="h-4 w-4" /> Edit
+              <button onClick={() => setModal({ kind: 'edit' })} className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:flex-none">
+                <Edit3 className="h-4 w-4" /> Edit details
               </button>
-              <button onClick={deleteAnimal} aria-label="Delete animal" className="rounded-xl border border-red-200 px-3 py-2 text-red-600 hover:bg-red-50">
+              <button onClick={deleteAnimal} aria-label="Delete animal" className="flex h-11 w-11 items-center justify-center rounded-xl border border-red-200 text-red-600 hover:bg-red-50">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
@@ -225,7 +225,7 @@ export default function AnimalDetailView({
           <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             {facts.filter(([, v]) => v).map(([k, v]) => (
               <div key={k} className="flex gap-2">
-                <dt className="w-28 shrink-0 text-slate-500">{k}</dt>
+                <dt className="w-24 shrink-0 text-slate-500">{k}</dt>
                 <dd className="font-medium text-slate-900">{v}</dd>
               </div>
             ))}
@@ -237,7 +237,7 @@ export default function AnimalDetailView({
           )}
 
           {/* Summary */}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
             {isFemale && (
               <SummaryTile Icon={HeartPulse} label="Breeding">
                 <p className="font-bold text-slate-900">{PREGNANCY_TEXT[s.pregnancy]}</p>
@@ -299,14 +299,14 @@ export default function AnimalDetailView({
 
       {/* History */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="min-w-0">
             <h2 className="text-base font-bold text-slate-900">History</h2>
             <p className="text-xs text-slate-500">Vaccines, AI, pregnancy checks, calvings, treatments and more</p>
           </div>
           <button
             onClick={() => setModal({ kind: 'event', event: null })}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
           >
             <Plus className="h-4 w-4" /> Add record
           </button>
@@ -341,10 +341,10 @@ export default function AnimalDetailView({
                     {e.notes && <p className="mt-0.5 text-xs italic text-slate-500">{e.notes}</p>}
                   </div>
                   <div className="flex shrink-0 items-start gap-1">
-                    <button onClick={() => setModal({ kind: 'event', event: e })} aria-label="Edit record" className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-slate-900">
+                    <button onClick={() => setModal({ kind: 'event', event: e })} aria-label="Edit record" className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-900">
                       <Edit3 className="h-4 w-4" />
                     </button>
-                    <button onClick={() => deleteEvent(e)} aria-label="Delete record" className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-red-600">
+                    <button onClick={() => deleteEvent(e)} aria-label="Delete record" className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-red-600">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>

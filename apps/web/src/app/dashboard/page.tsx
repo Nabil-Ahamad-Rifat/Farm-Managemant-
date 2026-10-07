@@ -148,7 +148,7 @@ export default async function DashboardPage() {
 
   const cards = [
     {
-      label: 'Total Herd (Cows)',
+      label: 'Animals',
       value: cowCount.toString(),
       subtext: `${activeCowsCount} active in herd`,
       href: '/dashboard/cows',
@@ -182,33 +182,33 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Farm Overview</h1>
-        <p className="mt-1 text-slate-500">Live operational metrics and management summaries for your farm.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Farm Overview</h1>
+        <p className="mt-1 text-sm text-slate-500 sm:text-base">Live operational metrics and management summaries for your farm.</p>
       </div>
 
       {/* Stat Cards */}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         {cards.map((card) => {
           const Icon = card.icon;
           return (
             <Link
               key={card.label}
               href={card.href}
-              className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md hover:border-slate-300"
+              className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-slate-300 sm:p-6"
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{card.label}</span>
-                <div className={`flex h-9 w-9 items-center justify-center rounded-xl border ${card.color}`}>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">{card.label}</span>
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border sm:h-9 sm:w-9 ${card.color}`}>
                   <Icon className="h-5 w-5" />
                 </div>
               </div>
-              <div className="mt-4">
-                <p className="text-3xl font-extrabold text-slate-900 tracking-tight">{card.value}</p>
-                <p className="mt-1 text-xs text-slate-500">{card.subtext}</p>
+              <div className="mt-3 sm:mt-4">
+                <p className="truncate text-xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">{card.value}</p>
+                <p className="mt-1 line-clamp-2 text-xs text-slate-500">{card.subtext}</p>
               </div>
-              <div className="mt-4 flex items-center gap-1 text-xs font-semibold text-emerald-600 transition group-hover:translate-x-0.5">
+              <div className="mt-4 hidden items-center gap-1 sm:flex text-xs font-semibold text-emerald-600 transition group-hover:translate-x-0.5">
                 Manage section <ArrowRight className="h-3.5 w-3.5" />
               </div>
             </Link>

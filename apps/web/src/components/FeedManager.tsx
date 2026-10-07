@@ -284,8 +284,8 @@ export default function FeedManager({
 
       {/* Feed Usage Modal */}
       {usageFeed && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Record feed usage">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-100 bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Record feed usage">
+          <div className="max-h-[92dvh] w-full max-w-sm overflow-y-auto rounded-t-3xl border border-slate-100 bg-white p-5 shadow-xl sm:rounded-2xl sm:p-6">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">{usageFeed.schedule ? 'Record extra use' : 'Record Feed Usage'}</h2>
