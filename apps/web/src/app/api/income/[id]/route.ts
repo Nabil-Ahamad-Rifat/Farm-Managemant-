@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { entryDay } from '@/lib/days';
 import { withAuth, getIdFromParams } from '@/lib/middleware/withAuth';
 
 // PUT /api/income/[id] - update an income record
@@ -13,10 +14,13 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
     const existing = await db.otherIncome.findFirst({ where: { id, tenantId } });
     if (!existing) return Response.json({ error: 'Income record not found' }, { status: 404 });
 
-    const parsedAmount = parseFloat(amount);
+    // The amount is optional on edit: leaving it out keeps the old one.
+    const parsedAmount = amount === undefined || amount === null || amount === '' ? existing.amount : parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       return Response.json({ error: 'Amount must be a positive number' }, { status: 400 });
     }
+    const day = entryDay(incomeDate, existing.incomeDate);
+    if ('error' in day) return Response.json({ error: day.error }, { status: 400 });
 
     const updated = await db.otherIncome.update({
       where: { id },
@@ -24,7 +28,7 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
         description: description || existing.description,
         amount: parsedAmount,
         category: category || existing.category,
-        incomeDate: incomeDate ? new Date(incomeDate + 'T12:00:00Z') : existing.incomeDate,
+        incomeDate: day.date,
       },
     });
 

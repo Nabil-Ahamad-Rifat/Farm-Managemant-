@@ -62,7 +62,15 @@ export const DELETE = withAuth(async (req, { tenantId }, routeContext) => {
       );
     }
 
-    // Payments cascade with the customer.
+    // Payments would be deleted with the customer and lower past "money received".
+    const paymentsCount = await db.payment.count({ where: { tenantId, customerId: id } });
+    if (paymentsCount > 0) {
+      return Response.json(
+        { error: `This customer has ${paymentsCount} payment(s) recorded. Delete those payments first so the money history stays correct.` },
+        { status: 409 },
+      );
+    }
+
     const result = await db.customer.deleteMany({ where: { id, tenantId } });
     if (result.count === 0) return Response.json({ error: 'Customer not found' }, { status: 404 });
     return Response.json({ success: true });

@@ -84,7 +84,8 @@ export default function FeedPurchaseModal({
       name: form.name.trim(),
       quantity: form.quantity,
       unitPrice: form.unitPrice,
-      coverDays: days || undefined,
+      // null clears the days on edit ("Don't know").
+      coverDays: days || null,
       purchasedAt: form.purchasedAt,
       ...(supplier ? (supplier.kind === 'existing' ? { supplierId: supplier.id } : { supplierName: supplier.name }) : {}),
       ...(editing

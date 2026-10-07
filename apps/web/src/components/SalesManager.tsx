@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, Search, Trash2, Edit3, Wallet, HandCoins, AlertCircle, FileText, Users } from 'lucide-react';
 import type { Cow, Sale } from '@farm/shared-types';
 import { webApiClient } from '@farm/api-client';
-import { daysAgo } from '@farm/business-logic';
+import { LIST_PERIODS, inListPeriod, type ListPeriod } from '@farm/business-logic';
 import SaleFormModal from '@/components/sales/SaleFormModal';
 import type { PickerCustomer } from '@/components/sales/CustomerPicker';
 import {
@@ -18,13 +18,6 @@ import {
   tk,
   fmtDate,
 } from '@/components/sales/shared';
-
-const PERIOD_FILTERS = [
-  { label: 'Today', days: 1 },
-  { label: '7 Days', days: 7 },
-  { label: '30 Days', days: 30 },
-  { label: 'All', days: 0 },
-];
 
 const STATUS_FILTERS = [
   { value: 'all', label: 'All' },
@@ -56,7 +49,7 @@ export default function SalesManager({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [periodDays, setPeriodDays] = useState(30);
+  const [period, setPeriod] = useState<ListPeriod>('month');
   const [modal, setModal] = useState<{ sale: Sale | null } | null>(null);
 
   async function handleDelete(sale: Sale) {
@@ -74,7 +67,6 @@ export default function SalesManager({
   }
 
   const q = search.trim().toLowerCase();
-  const since = periodDays > 0 ? daysAgo(periodDays) : null;
   const filtered = initialSales.filter((sale) => {
     const matchesSearch =
       !q ||
@@ -83,7 +75,7 @@ export default function SalesManager({
     const status = sale.customerId ? sale.status : sale.status === 'paid' ? 'paid' : 'pending';
     const matchesStatus = statusFilter === 'all' || status === statusFilter;
     const matchesType = typeFilter === 'all' || sale.customer?.type === typeFilter;
-    const matchesPeriod = !since || new Date(sale.createdAt) >= since;
+    const matchesPeriod = inListPeriod(sale.createdAt, period);
     return matchesSearch && matchesStatus && matchesType && matchesPeriod;
   });
 
@@ -124,8 +116,8 @@ export default function SalesManager({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {PERIOD_FILTERS.map(({ label, days }) => (
-          <button key={label} onClick={() => setPeriodDays(days)} className={chip(periodDays === days)}>
+        {LIST_PERIODS.map(({ value, label }) => (
+          <button key={value} onClick={() => setPeriod(value)} aria-pressed={period === value} className={chip(period === value)}>
             {label}
           </button>
         ))}

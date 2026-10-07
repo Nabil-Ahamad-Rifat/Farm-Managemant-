@@ -904,3 +904,158 @@ export function labourBetween(workers: WorkerLike[], from: Date | string, to: Da
   }
   return { earned: toTaka(earned), paid: toTaka(paid), writtenOff: toTaka(off) };
 }
+
+// ---------------------------------------------------------------------------
+// Farm money for any date range, two ways:
+// - Profit (what the farm earned and spent, paid or not): sales made + other
+//   income − feed bought (spread over its days when set) − labour earned
+//   (and advances written off) − other expenses.
+// - Cash flow (money that actually moved): money received from customers +
+//   other income − paid to suppliers − feed paid on the spot (no supplier) −
+//   paid to workers − other expenses.
+// ---------------------------------------------------------------------------
+
+export interface FinanceData {
+  /** Every sale. Legacy sales (no customer) marked paid also count as cash on their day. */
+  sales: { amount: number; date: Date | string; customerId?: string | null; status?: string | null }[];
+  /** Money received from customers. */
+  customerPayments: { amount: number; date: Date | string }[];
+  otherIncome: { amount: number; date: Date | string }[];
+  otherExpenses: { amount: number; date: Date | string }[];
+  /** Feed purchases; those without a supplier were paid in full when bought. */
+  feed: (ScheduledFeed & { supplierId?: string | null })[];
+  supplierPayments: { amount: number; date: Date | string }[];
+  workers: WorkerLike[];
+}
+
+export interface FinanceSummary {
+  profit: {
+    salesMade: number;
+    salesCount: number;
+    otherIncome: number;
+    income: number;
+    feed: number;
+    /** Pay earned by workers in the range. */
+    labour: number;
+    /** Worker advances given up in the range (a loss). */
+    writtenOff: number;
+    otherExpenses: number;
+    costs: number;
+    profit: number;
+  };
+  cash: {
+    fromCustomers: number;
+    otherIncome: number;
+    moneyIn: number;
+    toSuppliers: number;
+    feedPaidOnSpot: number;
+    toWorkers: number;
+    otherExpenses: number;
+    moneyOut: number;
+    net: number;
+  };
+}
+
+const isLegacySale = (s: { customerId?: string | null }) => !s.customerId;
+
+/** Profit and cash flow for [from, to] (calendar days, both ends included). */
+export function financeBetween(d: FinanceData, from: Date | string, to: Date | string, now: Date | string = new Date()): FinanceSummary {
+  const lo = utcDayIndex(from);
+  const hi = utcDayIndex(to);
+  const inRange = (date: Date | string) => {
+    const day = utcDayIndex(date);
+    return day >= lo && day <= hi;
+  };
+  const sumIn = (rows: { amount: number; date: Date | string }[]) => rows.reduce((s, r) => (inRange(r.date) ? s + toPaisa(r.amount) : s), 0);
+
+  let salesMade = 0;
+  let salesCount = 0;
+  let legacyPaid = 0;
+  for (const s of d.sales) {
+    if (!inRange(s.date)) continue;
+    salesMade += toPaisa(s.amount);
+    salesCount++;
+    if (isLegacySale(s) && s.status === 'paid') legacyPaid += toPaisa(s.amount);
+  }
+  const otherIncome = sumIn(d.otherIncome);
+  const otherExpenses = sumIn(d.otherExpenses);
+  const feed = toPaisa(feedCostBetween(d.feed, from, to));
+  const labour = labourBetween(d.workers, from, to, now);
+  const labourEarned = toPaisa(labour.earned);
+  const writtenOff = toPaisa(labour.writtenOff);
+
+  let feedPaidOnSpot = 0;
+  for (const b of d.feed) {
+    if (b.supplierId) continue;
+    const day = b.purchasedAt ?? b.createdAt;
+    if (day && inRange(day)) feedPaidOnSpot += toPaisa(b.quantity * b.unitPrice);
+  }
+  const fromCustomers = sumIn(d.customerPayments) + legacyPaid;
+  const toSuppliers = sumIn(d.supplierPayments);
+  const toWorkers = toPaisa(labour.paid);
+
+  const income = salesMade + otherIncome;
+  const costs = feed + labourEarned + writtenOff + otherExpenses;
+  const moneyIn = fromCustomers + otherIncome;
+  const moneyOut = toSuppliers + feedPaidOnSpot + toWorkers + otherExpenses;
+  return {
+    profit: {
+      salesMade: toTaka(salesMade),
+      salesCount,
+      otherIncome: toTaka(otherIncome),
+      income: toTaka(income),
+      feed: toTaka(feed),
+      labour: toTaka(labourEarned),
+      writtenOff: toTaka(writtenOff),
+      otherExpenses: toTaka(otherExpenses),
+      costs: toTaka(costs),
+      profit: toTaka(income - costs),
+    },
+    cash: {
+      fromCustomers: toTaka(fromCustomers),
+      otherIncome: toTaka(otherIncome),
+      moneyIn: toTaka(moneyIn),
+      toSuppliers: toTaka(toSuppliers),
+      feedPaidOnSpot: toTaka(feedPaidOnSpot),
+      toWorkers: toTaka(toWorkers),
+      otherExpenses: toTaka(otherExpenses),
+      moneyOut: toTaka(moneyOut),
+      net: toTaka(moneyIn - moneyOut),
+    },
+  };
+}
+
+/** "YYYY-MM-DD" days from `from` to `to`, both included. */
+export function daysBetween(from: string, to: string): string[] {
+  const out: string[] = [];
+  for (let day = utcDayIndex(from + 'T12:00:00Z'); day <= utcDayIndex(to + 'T12:00:00Z'); day++) out.push(dayIndexToIso(day));
+  return out;
+}
+
+/** "YYYY-MM" months touching [from, to], oldest first. */
+export function monthsBetween(from: string, to: string): string[] {
+  const out: string[] = [];
+  for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = shiftMonth(m, 1)) out.push(m);
+  return out;
+}
+
+/** The period chips on the Sales, Other Income and Other Expenses lists (farm calendar). */
+export const LIST_PERIODS = [
+  { value: 'today', label: 'Today' },
+  { value: '7d', label: '7 days' },
+  { value: 'month', label: 'This month' },
+  { value: 'lastmonth', label: 'Last month' },
+  { value: 'all', label: 'All' },
+] as const;
+export type ListPeriod = (typeof LIST_PERIODS)[number]['value'];
+
+/** Whether a stored day falls in a list period, counted on the farm's clock. */
+export function inListPeriod(date: Date | string, period: ListPeriod, now: Date | string = new Date()): boolean {
+  if (period === 'all') return true;
+  const day = utcDayIndex(date);
+  const today = farmDayIndex(now);
+  if (period === 'today') return day === today;
+  if (period === '7d') return day > today - 7 && day <= today;
+  const month = period === 'month' ? farmMonth(now) : shiftMonth(farmMonth(now), -1);
+  return monthKey(date) === month;
+}

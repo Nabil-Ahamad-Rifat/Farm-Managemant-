@@ -2,9 +2,11 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
-import { collectedBetween, legacySaleFilter, listCustomersWithBalances } from '@/lib/receivables';
+import { addDaysIso, daysBetween, farmToday } from '@farm/business-logic';
+import { listCustomersWithBalances } from '@/lib/receivables';
 import { listFeed, listSuppliersWithBalances } from '@/lib/payables';
-import { feedCostBetween } from '@/lib/feed-cost';
+import { loadFinanceData, summaryFor } from '@/lib/finance';
+import { listWorkers } from '@/lib/payroll';
 import { getDueSoon } from '@/lib/animals';
 import DueSoonPanel from '@/components/animals/DueSoonPanel';
 import { PaymentStatusPill, CustomerTypeBadge, tk } from '@/components/sales/shared';
@@ -19,43 +21,29 @@ export default async function DashboardPage() {
 
   const { tenantId } = session;
 
-  // Date helpers
+  // Days and months on the farm's clock (Bangladesh), the same as every other screen.
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  // Feed days are UTC calendar days (see feedSchedule), so its month is too.
-  const startOfMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
-  thirtyDaysAgo.setHours(0, 0, 0, 0);
+  const today = farmToday(now);
+  const monthStart = today.slice(0, 8) + '01';
+  const chartFrom = addDaysIso(today + 'T12:00:00Z', -29);
 
   const [
-    allEmployees,
+    workers,
     cowCount,
     activeCowsCount,
     feedBatches,
-    totalCollected,
-    totalSalesCount,
     recentSales,
     recentCows,
-    monthlySalaryData,
-    monthlyExpenses,
-    monthlyOtherIncome,
-    dailyPayments,
-    dailyLegacySales,
-    dailyOtherIncomeData,
     customers,
     suppliers,
-    monthlyFeedCost,
     animalsDue,
+    money,
   ] = await Promise.all([
-    db.employee.findMany({ where: { tenantId } }),
+    listWorkers(tenantId, now),
     db.cow.count({ where: { tenantId } }),
     db.cow.count({ where: { tenantId, status: 'active' } }),
     // Stock left now: scheduled batches already have their daily use taken off
     listFeed(tenantId),
-    // All money actually received from sales, ever
-    collectedBetween(tenantId, new Date(0), now),
-    db.sale.count({ where: { tenantId } }),
     db.sale.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
@@ -66,84 +54,27 @@ export default async function DashboardPage() {
       orderBy: { createdAt: 'desc' },
       take: 5,
     }),
-    // Monthly salary payments
-    db.salaryPayment
-      ? db.salaryPayment.findMany({
-          where: { employee: { tenantId }, paidAt: { gte: startOfMonth } },
-          select: { amount: true },
-        })
-      : Promise.resolve([]),
-    // Monthly other expenses
-    db.otherExpense
-      ? db.otherExpense.aggregate({
-          where: { tenantId, expenseDate: { gte: startOfMonth } },
-          _sum: { amount: true },
-        })
-      : Promise.resolve({ _sum: { amount: 0 } }),
-    // Monthly other income
-    db.otherIncome
-      ? db.otherIncome.aggregate({
-          where: { tenantId, incomeDate: { gte: startOfMonth } },
-          _sum: { amount: true },
-        })
-      : Promise.resolve({ _sum: { amount: 0 } }),
-    // Money received per day for the 30-day mini chart: customer payments...
-    db.payment.findMany({
-      where: { tenantId, paidAt: { gte: thirtyDaysAgo } },
-      select: { amount: true, paidAt: true },
-    }),
-    // ...plus legacy (customer-less) sales marked paid
-    db.sale.findMany({
-      where: { tenantId, status: 'paid', createdAt: { gte: thirtyDaysAgo }, ...legacySaleFilter },
-      select: { amount: true, createdAt: true },
-    }),
-    // Daily other income for 30-day mini chart
-    db.otherIncome.findMany({
-      where: { tenantId, incomeDate: { gte: thirtyDaysAgo } },
-      select: { amount: true, incomeDate: true },
-      orderBy: { incomeDate: 'asc' },
-    }),
     listCustomersWithBalances(tenantId),
     listSuppliersWithBalances(tenantId),
-    // Purchases spread over their days, plus usage of older batches, this month so far
-    feedCostBetween(tenantId, startOfMonthUTC, now),
     // Vaccines, calvings and pregnancy checks coming up
     getDueSoon(tenantId, now),
+    loadFinanceData(tenantId),
   ]);
 
-  const employeeCount = allEmployees.length;
-  const activeEmployeeCount = allEmployees.filter(e => e.status !== 'terminated').length;
-
+  // This month so far: the same numbers as the Revenue Portal.
+  const month = summaryFor(money, monthStart, today, now);
+  const activeEmployeeCount = workers.filter((w) => w.status !== 'left').length;
   const totalRemainingFeed = feedBatches.reduce((acc, f) => acc + f.remainingQuantity, 0);
   const totalFeedValue = feedBatches.reduce((acc, f) => acc + f.remainingQuantity * f.unitPrice, 0);
-  const totalOtherIncome = monthlyOtherIncome._sum.amount ?? 0;
-  const totalRevenue = totalCollected + totalOtherIncome;
   const owing = customers.filter((c) => c.totalDue > 0);
   const totalDue = owing.reduce((sum, c) => sum + c.totalDue, 0);
-  const monthlySalaryCost = monthlySalaryData.reduce((sum: number, p: { amount: number }) => sum + p.amount, 0);
-  const monthlyOtherCost = monthlyExpenses._sum.amount ?? 0;
   const owedSuppliers = suppliers.filter((s) => s.totalDue > 0);
   const totalPayable = owedSuppliers.reduce((sum, s) => sum + s.totalDue, 0);
   const feedRunningOut = feedBatches.filter((b) => b.schedule && b.schedule.remaining > 0 && b.schedule.daysLeft <= 1);
+  const signed = (n: number) => (n < 0 ? '− ' + tk(-n) : tk(n));
 
-  // Build 30-day chart data
-  const chartDays: { date: string; revenue: number }[] = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
-    const daySalesRevenue =
-      dailyPayments
-        .filter(p => new Date(p.paidAt).toISOString().slice(0, 10) === dateStr)
-        .reduce((sum, p) => sum + p.amount, 0) +
-      dailyLegacySales
-        .filter(s => new Date(s.createdAt).toISOString().slice(0, 10) === dateStr)
-        .reduce((sum, s) => sum + s.amount, 0);
-    const dayOtherIncomeRevenue = dailyOtherIncomeData
-      .filter(s => new Date(s.incomeDate).toISOString().slice(0, 10) === dateStr)
-      .reduce((sum, s) => sum + s.amount, 0);
-    chartDays.push({ date: dateStr, revenue: daySalesRevenue + dayOtherIncomeRevenue });
-  }
+  // Money received per day over the last 30 days (customers + other income).
+  const chartDays = daysBetween(chartFrom, today).map((date) => ({ date, revenue: summaryFor(money, date, date, now).cash.moneyIn }));
   const maxRevenue = Math.max(...chartDays.map(d => d.revenue), 1);
 
   const cards = [
@@ -156,9 +87,9 @@ export default async function DashboardPage() {
       color: 'text-blue-600 bg-blue-50 border-blue-100',
     },
     {
-      label: 'Active Employees',
+      label: 'Workers',
       value: activeEmployeeCount.toString(),
-      subtext: `${employeeCount} total staff`,
+      subtext: `working now · ${workers.length} in total`,
       href: '/dashboard/employees',
       icon: Users,
       color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
@@ -172,9 +103,9 @@ export default async function DashboardPage() {
       color: 'text-amber-600 bg-amber-50 border-amber-100',
     },
     {
-      label: 'Total Revenue',
-      value: `৳${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
-      subtext: `Received from ${totalSalesCount} sale${totalSalesCount === 1 ? "" : "s"} + other income`,
+      label: 'Profit this month',
+      value: signed(month.profit.profit),
+      subtext: `Sales ${tk(month.profit.salesMade)} · received ${tk(month.cash.moneyIn)}`,
       href: '/dashboard/revenue',
       icon: DollarSign,
       color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
@@ -342,13 +273,14 @@ export default async function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-wider text-indigo-700">Monthly Labour</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-indigo-700">Workers&apos; pay (this month)</p>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
               <Banknote className="h-4 w-4" />
             </div>
           </div>
-          <p className="mt-2 text-xl font-extrabold text-slate-900">৳{monthlySalaryCost.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
-          <Link href="/dashboard/employees" className="text-[11px] text-indigo-600 hover:underline">View employees →</Link>
+          <p className="mt-2 text-xl font-extrabold text-slate-900">{tk(month.profit.labour + month.profit.writtenOff)}</p>
+          <p className="text-[11px] text-slate-500">Earned so far · paid {tk(month.cash.toWorkers)}</p>
+          <Link href="/dashboard/employees" className="text-[11px] text-indigo-600 hover:underline">View workers →</Link>
         </div>
         <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
@@ -357,7 +289,7 @@ export default async function DashboardPage() {
               <Wheat className="h-4 w-4" />
             </div>
           </div>
-          <p className="mt-2 text-xl font-extrabold text-slate-900">৳{monthlyFeedCost.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+          <p className="mt-2 text-xl font-extrabold text-slate-900">{tk(month.profit.feed)}</p>
           <Link href="/dashboard/feed" className="text-[11px] text-amber-600 hover:underline">View feed →</Link>
         </div>
         <div className="rounded-2xl border border-red-100 bg-white p-5 shadow-sm">
@@ -367,7 +299,7 @@ export default async function DashboardPage() {
               <PackageOpen className="h-4 w-4" />
             </div>
           </div>
-          <p className="mt-2 text-xl font-extrabold text-slate-900">৳{monthlyOtherCost.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+          <p className="mt-2 text-xl font-extrabold text-slate-900">{tk(month.profit.otherExpenses)}</p>
           <Link href="/dashboard/expenses" className="text-[11px] text-red-600 hover:underline">View expenses →</Link>
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { farmToday } from '@farm/business-logic';
 // Display helpers for the dues/payables screens (same rules as the web app's
 // components/sales/shared.tsx).
 
@@ -7,7 +8,8 @@ export function tk(amount: number) {
   return '৳' + amount.toLocaleString('en-IN', { minimumFractionDigits: hasPaisa ? 2 : 0, maximumFractionDigits: 2 });
 }
 
-export const todayStr = () => new Date().toISOString().slice(0, 10);
+/** Today on the farm's clock (Bangladesh), not UTC. */
+export const todayStr = () => farmToday();
 export const toDay = (d: Date | string) => new Date(d).toISOString().slice(0, 10);
 export const fmtDate = (d: Date | string) =>
   new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });

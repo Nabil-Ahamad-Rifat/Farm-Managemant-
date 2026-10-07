@@ -10,6 +10,11 @@ import {
   workerMonths,
   labourBetween,
   type WorkerLike,
+  financeBetween,
+  inListPeriod,
+  daysBetween,
+  monthsBetween,
+  type FinanceData,
   formatCurrency,
   sumAmounts,
   calculateSaleAmount,
@@ -690,5 +695,96 @@ describe('worker pay', () => {
     const a = monthly({ payments: [{ amount: 2000, date: noon('2026-10-05') }, { amount: 100, date: noon('2026-10-06'), kind: 'writeoff' }] });
     const b: WorkerLike = { payType: 'daily', work: [{ date: noon('2026-10-05'), days: 2, rate: 500 }], payments: [{ amount: 1000, date: noon('2026-10-05') }] };
     expect(labourBetween([a, b], noon('2026-10-01'), noon('2026-10-10'), noon('2026-10-31'))).toEqual({ earned: 6000 + 1000, paid: 3000, writtenOff: 100 });
+  });
+});
+
+describe('financeBetween', () => {
+  const noon = (d: string) => d + 'T12:00:00Z';
+  const data: FinanceData = {
+    sales: [
+      { amount: 1000, date: noon('2026-10-02'), customerId: 'c1', status: 'partial' },
+      { amount: 500, date: noon('2026-10-03'), customerId: 'c2', status: 'pending' },
+      // legacy paid sale counts as cash too
+      { amount: 300, date: noon('2026-10-04'), customerId: null, status: 'paid' },
+      { amount: 999, date: noon('2026-09-30'), customerId: 'c1', status: 'paid' },
+    ],
+    customerPayments: [
+      { amount: 600, date: noon('2026-10-02') },
+      // paying an old September sale in October: cash in October, not a sale in October
+      { amount: 999, date: noon('2026-10-05') },
+    ],
+    otherIncome: [{ amount: 200, date: noon('2026-10-06') }],
+    otherExpenses: [{ amount: 150, date: noon('2026-10-06') }, { amount: 50, date: noon('2026-11-01') }],
+    feed: [
+      // bought on credit from a supplier: cost now, cash only when paid
+      { quantity: 100, unitPrice: 20, purchasedAt: noon('2026-10-01'), supplierId: 's1' },
+      // bought for cash, no supplier
+      { quantity: 10, unitPrice: 30, purchasedAt: noon('2026-10-03') },
+      // spread over 10 days from Oct 28: 4 days in October
+      { quantity: 50, unitPrice: 20, coverDays: 10, purchasedAt: noon('2026-10-28'), supplierId: 's1' },
+    ],
+    supplierPayments: [{ amount: 700, date: noon('2026-10-04') }],
+    workers: [
+      {
+        payType: 'monthly',
+        joinDate: noon('2026-10-01'),
+        rates: [{ from: noon('2026-10-01'), monthlySalary: 18000 }],
+        payments: [{ amount: 5000, date: noon('2026-10-15') }, { amount: 100, date: noon('2026-10-20'), kind: 'writeoff' }],
+      },
+    ],
+  };
+
+  it('works out profit (earned basis) and cash flow for October', () => {
+    const r = financeBetween(data, noon('2026-10-01'), noon('2026-10-31'), noon('2026-11-15'));
+    expect(r.profit).toEqual({
+      salesMade: 1800,
+      salesCount: 3,
+      otherIncome: 200,
+      income: 2000,
+      feed: 2000 + 300 + 400,
+      labour: 18600,
+      writtenOff: 100,
+      otherExpenses: 150,
+      costs: 2700 + 18600 + 100 + 150,
+      profit: 2000 - 21550,
+    });
+    expect(r.cash).toEqual({
+      fromCustomers: 600 + 999 + 300,
+      otherIncome: 200,
+      moneyIn: 2099,
+      toSuppliers: 700,
+      feedPaidOnSpot: 300,
+      toWorkers: 5000,
+      otherExpenses: 150,
+      moneyOut: 6150,
+      net: 2099 - 6150,
+    });
+  });
+
+  it('a single day only counts that day', () => {
+    const r = financeBetween(data, noon('2026-10-03'), noon('2026-10-03'), noon('2026-11-15'));
+    expect(r.profit.salesMade).toBe(500);
+    expect(r.profit.feed).toBe(300);
+    expect(r.profit.labour).toBe(600);
+    expect(r.cash.feedPaidOnSpot).toBe(300);
+    expect(r.cash.fromCustomers).toBe(0);
+  });
+
+  it('lists days and months of a range', () => {
+    expect(daysBetween('2026-10-30', '2026-11-02')).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
+    expect(monthsBetween('2026-11-15', '2027-01-02')).toEqual(['2026-11', '2026-12', '2027-01']);
+  });
+});
+
+describe('inListPeriod', () => {
+  const now = '2026-10-07T19:30:00Z'; // 8 Oct 01:30 in Bangladesh
+  it('uses the farm day and month', () => {
+    expect(inListPeriod('2026-10-08T12:00:00Z', 'today', now)).toBe(true);
+    expect(inListPeriod('2026-10-07T12:00:00Z', 'today', now)).toBe(false);
+    expect(inListPeriod('2026-10-02T12:00:00Z', '7d', now)).toBe(true);
+    expect(inListPeriod('2026-10-01T12:00:00Z', '7d', now)).toBe(false);
+    expect(inListPeriod('2026-10-01T12:00:00Z', 'month', now)).toBe(true);
+    expect(inListPeriod('2026-09-30T12:00:00Z', 'lastmonth', now)).toBe(true);
+    expect(inListPeriod('2020-01-01T12:00:00Z', 'all', now)).toBe(true);
   });
 });

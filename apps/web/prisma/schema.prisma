@@ -279,8 +279,9 @@ model FeedBatch {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   // Purchase tracking. All optional: older batches have none of these and
-  // are treated as fully paid, with cost taken from usage records.
-  // With coverDays set, the batch is used up evenly over that many days from
+  // are treated as fully paid. For profit, a batch with coverDays spreads its
+  // cost over those days; one without counts in full on its purchase day.
+  // Usage records only move stock, never cost. With coverDays set, the batch is used up evenly over that many days from
   // purchasedAt, and remainingQuantity only goes down for extra manual use
   // (see feedSchedule in @farm/business-logic).
   supplierId        String?   @db.ObjectId

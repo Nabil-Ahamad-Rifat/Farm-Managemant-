@@ -22,7 +22,8 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
     const id = await getIdFromParams(routeContext, req);
     if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
 
-    const parsed = feedPurchaseSchema.safeParse(await req.json().catch(() => null));
+    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    const parsed = feedPurchaseSchema.safeParse(body);
     if (!parsed.success) {
       return Response.json({ error: parsed.error.issues[0]?.message ?? 'Invalid feed batch' }, { status: 400 });
     }
@@ -36,8 +37,9 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
       if (!exists) return Response.json({ error: 'Supplier not found' }, { status: 404 });
     }
 
-    // Fields older mobile builds don't send keep their saved values.
-    const coverDays = f.coverDays ?? existing.coverDays;
+    // Fields older mobile builds don't send keep their saved values. Sending
+    // coverDays as null or blank means "don't know" (clears the days).
+    const coverDays = body && 'coverDays' in body ? f.coverDays ?? null : existing.coverDays;
     const purchasedAt = f.purchasedAt ? dayToDate(f.purchasedAt) : existing.purchasedAt;
     const next = { quantity: f.quantity, unitPrice: f.unitPrice, coverDays, purchasedAt, createdAt: existing.createdAt };
     // Clients send the stock left now (what GET returned); store it with the daily use so far added back.

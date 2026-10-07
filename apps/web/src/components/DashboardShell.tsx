@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Home, Users, PawPrint, Wheat, DollarSign, Sprout, TrendingUp, PackageOpen, Coins, Settings, HandCoins, Store, CalendarRange, Menu, X,
+  Home, Users, PawPrint, Wheat, DollarSign, Sprout, TrendingUp, PackageOpen, Coins, Settings, HandCoins, Store, CalendarRange, History, Menu, X,
   type LucideIcon,
 } from 'lucide-react';
 import LogoutButton from '@/components/LogoutButton';
@@ -39,6 +39,7 @@ const GROUPS: { title: string; links: NavLink[] }[] = [
   {
     title: 'Reports',
     links: [
+      { href: '/dashboard/history', label: 'History', icon: History },
       { href: '/dashboard/reports', label: 'Monthly Report', icon: CalendarRange },
       { href: '/dashboard/revenue', label: 'Revenue Portal', icon: TrendingUp },
       { href: '/dashboard/settings', label: 'Settings', icon: Settings },

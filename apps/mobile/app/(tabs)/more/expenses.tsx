@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { Plus, Search, Edit3, Trash2, PackageOpen } from 'lucide-react-native';
 import type { OtherExpense } from '@farm/shared-types';
-import { daysAgo, sumAmounts, formatCurrency } from '@farm/business-logic';
+import { daysAgo, sumAmounts, formatCurrency, farmToday } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { useCrudList } from '@/src/hooks/useCrudList';
@@ -27,8 +27,9 @@ const PERIOD_FILTERS = [
   { value: '0', label: 'All' },
 ];
 
-const today = () => new Date().toISOString().slice(0, 10);
-const emptyForm = { description: '', amount: '', category: 'other', expenseDate: today() };
+const today = () => farmToday();
+// A function, so the default date is today when the form opens, not when the app started.
+const emptyForm = () => ({ description: '', amount: '', category: 'other', expenseDate: today() });
 
 export default function ExpensesScreen() {
   const { items: expenses, loading, refreshing, refresh, reload } = useCrudList<OtherExpense>('/api/expenses');
@@ -46,7 +47,7 @@ export default function ExpensesScreen() {
 
   function openCreate() {
     setEditing(null);
-    setForm(emptyForm);
+    setForm(emptyForm());
     setError('');
     setCreateKey(generateIdempotencyKey());
     setModalOpen(true);

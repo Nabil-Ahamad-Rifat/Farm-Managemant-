@@ -2,7 +2,7 @@
 // absent days; or days x rate for daily workers), what they were given, and
 // the balance. The maths lives in @farm/business-logic; this loads the records.
 import type { Employee, Prisma } from '@prisma/client';
-import { farmToday, labourBetween, workerAccount, workerMonths, type WorkerLike } from '@farm/business-logic';
+import { farmToday, workerAccount, workerMonths, type WorkerLike } from '@farm/business-logic';
 import { db } from '@/lib/db';
 import { isObjectId } from '@/lib/receivables';
 
@@ -100,10 +100,10 @@ export async function getWorkerDetail(tenantId: string, id: string, now = new Da
   };
 }
 
-/** Labour in [from, to] across the farm: earned (profit view), paid (cash view), written off. */
-export async function farmLabourBetween(tenantId: string, from: Date, to: Date, now = new Date()) {
+/** Every worker of the farm in the shape the pay maths uses (for the money reports). */
+export async function farmWorkers(tenantId: string): Promise<WorkerLike[]> {
   const [employees, loaded] = await Promise.all([db.employee.findMany({ where: { tenantId } }), loadRecords(tenantId)]);
-  return labourBetween(employees.map((e) => toWorker(e, recordsOf(loaded, e.id))), from, to, now);
+  return employees.map((e) => toWorker(e, recordsOf(loaded, e.id)));
 }
 
 /** The worker of this farm, or null. */

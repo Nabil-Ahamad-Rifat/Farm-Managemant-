@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { entryDay } from '@/lib/days';
 import { withAuth } from '@/lib/middleware/withAuth';
 import { parseNullableFloat } from '@/lib/parse';
 import { withIdempotency } from '@/lib/idempotency';
@@ -20,12 +21,15 @@ export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, t
     return Response.json({ error: 'Description and a valid positive amount are required' }, { status: 400 });
   }
 
+  const day = entryDay(expenseDate);
+  if ('error' in day) return Response.json({ error: day.error }, { status: 400 });
+
   const expense = await db.otherExpense.create({
     data: {
       description,
       amount: parsedAmount,
       category: category || 'other',
-      expenseDate: expenseDate ? new Date(expenseDate + 'T12:00:00Z') : new Date(),
+      expenseDate: day.date,
       tenantId,
     },
   });

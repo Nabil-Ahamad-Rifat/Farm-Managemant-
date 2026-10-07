@@ -1,10 +1,11 @@
-import { customerMonths, feedMonthSummary, monthBounds, monthKey, monthlyStatement, type MonthLine } from '@farm/business-logic';
+import { customerMonths, farmMonth, feedMonthSummary, monthBounds, monthlyStatement, type MonthLine } from '@farm/business-logic';
 import { db } from '@/lib/db';
+import { loadFinanceData, summaryFor } from '@/lib/finance';
 
 /** "YYYY-MM" if valid, else the current month. */
 export function parseMonth(raw: string | string[] | undefined): string {
   const value = Array.isArray(raw) ? raw[0] : raw;
-  return value && /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : monthKey(new Date());
+  return value && /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : farmMonth();
 }
 
 export interface ReportLine extends MonthLine {
@@ -13,8 +14,8 @@ export interface ReportLine extends MonthLine {
 
 /** The month's statement for the whole farm, with each line's customer attached. */
 export async function getMonthlyReport(tenantId: string, month: string) {
-  const { end } = monthBounds(month);
-  const [sales, payments, customers, feedBatches] = await Promise.all([
+  const { start, end } = monthBounds(month);
+  const [sales, payments, customers, feedBatches, money] = await Promise.all([
     db.sale.findMany({
       where: { tenantId, createdAt: { lte: end } },
       select: { customerId: true, amount: true, createdAt: true, saleType: true, quantity: true, status: true },
@@ -28,6 +29,8 @@ export async function getMonthlyReport(tenantId: string, month: string) {
       where: { tenantId },
       select: { name: true, quantity: true, unitPrice: true, purchasedAt: true, createdAt: true, supplierId: true, paidAmount: true },
     }),
+    // Profit and cash for the month, the same numbers as the Revenue Portal.
+    loadFinanceData(tenantId).then((data) => summaryFor(data, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10))),
   ]);
 
   const statement = monthlyStatement(
@@ -47,7 +50,7 @@ export async function getMonthlyReport(tenantId: string, month: string) {
   const lines: ReportLine[] = statement.lines.map((l) => ({ ...l, customer: l.partyId ? byId.get(l.partyId) ?? null : null }));
   // Feed bought this month (cost, paid, owed), for the report's feed line.
   const feed = feedMonthSummary(feedBatches, month).totals;
-  return { month, totals: statement.totals, lines, feed };
+  return { month, totals: statement.totals, lines, feed, money };
 }
 
 /** One customer's months with activity, newest first, for the grouped history on their page. */

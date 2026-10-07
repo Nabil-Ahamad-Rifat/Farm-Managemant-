@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Milk, ShoppingBag, Wallet, History, AlertCircle, Wheat, ArrowRight } from 'lucide-react';
-import { monthKey, shiftMonth, type MonthStatement } from '@farm/business-logic';
+import { ChevronLeft, ChevronRight, Milk, ShoppingBag, Wallet, History, AlertCircle, Wheat, ArrowRight, TrendingUp } from 'lucide-react';
+import { farmMonth, shiftMonth, type FinanceSummary, type MonthStatement } from '@farm/business-logic';
 import type { ReportLine } from '@/lib/monthly-report';
 import CollectButton from '@/components/sales/CollectButton';
 import { SummaryCard, CustomerTypeBadge, tk, monthLabel } from '@/components/sales/shared';
@@ -19,14 +19,19 @@ export default function MonthlyReport({
   totals,
   lines,
   feed,
+  money,
 }: {
   month: string;
   totals: MonthStatement['totals'];
   lines: ReportLine[];
   /** Feed bought this month. */
   feed: { kg: number; spent: number; paid: number; owed: number; count: number };
+  /** Profit and cash flow for the month. */
+  money: FinanceSummary;
 }) {
-  const current = monthKey(new Date());
+  const current = farmMonth();
+  const p = money.profit;
+  const signed = (n: number) => (n < 0 ? '− ' + tk(-n) : tk(n));
   const navBtn = 'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50';
   const owing = lines.filter((l) => l.closing > 0).length;
 
@@ -93,6 +98,36 @@ export default function MonthlyReport({
           Feed details <ArrowRight className="h-3.5 w-3.5" />
         </span>
       </Link>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="costs-h">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="costs-h" className="flex items-center gap-2 text-base font-bold text-slate-900">
+              <TrendingUp className="h-4 w-4 text-slate-400" aria-hidden="true" /> Costs and profit
+            </h2>
+            <p className="text-xs text-slate-500">Earned and spent this month, whether paid yet or not.</p>
+          </div>
+          <p className={`text-2xl font-extrabold ${p.profit < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{signed(p.profit)}</p>
+        </div>
+        <dl className="mt-3 grid gap-x-8 gap-y-1.5 text-sm sm:grid-cols-2">
+          {[
+            ['Sales made', tk(p.salesMade)],
+            ['Other income', tk(p.otherIncome)],
+            ['Feed bought', '− ' + tk(p.feed)],
+            ["Workers' pay earned", '− ' + tk(p.labour + p.writtenOff)],
+            ['Other expenses', '− ' + tk(p.otherExpenses)],
+            ['Cash in / out', `${tk(money.cash.moneyIn)} / ${tk(money.cash.moneyOut)}`],
+          ].map(([k, v]) => (
+            <div key={k} className="flex justify-between gap-3 border-b border-slate-50 py-1">
+              <dt className="text-slate-600">{k}</dt>
+              <dd className="font-semibold text-slate-900">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        <Link href={`/dashboard/revenue?month=${month}`} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-sky-700 hover:underline">
+          Full breakdown in the Revenue Portal <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </section>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200">

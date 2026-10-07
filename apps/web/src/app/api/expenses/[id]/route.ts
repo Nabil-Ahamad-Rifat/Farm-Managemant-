@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { entryDay } from '@/lib/days';
 import { withAuth, getIdFromParams } from '@/lib/middleware/withAuth';
 import { parseNullableFloat } from '@/lib/parse';
 
@@ -27,13 +28,20 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
     amount = parsedAmount;
   }
 
+  let expenseDate: Date | undefined;
+  if (body.expenseDate) {
+    const day = entryDay(body.expenseDate);
+    if ('error' in day) return Response.json({ error: day.error }, { status: 400 });
+    expenseDate = day.date;
+  }
+
   const result = await db.otherExpense.updateMany({
     where: { id, tenantId },
     data: {
       description: body.description,
       amount,
       category: body.category || undefined,
-      expenseDate: body.expenseDate ? new Date(body.expenseDate + 'T12:00:00Z') : undefined,
+      expenseDate,
     },
   });
 
@@ -47,6 +55,7 @@ export const DELETE = withAuth(async (req, { tenantId }, routeContext) => {
   const id = await getIdFromParams(routeContext, req);
   if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
 
-  await db.otherExpense.deleteMany({ where: { id, tenantId } });
+  const { count } = await db.otherExpense.deleteMany({ where: { id, tenantId } });
+  if (!count) return Response.json({ error: 'Expense not found' }, { status: 404 });
   return Response.json({ success: true });
 });

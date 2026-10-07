@@ -1,314 +1,317 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Users, Wheat, PackageOpen, RefreshCw, Coins } from 'lucide-react';
-import type { DailyBreakdown, RevenueData } from '@farm/shared-types';
-import { webApiClient } from '@farm/api-client';
-import { formatCurrency as fmt, barHeightPx } from '@farm/business-logic';
+import { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { TrendingUp, TrendingDown, Wallet, Scale, ArrowRight, CalendarRange, ListChecks } from 'lucide-react';
+import { farmMonth } from '@farm/business-logic';
+import type { FinanceReport } from '@/lib/finance';
+import { fmtDate, monthLabel, tk } from '@/components/sales/shared';
 
-const PERIOD_LABELS: Record<number, string> = {
-  1: 'Today',
-  3: '3 Days',
-  5: '5 Days',
-  7: '7 Days',
-  15: '15 Days',
-  30: '30 Days',
-};
+// Chart colours (validated for colour-blind separation): income blue, costs orange.
+const INCOME = '#2a78d6';
+const COSTS = '#eb6834';
 
-function MiniBar({ data }: { data: DailyBreakdown[] }) {
-  if (!data || data.length === 0) return null;
-  const maxVal = Math.max(...data.map(d => Math.max(d.revenue, d.cost)), 1);
+const PRESETS = [
+  { value: 'today', label: 'Today' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: 'month', label: 'This month' },
+  { value: 'lastmonth', label: 'Last month' },
+] as const;
+
+const signed = (n: number) => (n < 0 ? '− ' + tk(-n) : tk(n));
+
+/** Short label of a chart bucket: "7 Oct" for a day, "Oct 26" for a month. */
+const bucketLabel = (key: string) =>
+  key.length === 7
+    ? new Date(key + '-01T00:00:00Z').toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+    : new Date(key + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+export default function RevenuePortal({ report }: { report: FinanceReport }) {
+  const router = useRouter();
+  const { range, summary, chart, months, dues } = report;
+  const p = summary.profit;
+  const c = summary.cash;
+  const [custom, setCustom] = useState({ from: range.from, to: range.to });
+  const [showCustom, setShowCustom] = useState(range.preset === 'custom');
+
+  const go = (q: string) => router.push(`/dashboard/revenue?${q}`);
+  const historyHref = (type: string) => `/dashboard/history?type=${type}&from=${range.from}&to=${range.to}`;
+  const periodText =
+    range.month && (range.preset === 'month' || range.preset === 'lastmonth' || range.preset === 'pick')
+      ? monthLabel(range.month) + (range.preset === 'month' ? ' (so far)' : '')
+      : range.from === range.to
+        ? fmtDate(range.from)
+        : `${fmtDate(range.from)} – ${fmtDate(range.to)}`;
+
+  const chip = (active: boolean) =>
+    `shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-semibold transition sm:py-2 sm:text-xs ${
+      active ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+    }`;
 
   return (
-    <div className="mt-4">
-      <div className="flex items-end gap-1 h-20">
-        {data.map((d, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center gap-0.5" title={`${d.date}\nRevenue: ${fmt(d.revenue)}\nCost: ${fmt(d.cost)}\nProfit: ${fmt(d.profit)}`}>
-            <div className="w-full flex flex-col justify-end gap-0.5" style={{ height: '72px' }}>
-              <div
-                className="w-full rounded-t bg-red-300/80 transition-all"
-                style={{ height: `${barHeightPx(d.cost, maxVal, 72)}px` }}
-              />
-              <div
-                className="w-full rounded-t bg-emerald-400/80 transition-all"
-                style={{ height: `${barHeightPx(d.revenue, maxVal, 72)}px` }}
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Revenue Portal</h1>
+        <p className="mt-1 text-sm text-slate-500 sm:text-base">Profit, cash and dues for any period. Every number links to the entries behind it.</p>
+      </div>
+
+      {/* Period */}
+      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
+          {PRESETS.map((pr) => (
+            <button key={pr.value} onClick={() => go(`range=${pr.value}`)} aria-pressed={range.preset === pr.value} className={chip(range.preset === pr.value)}>
+              {pr.label}
+            </button>
+          ))}
+          <button onClick={() => setShowCustom((v) => !v)} aria-pressed={range.preset === 'custom' || range.preset === 'pick'} className={chip(range.preset === 'custom' || range.preset === 'pick')}>
+            <CalendarRange className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
+            Choose dates
+          </button>
+        </div>
+        {showCustom && (
+          <div className="grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-[auto_1fr] sm:items-end">
+            <div>
+              <label htmlFor="rev-month" className="mb-1 block text-xs font-semibold uppercase text-slate-600">A month</label>
+              <input
+                id="rev-month"
+                type="month"
+                max={farmMonth()}
+                defaultValue={range.month ?? ''}
+                onChange={(e) => e.target.value && go(`month=${e.target.value}`)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base sm:text-sm"
               />
             </div>
-            <span className="text-[9px] text-slate-400 rotate-45 mt-1">
-              {d.date.slice(5)}
-            </span>
+            <form
+              className="flex flex-wrap items-end gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                go(`from=${custom.from}&to=${custom.to}`);
+              }}
+            >
+              <div className="min-w-[140px] flex-1">
+                <label htmlFor="rev-from" className="mb-1 block text-xs font-semibold uppercase text-slate-600">From</label>
+                <input id="rev-from" type="date" required value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base sm:text-sm" />
+              </div>
+              <div className="min-w-[140px] flex-1">
+                <label htmlFor="rev-to" className="mb-1 block text-xs font-semibold uppercase text-slate-600">To</label>
+                <input id="rev-to" type="date" required min={custom.from} value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base sm:text-sm" />
+              </div>
+              <button type="submit" className="h-11 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800">Show</button>
+            </form>
           </div>
-        ))}
+        )}
+        <p className="text-sm font-semibold text-slate-700">
+          {periodText} <span className="font-normal text-slate-500">· {range.days} day{range.days === 1 ? '' : 's'}</span>
+        </p>
       </div>
-      <div className="mt-5 flex items-center gap-4 text-[11px] text-slate-500">
-        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded bg-emerald-400/80" /> Revenue</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded bg-red-300/80" /> Cost</span>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Profit */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="profit-h">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 id="profit-h" className="text-xs font-bold uppercase tracking-wider text-slate-500">Profit</h2>
+              <p className={`mt-1 text-3xl font-extrabold ${p.profit < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{signed(p.profit)}</p>
+              <p className="mt-1 text-xs text-slate-500">What the farm earned minus what it cost, whether paid yet or not.</p>
+            </div>
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white ${p.profit < 0 ? 'bg-red-600' : 'bg-emerald-600'}`}>
+              {p.profit < 0 ? <TrendingDown className="h-5 w-5" aria-label="Loss" /> : <TrendingUp className="h-5 w-5" aria-label="Profit" />}
+            </div>
+          </div>
+          <dl className="mt-4 divide-y divide-slate-100 border-t border-slate-100 text-sm">
+            <Row label={`Sales made (${p.salesCount})`} value={tk(p.salesMade)} href={historyHref('sale')} />
+            <Row label="Other income" value={tk(p.otherIncome)} href={historyHref('income')} />
+            <Row label="Feed bought" value={'− ' + tk(p.feed)} href={historyHref('feed')} hint="Feed with days set is spread over those days" />
+            <Row label="Workers' pay earned" value={'− ' + tk(p.labour)} href="/dashboard/employees" hint="Salary ÷ 30 per day worked, plus daily labour" />
+            {p.writtenOff > 0 && <Row label="Advances written off" value={'− ' + tk(p.writtenOff)} href={historyHref('writeoff')} />}
+            <Row label="Other expenses" value={'− ' + tk(p.otherExpenses)} href={historyHref('expense')} />
+            <Row label="Profit" value={signed(p.profit)} strong />
+          </dl>
+        </section>
+
+        {/* Cash */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="cash-h">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 id="cash-h" className="text-xs font-bold uppercase tracking-wider text-slate-500">Cash flow</h2>
+              <p className={`mt-1 text-3xl font-extrabold ${c.net < 0 ? 'text-red-600' : 'text-slate-900'}`}>{signed(c.net)}</p>
+              <p className="mt-1 text-xs text-slate-500">Money that actually came in minus money that went out.</p>
+            </div>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white">
+              <Wallet className="h-5 w-5" aria-hidden="true" />
+            </div>
+          </div>
+          <dl className="mt-4 divide-y divide-slate-100 border-t border-slate-100 text-sm">
+            <Row label="Received from customers" value={tk(c.fromCustomers)} href={historyHref('payment')} />
+            <Row label="Other income" value={tk(c.otherIncome)} href={historyHref('income')} />
+            <Row label="Money in" value={tk(c.moneyIn)} strong />
+            <Row label="Paid to suppliers" value={'− ' + tk(c.toSuppliers)} href={historyHref('supplier')} />
+            {c.feedPaidOnSpot > 0 && <Row label="Feed paid on the spot" value={'− ' + tk(c.feedPaidOnSpot)} href={historyHref('feed')} />}
+            <Row label="Paid to workers" value={'− ' + tk(c.toWorkers)} href={historyHref('salary')} />
+            <Row label="Other expenses" value={'− ' + tk(c.otherExpenses)} href={historyHref('expense')} />
+            <Row label="Money out" value={'− ' + tk(c.moneyOut)} strong />
+          </dl>
+        </section>
       </div>
+
+      {/* Dues */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="dues-h">
+        <div className="flex items-center gap-2">
+          <Scale className="h-4 w-4 text-slate-400" aria-hidden="true" />
+          <h2 id="dues-h" className="text-base font-bold text-slate-900">Dues right now</h2>
+        </div>
+        <p className="text-xs text-slate-500">Why profit and cash differ: sales not yet paid for, and bills not yet paid.</p>
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Due label="Customers owe you" value={dues.customersOwe} href="/dashboard/customers" />
+          <Due label="You owe suppliers" value={dues.youOweSuppliers} href="/dashboard/suppliers" />
+          <Due label="You owe workers" value={dues.youOweWorkers} href="/dashboard/employees" />
+          <Due label="Advances to workers" value={dues.workerAdvances} href="/dashboard/employees" />
+        </div>
+      </section>
+
+      <IncomeCostChart chart={chart} />
+
+      {/* Months */}
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm" aria-labelledby="months-h">
+        <div className="flex items-center justify-between gap-3 p-5 sm:p-6">
+          <div>
+            <h2 id="months-h" className="text-base font-bold text-slate-900">Month by month</h2>
+            <p className="text-xs text-slate-500">Tap a month to see it in full.</p>
+          </div>
+          <Link href="/dashboard/history" className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+            <ListChecks className="h-4 w-4" /> All entries
+          </Link>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <tr>
+                <th className="px-5 py-3">Month</th>
+                <th className="px-3 py-3 text-right">Income</th>
+                <th className="px-3 py-3 text-right">Costs</th>
+                <th className="px-3 py-3 text-right">Profit</th>
+                <th className="px-3 py-3 text-right">Money in</th>
+                <th className="px-5 py-3 text-right">Money out</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {months.map((m) => (
+                <tr key={m.month} className={`cursor-pointer hover:bg-slate-50 ${range.month === m.month ? 'bg-sky-50/60' : ''}`} onClick={() => go(`month=${m.month}`)}>
+                  <td className="whitespace-nowrap px-5 py-3 font-semibold text-slate-900">
+                    <Link href={`/dashboard/revenue?month=${m.month}`} onClick={(e) => e.stopPropagation()} className="hover:underline">{monthLabel(m.month)}</Link>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right text-slate-700">{tk(m.income)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right text-slate-700">{tk(m.costs)}</td>
+                  <td className={`whitespace-nowrap px-3 py-3 text-right font-semibold ${m.profit < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{signed(m.profit)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right text-slate-700">{tk(m.moneyIn)}</td>
+                  <td className="whitespace-nowrap px-5 py-3 text-right text-slate-700">{tk(m.moneyOut)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
 
-export default function RevenuePortal() {
-  const [data, setData] = useState<RevenueData | null>(null);
-  const [activePeriod, setActivePeriod] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+function Row({ label, value, href, hint, strong }: { label: string; value: string; href?: string; hint?: string; strong?: boolean }) {
+  const body = (
+    <>
+      <dt className={`min-w-0 ${strong ? 'font-bold text-slate-900' : 'text-slate-600'}`}>
+        {label}
+        {hint && <span className="block text-[11px] font-normal text-slate-400">{hint}</span>}
+      </dt>
+      <dd className={`flex shrink-0 items-center gap-1 ${strong ? 'font-extrabold text-slate-900' : 'font-semibold text-slate-900'}`}>
+        {value}
+        {href && <ArrowRight className="h-3.5 w-3.5 text-slate-300" aria-hidden="true" />}
+      </dd>
+    </>
+  );
+  return href ? (
+    <Link href={href} className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-2.5 hover:bg-slate-50">{body}</Link>
+  ) : (
+    <div className="flex items-center justify-between gap-3 py-2.5">{body}</div>
+  );
+}
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      setData(await webApiClient.get<RevenueData>(`/api/revenue?period=${activePeriod}`, 'Failed to fetch revenue data'));
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [activePeriod]);
+function Due({ label, value, href }: { label: string; value: number; href: string }) {
+  return (
+    <Link href={href} className="rounded-xl border border-slate-100 bg-slate-50/60 p-3 transition hover:border-slate-200 hover:bg-slate-50">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-extrabold text-slate-900">{tk(value)}</p>
+    </Link>
+  );
+}
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  const currentPeriod = data?.periods.find(p => p.days === activePeriod);
+/** Income vs costs per day (or per month for long ranges), with a tooltip per pair. */
+function IncomeCostChart({ chart }: { chart: FinanceReport['chart'] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const max = Math.max(1, ...chart.flatMap((b) => [b.income, b.costs]));
+  const H = 160;
+  const h = (v: number) => (v > 0 ? Math.max(2, (v / max) * H) : 0);
+  const active = hover !== null ? chart[hover] : null;
+  const ticks = chart.length <= 1 ? [0] : [0, Math.floor((chart.length - 1) / 2), chart.length - 1];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="chart-h">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Revenue Portal</h1>
-          <p className="mt-1 text-slate-500">Total Revenue (Sales + Other Income) − Total Cost (Labour + Feed + Other) = Net Profit</p>
+          <h2 id="chart-h" className="text-base font-bold text-slate-900">Income and costs</h2>
+          <p className="text-xs text-slate-500">{chart[0]?.key.length === 7 ? 'Per month' : 'Per day'} · profit view</p>
         </div>
-        <button
-          onClick={fetchData}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex gap-4 text-xs font-semibold text-slate-600">
+          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: INCOME }} /> Income</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: COSTS }} /> Costs</span>
+        </div>
       </div>
 
-      {/* Period Selector */}
-      <div className="flex flex-wrap gap-2">
-        {[1, 3, 5, 7, 15, 30].map(days => (
-          <button
-            key={days}
-            onClick={() => setActivePeriod(days)}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-              activePeriod === days
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-            }`}
+      <div className="mt-3 h-12 text-sm" aria-live="polite">
+        {active ? (
+          <div className="inline-flex flex-wrap gap-x-4 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            <span className="font-semibold text-slate-900">{active.key.length === 7 ? monthLabel(active.key) : fmtDate(active.key)}</span>
+            <span className="text-slate-600">Income <b className="text-slate-900">{tk(active.income)}</b></span>
+            <span className="text-slate-600">Costs <b className="text-slate-900">{tk(active.costs)}</b></span>
+            <span className="text-slate-600">Profit <b className={active.profit < 0 ? 'text-red-600' : 'text-emerald-700'}>{signed(active.profit)}</b></span>
+          </div>
+        ) : (
+          <p className="pt-2 text-xs text-slate-400">Point at or tap a bar to see its numbers. Highest: {tk(max)}</p>
+        )}
+      </div>
+
+      <div className="relative border-b border-slate-200" style={{ height: H }} onMouseLeave={() => setHover(null)}>
+        <div className="absolute inset-x-0 top-0 border-t border-dashed border-slate-100" aria-hidden="true" />
+        <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-slate-100" aria-hidden="true" />
+        <div className="relative flex h-full items-end gap-[2px]">
+          {chart.map((b, i) => (
+            <button
+              key={b.key}
+              type="button"
+              onMouseEnter={() => setHover(i)}
+              onFocus={() => setHover(i)}
+              onClick={() => setHover(i)}
+              aria-label={`${b.key}: income ${tk(b.income)}, costs ${tk(b.costs)}`}
+              className={`flex h-full min-w-0 flex-1 items-end justify-center gap-[2px] rounded-t px-[1px] ${hover === i ? 'bg-slate-100' : ''}`}
+            >
+              <span className="w-full max-w-[14px] rounded-t-[4px]" style={{ height: h(b.income), background: INCOME }} />
+              <span className="w-full max-w-[14px] rounded-t-[4px]" style={{ height: h(b.costs), background: COSTS }} />
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="relative mt-1.5 h-4 text-[11px] text-slate-400">
+        {ticks.map((t, i) => (
+          <span
+            key={t}
+            className="absolute whitespace-nowrap"
+            style={i === 0 ? { left: 0 } : i === ticks.length - 1 ? { right: 0 } : { left: `${((t + 0.5) / chart.length) * 100}%`, transform: 'translateX(-50%)' }}
           >
-            {PERIOD_LABELS[days]}
-          </button>
+            {bucketLabel(chart[t].key)}
+          </span>
         ))}
       </div>
-
-      {error && (
-        <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700 border border-red-100">{error}</div>
-      )}
-
-      {loading ? (
-        <div className="flex items-center justify-center h-48 text-slate-400 text-sm">Loading revenue data...</div>
-      ) : currentPeriod ? (
-        <>
-          {/* Net Profit Hero Card */}
-          <div className={`rounded-2xl p-6 text-white ${currentPeriod.netProfit >= 0
-            ? 'bg-gradient-to-br from-emerald-600 to-emerald-700 shadow-lg shadow-emerald-600/20'
-            : 'bg-gradient-to-br from-red-600 to-red-700 shadow-lg shadow-red-600/20'
-          }`}>
-            <p className="text-sm font-semibold opacity-80">
-              Net Profit — {PERIOD_LABELS[activePeriod]}
-            </p>
-            <p className="mt-2 text-4xl font-extrabold tracking-tight">
-              {fmt(currentPeriod.netProfit)}
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-4 text-sm opacity-90">
-              <div>
-                <p className="text-xs opacity-70 uppercase tracking-wide">Total Revenue</p>
-                <p className="font-bold text-base">{fmt(currentPeriod.totalRevenue)}</p>
-              </div>
-              <div>
-                <p className="text-xs opacity-70 uppercase tracking-wide">Total Cost</p>
-                <p className="font-bold text-base">{fmt(currentPeriod.totalCost)}</p>
-              </div>
-            </div>
-            <div className="mt-4 flex items-center gap-2 text-sm opacity-90">
-              {currentPeriod.netProfit >= 0
-                ? <TrendingUp className="h-4 w-4" />
-                : <TrendingDown className="h-4 w-4" />
-              }
-              <span>
-                {currentPeriod.netProfit >= 0 ? 'Profitable' : 'Running at loss'} in this period
-              </span>
-            </div>
-          </div>
-
-          {/* Revenue Breakdown Cards */}
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Revenue Breakdown</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Sales Revenue</p>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
-                    <DollarSign className="h-4 w-4" />
-                  </div>
-                </div>
-                <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalSales)}</p>
-                <p className="text-[11px] text-slate-400 mt-1">{currentPeriod.salesCount} paid sale{currentPeriod.salesCount !== 1 ? 's' : ''}</p>
-              </div>
-
-              <div className="rounded-2xl border border-teal-100 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold uppercase tracking-wider text-teal-700">Other Income</p>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-100 text-teal-700">
-                    <Coins className="h-4 w-4" />
-                  </div>
-                </div>
-                <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalOtherIncome)}</p>
-                <p className="text-[11px] text-slate-400 mt-1">Grants, subsidies, donations, etc.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Cost Breakdown Cards */}
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Cost Breakdown</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold uppercase tracking-wider text-indigo-700">Labour Cost</p>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
-                    <Users className="h-4 w-4" />
-                  </div>
-                </div>
-                <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalSalaryCost)}</p>
-                <p className="text-[11px] text-slate-400 mt-1">Prorated: monthly salary × {activePeriod}/30</p>
-              </div>
-
-              <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Feed Cost</p>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-                    <Wheat className="h-4 w-4" />
-                  </div>
-                </div>
-                <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalFeedCost)}</p>
-                <p className="text-[11px] text-slate-400 mt-1">Feed consumed cost</p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-700">Other Costs</p>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
-                    <PackageOpen className="h-4 w-4" />
-                  </div>
-                </div>
-                <p className="mt-2 text-xl font-extrabold text-slate-900">{fmt(currentPeriod.totalOtherCost)}</p>
-                <p className="text-[11px] text-slate-400 mt-1">Vet, equipment, misc</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Profit Formula */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">Profit Calculation — {PERIOD_LABELS[activePeriod]}</h2>
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-center">
-                <p className="text-[11px] font-semibold text-emerald-700 uppercase">Revenue</p>
-                <p className="text-lg font-extrabold text-slate-900">{fmt(currentPeriod.totalRevenue)}</p>
-                <p className="text-[10px] text-emerald-600">Sales + Other Income</p>
-              </div>
-              <span className="text-2xl text-slate-400 font-light">−</span>
-              <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-center">
-                <p className="text-[11px] font-semibold text-red-700 uppercase">Total Cost</p>
-                <p className="text-lg font-extrabold text-slate-900">{fmt(currentPeriod.totalCost)}</p>
-                <p className="text-[10px] text-red-600">Labour + Feed + Other</p>
-              </div>
-              <span className="text-2xl text-slate-400 font-light">=</span>
-              <div className={`rounded-xl px-4 py-3 text-center border ${currentPeriod.netProfit >= 0
-                ? 'bg-emerald-600 border-emerald-600 text-white'
-                : 'bg-red-600 border-red-600 text-white'
-              }`}>
-                <p className="text-[11px] font-semibold uppercase opacity-80">Net Profit</p>
-                <p className="text-lg font-extrabold">{fmt(currentPeriod.netProfit)}</p>
-              </div>
-            </div>
-
-            {/* Cost breakdown bars */}
-            <div className="mt-4 rounded-xl bg-slate-50 border border-slate-100 p-4">
-              <p className="text-xs font-semibold text-slate-500 mb-2">Cost Breakdown</p>
-              <div className="space-y-2">
-                {[
-                  { label: 'Labour (Prorated Salary)', value: currentPeriod.totalSalaryCost, color: 'bg-indigo-400' },
-                  { label: 'Feed', value: currentPeriod.totalFeedCost, color: 'bg-amber-400' },
-                  { label: 'Other Expenses', value: currentPeriod.totalOtherCost, color: 'bg-slate-400' },
-                ].map(({ label, value, color }) => {
-                  const pct = currentPeriod.totalCost > 0 ? (value / currentPeriod.totalCost) * 100 : 0;
-                  return (
-                    <div key={label}>
-                      <div className="flex justify-between text-xs text-slate-600 mb-1">
-                        <span>{label}</span>
-                        <span className="font-semibold">{fmt(value)} ({pct.toFixed(0)}%)</span>
-                      </div>
-                      <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Daily Chart */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
-              Daily Trend — {PERIOD_LABELS[activePeriod]}
-            </h2>
-            <MiniBar data={data?.dailyBreakdown || []} />
-          </div>
-
-          {/* Period Comparison Table */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">Period Summary Table</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="py-2 pr-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Period</th>
-                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Sales</th>
-                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Other Income</th>
-                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Total Revenue</th>
-                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Labour</th>
-                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Feed</th>
-                    <th className="py-2 pr-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Other Cost</th>
-                    <th className="py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Net Profit</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {data?.periods.map(p => (
-                    <tr key={p.days} className={`hover:bg-slate-50/50 transition ${activePeriod === p.days ? 'bg-slate-50' : ''}`}>
-                      <td className="py-3 pr-4 font-medium text-slate-700">{PERIOD_LABELS[p.days]}</td>
-                      <td className="py-3 pr-4 text-right text-emerald-600 font-semibold">{fmt(p.totalSales)}</td>
-                      <td className="py-3 pr-4 text-right text-teal-600 font-semibold">{fmt(p.totalOtherIncome)}</td>
-                      <td className="py-3 pr-4 text-right text-emerald-700 font-bold">{fmt(p.totalRevenue)}</td>
-                      <td className="py-3 pr-4 text-right text-indigo-500 text-xs">{fmt(p.totalSalaryCost)}</td>
-                      <td className="py-3 pr-4 text-right text-amber-500 text-xs">{fmt(p.totalFeedCost)}</td>
-                      <td className="py-3 pr-4 text-right text-slate-500 text-xs">{fmt(p.totalOtherCost)}</td>
-                      <td className={`py-3 text-right font-bold ${p.netProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                        {fmt(p.netProfit)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      ) : null}
-    </div>
+    </section>
   );
 }

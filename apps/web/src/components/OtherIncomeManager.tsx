@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, Trash2, Edit3, X, Coins, TrendingUp, CalendarDays, Search } from 'lucide-react';
 import type { OtherIncome } from '@farm/shared-types';
 import { webApiClient } from '@farm/api-client';
-import { daysAgo, sumAmounts, formatCurrency as fmt } from '@farm/business-logic';
+import { LIST_PERIODS, inListPeriod, farmToday, type ListPeriod, sumAmounts, formatCurrency as fmt } from '@farm/business-logic';
 
 const CATEGORIES = [
   { value: 'subsidy', label: 'Government Subsidy' },
@@ -27,24 +27,14 @@ const CATEGORY_COLORS: Record<string, string> = {
   other: 'bg-slate-50 text-slate-700 border-slate-200',
 };
 
-const PERIOD_FILTERS = [
-  { label: 'Today', days: 1 },
-  { label: '3 Days', days: 3 },
-  { label: '5 Days', days: 5 },
-  { label: '7 Days', days: 7 },
-  { label: '15 Days', days: 15 },
-  { label: '30 Days', days: 30 },
-  { label: 'All', days: 0 },
-];
-
 export default function OtherIncomeManager({ initialIncomes }: { initialIncomes: OtherIncome[] }) {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [periodDays, setPeriodDays] = useState(1);
+  const [period, setPeriod] = useState<ListPeriod>('month');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingIncome, setEditingIncome] = useState<OtherIncome | null>(null);
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = farmToday();
   const [form, setForm] = useState({
     description: '',
     amount: '',
@@ -106,7 +96,7 @@ export default function OtherIncomeManager({ initialIncomes }: { initialIncomes:
   const filteredIncomes = initialIncomes.filter(inc => {
     const matchesSearch = inc.description.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || inc.category === categoryFilter;
-    const matchesPeriod = periodDays === 0 || new Date(inc.incomeDate) >= daysAgo(periodDays);
+    const matchesPeriod = inListPeriod(inc.incomeDate, period);
     return matchesSearch && matchesCategory && matchesPeriod;
   });
 
@@ -144,12 +134,13 @@ export default function OtherIncomeManager({ initialIncomes }: { initialIncomes:
 
       {/* Period Tabs */}
       <div className="flex flex-wrap gap-2">
-        {PERIOD_FILTERS.map(({ label, days }) => (
+        {LIST_PERIODS.map(({ value, label }) => (
           <button
-            key={label}
-            onClick={() => setPeriodDays(days)}
+            key={value}
+            onClick={() => setPeriod(value)}
+            aria-pressed={period === value}
             className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-              periodDays === days
+              period === value
                 ? 'bg-teal-700 text-white shadow-sm'
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
             }`}

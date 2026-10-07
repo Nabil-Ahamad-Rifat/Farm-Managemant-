@@ -1,140 +1,63 @@
-import { db } from '@/lib/db';
+import { addDaysIso, farmToday } from '@farm/business-logic';
 import { withAuth } from '@/lib/middleware/withAuth';
-import { collectedBetween, totalReceivable } from '@/lib/receivables';
-import { totalPayable } from '@/lib/payables';
-import { feedCostBetween } from '@/lib/feed-cost';
+import { getFinanceReport, resolveRange, summaryFor, loadFinanceData } from '@/lib/finance';
 
-function dayStartUTC(daysBack: number): Date {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - daysBack);
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
-}
+/** Day counts the older mobile screen shows side by side. */
+const LEGACY_PERIODS = [1, 3, 5, 7, 15, 30];
 
-function todayEndUTC(): Date {
-  const d = new Date();
-  d.setUTCHours(23, 59, 59, 999);
-  return d;
-}
-
+/**
+ * The farm's money for a period: `range=today|7d|30d|month|lastmonth`,
+ * `month=YYYY-MM` or `from`/`to` days (see resolveRange). Returns `summary`
+ * (profit and cash flow), `chart`, the last 12 `months` and current `dues`.
+ *
+ * Older mobile builds send `period=N` (the last N days) and read `periods`,
+ * `dailyBreakdown`, `totalDue` and `totalPayable`; those keep working, now
+ * on the profit basis (sales made, labour earned).
+ */
 export const GET = withAuth(async (req, { tenantId }) => {
-  const url = new URL(req.url);
-  const periodDays = parseInt(url.searchParams.get('period') || '1');
-
-  // Supported periods
-  const periods = [1, 3, 5, 7, 15, 30];
-
-  async function getStatsForPeriod(days: number) {
-    // "since" = start of (days-1) days ago through end of today
-    // e.g. days=1 → today only; days=7 → last 7 days
-    const since = dayStartUTC(days - 1);
-    const until = todayEndUTC();
-
-    const [totalSales, salesCount, activeEmployees, totalFeedCost, otherExpAgg, otherIncAgg] = await Promise.all([
-      // Revenue: money actually collected in the period (payments + legacy paid sales)
-      collectedBetween(tenantId, since, until),
-      db.sale.count({ where: { tenantId, createdAt: { gte: since, lte: until } } }),
-      // Active employees — used for prorated salary cost
-      db.employee.findMany({
-        where: { tenantId, status: 'active' },
-        select: { salary: true },
-      }),
-      // Feed: purchases spread evenly over their days, plus usage of older batches
-      feedCostBetween(tenantId, since, until),
-      // Other expenses in period
-      db.otherExpense.aggregate({
-        where: { tenantId, expenseDate: { gte: since, lte: until } },
-        _sum: { amount: true },
-      }),
-      // Other income in period
-      db.otherIncome.aggregate({
-        where: { tenantId, incomeDate: { gte: since, lte: until } },
-        _sum: { amount: true },
-      }),
-    ]);
-
-
-    // Prorated labour cost: sum of (monthly salary / 30 * days)
-    const totalMonthlySalary = activeEmployees.reduce((sum, e) => sum + (e.salary ?? 0), 0);
-    const totalSalaryCost = parseFloat(((totalMonthlySalary / 30) * days).toFixed(2));
-
-    const totalOtherCost = otherExpAgg._sum.amount ?? 0;
-    const totalOtherIncome = otherIncAgg._sum.amount ?? 0;
-
-    const totalRevenue = totalSales + totalOtherIncome;
-    const totalCost = totalSalaryCost + totalFeedCost + totalOtherCost;
-    const netProfit = totalRevenue - totalCost;
-
-    return {
-      days,
-      totalSales,
-      totalOtherIncome,
-      totalRevenue,
-      salesCount,
-      totalSalaryCost,
-      totalFeedCost,
-      totalOtherCost,
-      totalCost,
-      netProfit,
-    };
-  }
-
-  // Daily breakdown for chart (last `periodDays` days)
-  async function getDailyBreakdown(days: number) {
-    const breakdown = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const dStart = new Date();
-      dStart.setUTCDate(dStart.getUTCDate() - i);
-      dStart.setUTCHours(0, 0, 0, 0);
-      const dEnd = new Date(dStart);
-      dEnd.setUTCHours(23, 59, 59, 999);
-
-      const [salesRevenue, activeEmployees, feedCost, otherExpAgg, otherIncAgg] = await Promise.all([
-        collectedBetween(tenantId, dStart, dEnd),
-        db.employee.findMany({
-          where: { tenantId, status: 'active' },
-          select: { salary: true },
-        }),
-        feedCostBetween(tenantId, dStart, dEnd),
-        db.otherExpense.aggregate({
-          where: { tenantId, expenseDate: { gte: dStart, lte: dEnd } },
-          _sum: { amount: true },
-        }),
-        db.otherIncome.aggregate({
-          where: { tenantId, incomeDate: { gte: dStart, lte: dEnd } },
-          _sum: { amount: true },
-        }),
-      ]);
-
-      const otherIncome = otherIncAgg._sum.amount ?? 0;
-      const revenue = salesRevenue + otherIncome;
-
-      const totalMonthlySalary = activeEmployees.reduce((s, e) => s + (e.salary ?? 0), 0);
-      const labourCost = parseFloat(((totalMonthlySalary / 30) * 1).toFixed(2));
-      const otherCost = otherExpAgg._sum.amount ?? 0;
-      const cost = labourCost + feedCost + otherCost;
-
-      breakdown.push({
-        date: dStart.toISOString().slice(0, 10),
-        revenue,
-        cost,
-        profit: revenue - cost,
-      });
+  try {
+    const url = new URL(req.url);
+    const q = (k: string) => url.searchParams.get(k);
+    const rawPeriod = q('period');
+    const period = rawPeriod === null ? null : Number(rawPeriod);
+    if (period !== null && !(Number.isInteger(period) && period >= 1 && period <= 366)) {
+      return Response.json({ error: 'period must be a whole number of days from 1 to 366' }, { status: 400 });
     }
-    return breakdown;
+
+    const now = new Date();
+    const today = farmToday(now);
+    const lastDays = (n: number) => ({ from: addDaysIso(today + 'T12:00:00Z', -(n - 1)), to: today });
+    const range = period !== null ? resolveRange(lastDays(period), now) : resolveRange({ range: q('range'), month: q('month'), from: q('from'), to: q('to') }, now);
+
+    const data = await loadFinanceData(tenantId);
+    const report = await getFinanceReport(tenantId, range, now, data);
+
+    const periods = LEGACY_PERIODS.map((days) => {
+      const r = lastDays(days);
+      const s = summaryFor(data, r.from, r.to, now).profit;
+      return {
+        days,
+        totalSales: s.salesMade,
+        totalOtherIncome: s.otherIncome,
+        totalRevenue: s.income,
+        salesCount: s.salesCount,
+        totalSalaryCost: s.labour + s.writtenOff,
+        totalFeedCost: s.feed,
+        totalOtherCost: s.otherExpenses,
+        totalCost: s.costs,
+        netProfit: s.profit,
+      };
+    });
+
+    return Response.json({
+      ...report,
+      periods,
+      dailyBreakdown: report.chart.map((c) => ({ date: c.key, revenue: c.income, cost: c.costs, profit: c.profit })),
+      totalDue: report.dues.customersOwe,
+      totalPayable: report.dues.youOweSuppliers,
+    });
+  } catch (err: unknown) {
+    console.error('Error building money report:', err);
+    return Response.json({ error: 'Failed to load the money report' }, { status: 500 });
   }
-
-  const [allPeriodStats, dailyBreakdown, totalDue, payable] = await Promise.all([
-    Promise.all(periods.map(getStatsForPeriod)),
-    getDailyBreakdown(periodDays),
-    totalReceivable(tenantId),
-    totalPayable(tenantId),
-  ]);
-
-  return Response.json({
-    periods: allPeriodStats,
-    dailyBreakdown,
-    totalDue,
-    totalPayable: payable,
-  });
 });

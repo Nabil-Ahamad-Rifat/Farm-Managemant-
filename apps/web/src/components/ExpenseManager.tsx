@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, Search, Trash2, Edit3, X, PackageOpen } from 'lucide-react';
 import type { OtherExpense } from '@farm/shared-types';
 import { webApiClient } from '@farm/api-client';
-import { daysAgo, sumAmounts } from '@farm/business-logic';
+import { LIST_PERIODS, inListPeriod, farmToday, type ListPeriod, sumAmounts } from '@farm/business-logic';
 
 const CATEGORIES = [
   { value: 'vet', label: 'Veterinary' },
@@ -27,34 +27,25 @@ const CATEGORY_COLORS: Record<string, string> = {
   other: 'bg-gray-50 text-gray-700 border-gray-200',
 };
 
-const PERIOD_FILTERS = [
-  { label: 'Today', days: 1 },
-  { label: '4 Days', days: 4 },
-  { label: '8 Days', days: 8 },
-  { label: '15 Days', days: 15 },
-  { label: '30 Days', days: 30 },
-  { label: 'All', days: 0 },
-];
-
 export default function ExpenseManager({ initialExpenses }: { initialExpenses: OtherExpense[] }) {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [periodDays, setPeriodDays] = useState(0);
+  const [period, setPeriod] = useState<ListPeriod>('month');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<OtherExpense | null>(null);
   const [form, setForm] = useState({
     description: '',
     amount: '',
     category: 'other',
-    expenseDate: new Date().toISOString().slice(0, 10),
+    expenseDate: farmToday(),
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   function openCreateModal() {
     setEditingExpense(null);
-    setForm({ description: '', amount: '', category: 'other', expenseDate: new Date().toISOString().slice(0, 10) });
+    setForm({ description: '', amount: '', category: 'other', expenseDate: farmToday() });
     setError('');
     setIsModalOpen(true);
   }
@@ -104,7 +95,7 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
   const filteredExpenses = initialExpenses.filter(exp => {
     const matchesSearch = exp.description.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || exp.category === categoryFilter;
-    const matchesPeriod = periodDays === 0 || new Date(exp.expenseDate) >= daysAgo(periodDays);
+    const matchesPeriod = inListPeriod(exp.expenseDate, period);
     return matchesSearch && matchesCategory && matchesPeriod;
   });
 
@@ -144,12 +135,13 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
 
       {/* Period Tabs */}
       <div className="flex flex-wrap gap-2">
-        {PERIOD_FILTERS.map(({ label, days }) => (
+        {LIST_PERIODS.map(({ value, label }) => (
           <button
-            key={label}
-            onClick={() => setPeriodDays(days)}
+            key={value}
+            onClick={() => setPeriod(value)}
+            aria-pressed={period === value}
             className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-              periodDays === days
+              period === value
                 ? 'bg-slate-900 text-white shadow-sm'
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
             }`}
@@ -282,6 +274,7 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
                   <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Date</label>
                   <input
                     type="date"
+                    max={farmToday()}
                     value={form.expenseDate}
                     onChange={e => setForm({ ...form, expenseDate: e.target.value })}
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"

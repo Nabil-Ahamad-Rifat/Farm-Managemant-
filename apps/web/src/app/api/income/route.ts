@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { entryDay } from '@/lib/days';
 import { withAuth } from '@/lib/middleware/withAuth';
 import { withIdempotency } from '@/lib/idempotency';
 
@@ -31,12 +32,15 @@ export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, t
       return Response.json({ error: 'Amount must be a positive number' }, { status: 400 });
     }
 
+    const day = entryDay(incomeDate);
+    if ('error' in day) return Response.json({ error: day.error }, { status: 400 });
+
     const income = await db.otherIncome.create({
       data: {
         description,
         amount: parsedAmount,
         category: category || 'other',
-        incomeDate: incomeDate ? new Date(incomeDate + 'T12:00:00Z') : new Date(),
+        incomeDate: day.date,
         tenantId,
       },
     });

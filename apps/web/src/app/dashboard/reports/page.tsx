@@ -11,5 +11,5 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
   const month = parseMonth((await searchParams).month);
   const report = await getMonthlyReport(session.tenantId, month);
-  return <MonthlyReport month={report.month} totals={report.totals} lines={report.lines} feed={report.feed} />;
+  return <MonthlyReport month={report.month} totals={report.totals} lines={report.lines} feed={report.feed} money={report.money} />;
 }
