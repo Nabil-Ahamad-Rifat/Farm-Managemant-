@@ -1,4 +1,5 @@
 import { farmToday } from '@farm/business-logic';
+import { StatCard } from '@/components/ui/StatCard';
 import { CheckCircle, Clock, CircleDashed, Milk, Beef, Package, type LucideIcon } from 'lucide-react';
 
 /** Product types offered in the sale form. general/products are legacy values that still display. */
@@ -80,15 +81,10 @@ export function CustomerTypeBadge({ type }: { type: string }) {
 }
 
 export const inputCls =
-  'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base text-slate-900 sm:text-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200';
-export const labelCls = 'mb-1 block text-xs font-semibold uppercase text-slate-600';
+  'w-full rounded-control border border-line bg-white px-3.5 py-2.5 text-base text-ink shadow-sm placeholder:text-slate-400 transition-colors focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/10 sm:py-2 sm:text-sm';
+export const labelCls = 'mb-1.5 block text-[13px] font-medium text-slate-700';
 
-const TONES = {
-  slate: 'border-slate-200 from-slate-500/10 text-slate-700 bg-slate-900',
-  emerald: 'border-emerald-100 from-emerald-500/10 text-emerald-800 bg-emerald-600',
-  red: 'border-red-100 from-red-500/10 text-red-800 bg-red-600',
-} as const;
-
+/** Older name for StatCard (components/ui): slate, emerald and red map to its tones. */
 export function SummaryCard({
   label,
   value,
@@ -99,20 +95,8 @@ export function SummaryCard({
   label: string;
   value: string;
   Icon: LucideIcon;
-  tone: keyof typeof TONES;
+  tone: 'slate' | 'emerald' | 'red';
   hint?: string;
 }) {
-  const [border, from, text, iconBg] = TONES[tone].split(' ');
-  return (
-    <div className={`flex h-full items-center justify-between rounded-2xl border ${border} bg-gradient-to-r ${from} via-transparent to-transparent bg-white p-5`}>
-      <div>
-        <p className={`text-xs font-bold uppercase tracking-wider ${text}`}>{label}</p>
-        <p className="mt-1 text-2xl font-extrabold text-slate-900">{value}</p>
-        {hint && <p className="mt-0.5 text-xs font-semibold text-slate-500">{hint}</p>}
-      </div>
-      <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${iconBg} text-white shadow-md`}>
-        <Icon className="h-5 w-5" />
-      </div>
-    </div>
-  );
+  return <StatCard label={label} value={value} Icon={Icon} hint={hint} tone={tone === 'emerald' ? 'brand' : tone === 'red' ? 'danger' : 'neutral'} />;
 }

@@ -3,7 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 
-export default function LogoutButton() {
+/** Sign-out button; `dark` for the navy sidebar and menu. */
+export default function LogoutButton({ dark = false }: { dark?: boolean }) {
   const router = useRouter();
 
   async function handleLogout() {
@@ -20,9 +21,11 @@ export default function LogoutButton() {
   return (
     <button
       onClick={handleLogout}
-      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50 hover:text-red-700"
+      className={`flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium transition-colors ${
+        dark ? 'text-slate-400 hover:bg-white/5 hover:text-white' : 'text-red-600 hover:bg-red-50 hover:text-red-700'
+      }`}
     >
-      <LogOut className="h-4 w-4" />
+      <LogOut className="h-4 w-4" aria-hidden="true" />
       Sign out
     </button>
   );
