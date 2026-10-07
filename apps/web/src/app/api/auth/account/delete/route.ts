@@ -48,6 +48,13 @@ export const POST = withAuth(async (req: NextRequest, { userId, tenantId }) => {
       await tx.sale.deleteMany({ where: { tenantId } });
       await tx.payment.deleteMany({ where: { tenantId } });
       await tx.customer.deleteMany({ where: { tenantId } });
+      // Worker records before the workers. Older salary payments have no
+      // tenantId, so they are found through their worker.
+      await tx.salaryPayment.deleteMany({ where: { employee: { tenantId } } });
+      await tx.salaryPayment.deleteMany({ where: { tenantId } });
+      await tx.payRate.deleteMany({ where: { tenantId } });
+      await tx.employeeAbsence.deleteMany({ where: { tenantId } });
+      await tx.workEntry.deleteMany({ where: { tenantId } });
       await tx.employee.deleteMany({ where: { tenantId } });
       // Animal photos and history before the animals themselves.
       await tx.animalEvent.deleteMany({ where: { tenantId } });

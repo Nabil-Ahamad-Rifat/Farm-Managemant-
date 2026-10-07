@@ -674,3 +674,233 @@ export function dueSoon(
   }
   return items.sort((x, y) => x.daysLeft - y.daysLeft);
 }
+
+// ---------------------------------------------------------------------------
+// The farm's calendar. The farm is in Bangladesh (UTC+6, no daylight saving),
+// so "today" and "this month" change at local midnight, not UTC midnight.
+// Stored days stay at noon UTC of their calendar day (see dayToDate on web).
+// ---------------------------------------------------------------------------
+
+export const FARM_UTC_OFFSET_HOURS = 6;
+
+/** Calendar-day number of `d` on the farm's clock (comparable with utcDayIndex of stored noon-UTC days). */
+export function farmDayIndex(d: Date | string = new Date()): number {
+  return utcDayIndex(new Date(new Date(d).getTime() + FARM_UTC_OFFSET_HOURS * 3_600_000));
+}
+
+/** Today on the farm's clock, as "YYYY-MM-DD". */
+export function farmToday(now: Date | string = new Date()): string {
+  return dayIndexToIso(farmDayIndex(now));
+}
+
+/** This month on the farm's clock, as "YYYY-MM". */
+export function farmMonth(now: Date | string = new Date()): string {
+  return farmToday(now).slice(0, 7);
+}
+
+/** Number of days in a "YYYY-MM" month. */
+export function daysInMonth(month: string): number {
+  const [y, m] = month.split('-').map(Number);
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+// ---------------------------------------------------------------------------
+// Worker pay accounts. A monthly worker earns monthly salary / 30 for every
+// day from their start day to their leaving day (or today), except days marked
+// absent: an 18,000 taka worker earns 600 a day, 18,600 in a 31-day month.
+// A daily worker earns days x rate for each work entry. Money given at any
+// time is subtracted; what is left is owed to the worker (or, if negative, an
+// advance the worker owes the farm, which can be written off as a loss).
+// ---------------------------------------------------------------------------
+
+/** Every monthly salary is paid as salary / 30 per day, whatever the month length. */
+export const PAY_DAYS_PER_MONTH = 30;
+
+export function dayRate(monthlySalary: number): number {
+  return round2(monthlySalary / PAY_DAYS_PER_MONTH);
+}
+
+export interface PayRateLike {
+  from: Date | string;
+  monthlySalary?: number | null;
+  dailyRate?: number | null;
+}
+
+export interface WorkerPaymentLike {
+  amount: number;
+  date: Date | string;
+  /** "writeoff" closes an advance as a loss; anything else is money given. */
+  kind?: string | null;
+}
+
+export interface WorkerLike {
+  payType?: string | null;
+  /** Start day. */
+  joinDate?: Date | string | null;
+  createdAt?: Date | string | null;
+  leftDate?: Date | string | null;
+  /** Current monthly salary, used when no PayRate covers a day. */
+  salary?: number | null;
+  rates?: PayRateLike[];
+  absences?: (Date | string)[];
+  work?: { date: Date | string; days: number; rate: number }[];
+  payments?: WorkerPaymentLike[];
+}
+
+export const isDailyWorker = (w: Pick<WorkerLike, 'payType'>) => w.payType === 'daily';
+
+/** First and last day the worker can earn, or null if they never started. */
+function workerSpan(w: WorkerLike, now: Date | string) {
+  const start = w.joinDate ?? w.createdAt;
+  if (!start) return null;
+  const first = utcDayIndex(start);
+  const today = farmDayIndex(now);
+  const last = w.leftDate ? Math.min(utcDayIndex(w.leftDate), today) : today;
+  return last < first ? null : { first, last };
+}
+
+/**
+ * What a worker earned in [from, to] (calendar days, both included; omitted
+ * ends mean "since starting" / "up to today").
+ */
+export function workerEarned(
+  w: WorkerLike,
+  from?: Date | string | null,
+  to?: Date | string | null,
+  now: Date | string = new Date(),
+): { earned: number; daysWorked: number; daysAbsent: number } {
+  const lo = from ? utcDayIndex(from) : -Infinity;
+  const hi = to ? utcDayIndex(to) : Infinity;
+
+  if (isDailyWorker(w)) {
+    let paisa = 0;
+    let days = 0;
+    for (const e of w.work ?? []) {
+      const d = utcDayIndex(e.date);
+      if (d < lo || d > hi) continue;
+      paisa += toPaisa(e.days * e.rate);
+      days += e.days;
+    }
+    return { earned: toTaka(paisa), daysWorked: round2(days), daysAbsent: 0 };
+  }
+
+  const span = workerSpan(w, now);
+  if (!span) return { earned: 0, daysWorked: 0, daysAbsent: 0 };
+  const first = Math.max(span.first, lo);
+  const last = Math.min(span.last, hi);
+  if (last < first) return { earned: 0, daysWorked: 0, daysAbsent: 0 };
+
+  const absent = new Set((w.absences ?? []).map((d) => utcDayIndex(d)));
+  // Rates newest first, so the first one on or before a day applies to it.
+  const rates = (w.rates ?? [])
+    .filter((r) => r.monthlySalary != null)
+    .map((r) => ({ from: utcDayIndex(r.from), salary: r.monthlySalary! }))
+    .sort((a, b) => b.from - a.from);
+  const salaryOn = (day: number) => rates.find((r) => r.from <= day)?.salary ?? rates[rates.length - 1]?.salary ?? w.salary ?? 0;
+
+  // Sum the monthly salary of every worked day, then divide once, so a 1,600
+  // salary over 30 days comes to exactly 1,600 with no rounding drift.
+  let salaryPaisaDays = 0;
+  let worked = 0;
+  let missed = 0;
+  for (let day = first; day <= last; day++) {
+    if (absent.has(day)) {
+      missed++;
+      continue;
+    }
+    worked++;
+    salaryPaisaDays += toPaisa(salaryOn(day));
+  }
+  return { earned: toTaka(Math.round(salaryPaisaDays / PAY_DAYS_PER_MONTH)), daysWorked: worked, daysAbsent: missed };
+}
+
+export interface WorkerAccount {
+  earned: number;
+  paid: number;
+  writtenOff: number;
+  /** Positive: the farm owes the worker. Negative: an advance the worker owes the farm. */
+  balance: number;
+  daysWorked: number;
+  daysAbsent: number;
+}
+
+/** A worker's account from their first day up to today. */
+export function workerAccount(w: WorkerLike, now: Date | string = new Date()): WorkerAccount {
+  const e = workerEarned(w, null, null, now);
+  let paid = 0;
+  let off = 0;
+  for (const p of w.payments ?? []) {
+    if (p.kind === 'writeoff') off += toPaisa(p.amount);
+    else paid += toPaisa(p.amount);
+  }
+  return {
+    earned: e.earned,
+    paid: toTaka(paid),
+    writtenOff: toTaka(off),
+    balance: toTaka(toPaisa(e.earned) - paid + off),
+    daysWorked: e.daysWorked,
+    daysAbsent: e.daysAbsent,
+  };
+}
+
+export interface WorkerMonth {
+  month: string;
+  daysWorked: number;
+  daysAbsent: number;
+  earned: number;
+  paid: number;
+  writtenOff: number;
+  /** Balance at the end of the month (positive: owed to the worker). */
+  closing: number;
+}
+
+/** Month by month from the first activity up to now, newest first. */
+export function workerMonths(w: WorkerLike, now: Date | string = new Date()): WorkerMonth[] {
+  const keys = new Set<string>();
+  const span = isDailyWorker(w) ? null : workerSpan(w, now);
+  if (span) {
+    const lastMonth = dayIndexToIso(span.last).slice(0, 7);
+    for (let m = dayIndexToIso(span.first).slice(0, 7); m <= lastMonth; m = shiftMonth(m, 1)) keys.add(m);
+  }
+  for (const e of w.work ?? []) keys.add(monthKey(e.date));
+  for (const p of w.payments ?? []) keys.add(monthKey(p.date));
+
+  let balance = 0;
+  const ascending = [...keys].sort().map((month) => {
+    const { start, end } = monthBounds(month);
+    const e = workerEarned(w, start, end, now);
+    let paid = 0;
+    let off = 0;
+    for (const p of w.payments ?? []) {
+      if (monthKey(p.date) !== month) continue;
+      if (p.kind === 'writeoff') off += toPaisa(p.amount);
+      else paid += toPaisa(p.amount);
+    }
+    balance += toPaisa(e.earned) - paid + off;
+    return { month, daysWorked: e.daysWorked, daysAbsent: e.daysAbsent, earned: e.earned, paid: toTaka(paid), writtenOff: toTaka(off), closing: toTaka(balance) };
+  });
+  return ascending.reverse();
+}
+
+/**
+ * Labour for the money reports in [from, to]: `earned` (pay earned in the
+ * range, the profit view), `paid` (money given in the range, the cash view)
+ * and `writtenOff` (advances given up in the range, a loss).
+ */
+export function labourBetween(workers: WorkerLike[], from: Date | string, to: Date | string, now: Date | string = new Date()) {
+  const lo = utcDayIndex(from);
+  const hi = utcDayIndex(to);
+  let earned = 0;
+  let paid = 0;
+  let off = 0;
+  for (const w of workers) {
+    earned += toPaisa(workerEarned(w, from, to, now).earned);
+    for (const p of w.payments ?? []) {
+      const d = utcDayIndex(p.date);
+      if (d < lo || d > hi) continue;
+      if (p.kind === 'writeoff') off += toPaisa(p.amount);
+      else paid += toPaisa(p.amount);
+    }
+  }
+  return { earned: toTaka(earned), paid: toTaka(paid), writtenOff: toTaka(off) };
+}

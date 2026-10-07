@@ -8,27 +8,31 @@ datasource db {
 }
 
 model Tenant {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  name             String
   // Milk price per litre the sale form starts with for a customer who has no
   // earlier milk sale. Null means the built-in default (see src/lib/settings.ts).
   defaultMilkPrice Float?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  users          User[]
-  employees      Employee[]
-  cows           Cow[]
-  feedBatches    FeedBatch[]
-  sales          Sale[]
-  otherExpenses  OtherExpense[]
-  otherIncomes   OtherIncome[]
-  customers      Customer[]
-  payments       Payment[]
+  users            User[]
+  employees        Employee[]
+  cows             Cow[]
+  feedBatches      FeedBatch[]
+  sales            Sale[]
+  otherExpenses    OtherExpense[]
+  otherIncomes     OtherIncome[]
+  customers        Customer[]
+  payments         Payment[]
   suppliers        Supplier[]
   supplierPayments SupplierPayment[]
   animalPhotos     AnimalPhoto[]
   animalEvents     AnimalEvent[]
+  payRates         PayRate[]
+  absences         EmployeeAbsence[]
+  workEntries      WorkEntry[]
+  salaryPayments   SalaryPayment[]
 }
 
 model User {
@@ -87,33 +91,97 @@ model PasswordResetToken {
   createdAt DateTime @default(now())
 }
 
+// A worker. Monthly workers earn salary/30 for every day from joinDate (their
+// start date) to leftDate or today, except days marked absent; the rate for a
+// day comes from PayRate. Daily workers earn days x rate for each WorkEntry.
+// What they are owed is earned minus SalaryPayment (payments and write-offs).
 model Employee {
-  id          String    @id @default(auto()) @map("_id") @db.ObjectId
-  name        String
-  role        String
-  email       String?
-  phone       String?
-  salary      Float     @default(0)
-  joinDate    DateTime?
-  status      String    @default("active")
-  tenantId    String    @db.ObjectId
-  tenant      Tenant    @relation(fields: [tenantId], references: [id])
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  role      String
+  email     String?
+  phone     String?
+  salary    Float     @default(0) // current monthly salary (monthly workers)
+  joinDate  DateTime?
+  status    String    @default("active") // active | left (older: terminated, on_leave)
+  payType   String? // monthly | daily; null on older documents means monthly
+  dailyRate Float? // current day rate (daily workers)
+  leftDate  DateTime?
+  tenantId  String    @db.ObjectId
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   salaryPayments SalaryPayment[]
+  payRates       PayRate[]
+  absences       EmployeeAbsence[]
+  workEntries    WorkEntry[]
 }
 
+// Money given to a worker (kind "payment", any amount, any day) or an
+// advance written off as a loss after they left (kind "writeoff").
+// periodMonth/periodYear only exist on payments made before pay accounts.
 model SalaryPayment {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   employeeId  String   @db.ObjectId
   employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  tenantId    String?  @db.ObjectId
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+  kind        String? // payment | writeoff; null on older documents means payment
   amount      Float
-  periodMonth Int
-  periodYear  Int
+  periodMonth Int?
+  periodYear  Int?
   note        String?
   paidAt      DateTime @default(now())
   createdAt   DateTime @default(now())
+
+  @@index([tenantId, paidAt])
+}
+
+// A worker's pay from a day onwards. The newest row on or before a day applies.
+model PayRate {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId    String   @db.ObjectId
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  tenantId      String   @db.ObjectId
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  from          DateTime
+  monthlySalary Float?
+  dailyRate     Float?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId, employeeId])
+}
+
+// A day a monthly worker did not work (unpaid).
+model EmployeeAbsence {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId String   @db.ObjectId
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  tenantId   String   @db.ObjectId
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  date       DateTime
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@unique([employeeId, date])
+  @@index([tenantId])
+}
+
+// Work done by a daily worker: `days` (0.5 allowed) at the rate of that time.
+model WorkEntry {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId String   @db.ObjectId
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  tenantId   String   @db.ObjectId
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  date       DateTime
+  days       Float
+  rate       Float
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, date])
 }
 
 // An animal. tagNumber is the "Cow ID" shown everywhere (auto-suggested as
@@ -132,11 +200,11 @@ model Cow {
   updatedAt     DateTime @updatedAt
   sales         Sale[]
 
-  gender       String?   // female | male
-  category     String?   // cow | heifer | calf | bull
+  gender       String? // female | male
+  category     String? // cow | heifer | calf | bull
   birthDate    DateTime?
   color        String?
-  source       String?   // born | purchased
+  source       String? // born | purchased
   purchaseDate DateTime?
   notes        String?
   // The photo shown on cards; one of this animal's photos.
@@ -201,27 +269,27 @@ model AnimalEvent {
 }
 
 model FeedBatch {
-  id                String      @id @default(auto()) @map("_id") @db.ObjectId
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
   name              String
   quantity          Float
   unitPrice         Float
   remainingQuantity Float
-  tenantId          String      @db.ObjectId
-  tenant            Tenant      @relation(fields: [tenantId], references: [id])
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  tenantId          String    @db.ObjectId
+  tenant            Tenant    @relation(fields: [tenantId], references: [id])
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
   // Purchase tracking. All optional: older batches have none of these and
   // are treated as fully paid, with cost taken from usage records.
   // With coverDays set, the batch is used up evenly over that many days from
   // purchasedAt, and remainingQuantity only goes down for extra manual use
   // (see feedSchedule in @farm/business-logic).
-  supplierId        String?     @db.ObjectId
-  supplier          Supplier?   @relation(fields: [supplierId], references: [id])
+  supplierId        String?   @db.ObjectId
+  supplier          Supplier? @relation(fields: [supplierId], references: [id])
   coverDays         Int?
   purchasedAt       DateTime?
   // Cache recomputed by recomputeSupplier() in src/lib/payables.ts — never write directly.
   paidAmount        Float?
-  payStatus         String?     // "paid" | "partial" | "pending"
+  payStatus         String? // "paid" | "partial" | "pending"
 
   usages FeedUsage[]
 
@@ -239,27 +307,27 @@ model FeedUsage {
 }
 
 model Sale {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  customerName  String
-  amount        Float
-  status        String   @default("paid")
-  saleType      String   @default("general")
-  quantity      Float?
-  unitPrice     Float?
-  notes         String?
-  tenantId      String   @db.ObjectId
-  tenant        Tenant   @relation(fields: [tenantId], references: [id])
-  cowId         String?  @db.ObjectId
-  cow           Cow?     @relation(fields: [cowId], references: [id])
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  customerName String
+  amount       Float
+  status       String    @default("paid")
+  saleType     String    @default("general")
+  quantity     Float?
+  unitPrice    Float?
+  notes        String?
+  tenantId     String    @db.ObjectId
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  cowId        String?   @db.ObjectId
+  cow          Cow?      @relation(fields: [cowId], references: [id])
   // Set for every sale made through the customer/dues flow. Legacy sales
   // without a customer keep a hand-set status. For linked sales, paidAmount
   // and status ("paid" | "partial" | "pending") are a cache recomputed by
   // recomputeCustomer() in src/lib/receivables.ts — never write them directly.
-  customerId    String?   @db.ObjectId
-  customer      Customer? @relation(fields: [customerId], references: [id])
-  paidAmount    Float?   @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  customerId   String?   @db.ObjectId
+  customer     Customer? @relation(fields: [customerId], references: [id])
+  paidAmount   Float?    @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([tenantId, customerId])
 }

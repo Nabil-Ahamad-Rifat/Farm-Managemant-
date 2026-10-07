@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import {
   daysAgo,
+  farmToday,
+  farmMonth,
+  daysInMonth,
+  dayRate,
+  workerEarned,
+  workerAccount,
+  workerMonths,
+  labourBetween,
+  type WorkerLike,
   formatCurrency,
   sumAmounts,
   calculateSaleAmount,
@@ -577,5 +586,109 @@ describe('dueSoon', () => {
       { cowId: 'heifer', tagNumber: 'HEIFER', name: 'heifer', kind: 'pregnancy_check', title: 'Pregnancy check', dueDate: '2026-10-04', daysLeft: -2 },
       { cowId: 'cow', tagNumber: 'COW', name: 'cow', kind: 'calving', title: 'Expected calving', dueDate: '2026-10-20', daysLeft: 14 },
     ]);
+  });
+});
+
+describe('farm calendar', () => {
+  it('uses Bangladesh time: 01:00 BD is still the previous UTC day', () => {
+    // 2026-10-07 19:30 UTC is 2026-10-08 01:30 in Bangladesh.
+    expect(farmToday('2026-10-07T19:30:00Z')).toBe('2026-10-08');
+    expect(farmToday('2026-10-07T17:59:00Z')).toBe('2026-10-07');
+    expect(farmMonth('2026-10-31T18:30:00Z')).toBe('2026-11');
+  });
+  it('knows month lengths', () => {
+    expect(daysInMonth('2026-02')).toBe(28);
+    expect(daysInMonth('2028-02')).toBe(29);
+    expect(daysInMonth('2026-10')).toBe(31);
+  });
+});
+
+describe('worker pay', () => {
+  const noon = (d: string) => d + 'T12:00:00Z';
+  const monthly = (extra: Partial<WorkerLike> = {}): WorkerLike => ({
+    payType: 'monthly',
+    joinDate: noon('2026-10-01'),
+    salary: 18000,
+    rates: [{ from: noon('2026-10-01'), monthlySalary: 18000 }],
+    ...extra,
+  });
+  const endOf = (month: string) => noon(month + '-' + String(daysInMonth(month)).padStart(2, '0'));
+
+  it('pays salary / 30 per day: a 31-day month is 18,600', () => {
+    expect(dayRate(18000)).toBe(600);
+    expect(workerEarned(monthly(), noon('2026-10-01'), noon('2026-10-31'), endOf('2026-10'))).toEqual({ earned: 18600, daysWorked: 31, daysAbsent: 0 });
+  });
+
+  it('February (28 days) is 16,800', () => {
+    const w = monthly({ joinDate: noon('2026-02-01'), rates: [{ from: noon('2026-02-01'), monthlySalary: 18000 }] });
+    expect(workerEarned(w, noon('2026-02-01'), noon('2026-02-28'), noon('2026-03-15')).earned).toBe(16800);
+  });
+
+  it('does not pay absent days: 2 absences in October is 17,400', () => {
+    const w = monthly({ absences: [noon('2026-10-05'), noon('2026-10-06')] });
+    expect(workerEarned(w, null, null, endOf('2026-10'))).toEqual({ earned: 17400, daysWorked: 29, daysAbsent: 2 });
+  });
+
+  it('counts only up to today', () => {
+    // Started on the 1st, today is the 3rd: 3 days.
+    expect(workerEarned(monthly(), null, null, noon('2026-10-03')).earned).toBe(1800);
+  });
+
+  it('stops on the leaving day', () => {
+    const w = monthly({ leftDate: noon('2026-10-10') });
+    expect(workerEarned(w, null, null, noon('2026-12-01')).earned).toBe(6000);
+  });
+
+  it('applies a salary change from its day', () => {
+    const w = monthly({ rates: [{ from: noon('2026-10-01'), monthlySalary: 18000 }, { from: noon('2026-10-21'), monthlySalary: 21000 }] });
+    // 20 days at 600 + 11 days at 700
+    expect(workerEarned(w, null, null, endOf('2026-10')).earned).toBe(12000 + 7700);
+  });
+
+  it('has no rounding drift on odd salaries', () => {
+    const w = monthly({ salary: 1600, rates: [{ from: noon('2026-10-01'), monthlySalary: 1600 }] });
+    expect(workerEarned(w, noon('2026-10-01'), noon('2026-10-30'), endOf('2026-10')).earned).toBe(1600);
+  });
+
+  it('pays daily workers days x rate', () => {
+    const w: WorkerLike = {
+      payType: 'daily',
+      work: [
+        { date: noon('2026-10-02'), days: 3, rate: 500 },
+        { date: noon('2026-10-09'), days: 0.5, rate: 500 },
+        { date: noon('2026-11-01'), days: 1, rate: 550 },
+      ],
+    };
+    expect(workerEarned(w, noon('2026-10-01'), noon('2026-10-31'))).toEqual({ earned: 1750, daysWorked: 3.5, daysAbsent: 0 });
+  });
+
+  it('keeps an account: advances lower what is owed, negative means the worker owes', () => {
+    const w = monthly({ payments: [{ amount: 500, date: noon('2026-10-03') }, { amount: 1000, date: noon('2026-10-04') }] });
+    expect(workerAccount(w, noon('2026-10-04'))).toMatchObject({ earned: 2400, paid: 1500, balance: 900, daysWorked: 4 });
+
+    // Left on the 2nd after taking 1,500: he owes 300, then it is written off.
+    const left = monthly({ leftDate: noon('2026-10-02'), payments: [{ amount: 1500, date: noon('2026-10-02') }] });
+    expect(workerAccount(left, noon('2026-10-20')).balance).toBe(-300);
+    const off = { ...left, payments: [...left.payments!, { amount: 300, date: noon('2026-10-20'), kind: 'writeoff' }] };
+    expect(workerAccount(off, noon('2026-10-20'))).toMatchObject({ balance: 0, writtenOff: 300 });
+  });
+
+  it('gives a month-by-month statement with running balance, newest first', () => {
+    const w = monthly({
+      joinDate: noon('2026-09-16'),
+      rates: [{ from: noon('2026-09-16'), monthlySalary: 18000 }],
+      absences: [noon('2026-10-05')],
+      payments: [{ amount: 9000, date: noon('2026-10-01') }, { amount: 5000, date: noon('2026-10-15') }],
+    });
+    const months = workerMonths(w, noon('2026-10-15'));
+    expect(months.map((m) => m.month)).toEqual(['2026-10', '2026-09']);
+    expect(months[1]).toMatchObject({ daysWorked: 15, earned: 9000, paid: 0, closing: 9000 });
+    expect(months[0]).toMatchObject({ daysWorked: 14, daysAbsent: 1, earned: 8400, paid: 14000, closing: 3400 });
+  });
+
+  it('splits labour into earned, paid and written off for a range', () => {
+    const a = monthly({ payments: [{ amount: 2000, date: noon('2026-10-05') }, { amount: 100, date: noon('2026-10-06'), kind: 'writeoff' }] });
+    const b: WorkerLike = { payType: 'daily', work: [{ date: noon('2026-10-05'), days: 2, rate: 500 }], payments: [{ amount: 1000, date: noon('2026-10-05') }] };
+    expect(labourBetween([a, b], noon('2026-10-01'), noon('2026-10-10'), noon('2026-10-31'))).toEqual({ earned: 6000 + 1000, paid: 3000, writtenOff: 100 });
   });
 });

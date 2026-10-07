@@ -94,11 +94,15 @@ export interface AnimalDueItem {
   daysLeft: number;
 }
 
+/** Money given to a worker, or (kind "writeoff") an advance given up as a loss. */
 export interface SalaryPayment {
   id: string;
+  employeeId?: string;
+  kind?: 'payment' | 'writeoff' | string | null;
   amount: number;
-  periodMonth: number;
-  periodYear: number;
+  /** Only on payments made before pay accounts. */
+  periodMonth?: number | null;
+  periodYear?: number | null;
   note: string | null;
   paidAt: string | Date;
 }
@@ -109,10 +113,54 @@ export interface Employee {
   role: string;
   email: string | null;
   phone: string | null;
+  /** Monthly salary (monthly workers). */
   salary: number;
+  /** Start day. */
   joinDate: string | Date | null;
-  status: string;
+  status: 'active' | 'left' | string;
+  payType?: 'monthly' | 'daily' | string | null;
+  dailyRate?: number | null;
+  leftDate?: string | Date | null;
   salaryPayments?: SalaryPayment[];
+}
+
+/** workerAccount in @farm/business-logic. Positive balance: the farm owes the worker; negative: an advance. */
+export interface WorkerAccountInfo {
+  earned: number;
+  paid: number;
+  writtenOff: number;
+  balance: number;
+  daysWorked: number;
+  daysAbsent: number;
+}
+
+/** GET /api/employees */
+export interface WorkerListItem extends Employee {
+  account: WorkerAccountInfo;
+  thisMonth: { earned: number; paid: number; daysAbsent: number };
+}
+
+export interface WorkerMonthInfo {
+  month: string;
+  daysWorked: number;
+  daysAbsent: number;
+  earned: number;
+  paid: number;
+  writtenOff: number;
+  closing: number;
+}
+
+/** GET /api/employees/:id */
+export interface WorkerDetail extends Employee {
+  account: WorkerAccountInfo;
+  /** Newest first. */
+  months: WorkerMonthInfo[];
+  payments: SalaryPayment[];
+  absences: { id: string; date: string | Date; note: string | null }[];
+  work: { id: string; date: string | Date; days: number; rate: number; note: string | null }[];
+  /** Newest first. */
+  rates: { id: string; from: string | Date; monthlySalary: number | null; dailyRate: number | null }[];
+  createdAt: string | Date;
 }
 
 /** Daily plan for a purchase that lasts a set number of days (see feedSchedule in @farm/business-logic). */

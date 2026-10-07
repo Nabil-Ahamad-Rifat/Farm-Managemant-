@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   loginSchema, registerSchema, forgotPasswordSchema, customerSchema, paymentSchema, saleSchema, supplierSchema, feedPurchaseSchema, farmSettingsSchema, animalSchema, animalEventSchema,
+  employeeSchema, workerPaymentSchema, absenceSchema, workEntrySchema, leaveSchema,
 } from './index';
 
 describe('loginSchema', () => {
@@ -199,5 +200,41 @@ describe('animalEventSchema', () => {
     const calf = { tagNumber: 'C-010', gender: 'male', photo: { data: 'A'.repeat(200) } };
     expect(animalEventSchema.safeParse({ type: 'calving', date: '2026-10-01', createCalf: calf }).success).toBe(true);
     expect(animalEventSchema.safeParse({ type: 'treatment', date: '2026-10-01', createCalf: calf }).success).toBe(false);
+  });
+});
+
+describe('employeeSchema', () => {
+  it('accepts a monthly worker and fills defaults', () => {
+    const r = employeeSchema.parse({ name: ' Karim ', salary: '18000', joinDate: '2026-10-01', role: '' });
+    expect(r).toMatchObject({ name: 'Karim', role: 'Worker', payType: 'monthly', salary: 18000 });
+  });
+  it('needs the salary for monthly and the day rate for daily workers', () => {
+    expect(employeeSchema.safeParse({ name: 'A', joinDate: '2026-10-01' }).error?.issues[0].message).toBe('Enter the monthly salary');
+    expect(employeeSchema.safeParse({ name: 'A', payType: 'daily', joinDate: '2026-10-01' }).error?.issues[0].message).toBe('Enter the day rate');
+    expect(employeeSchema.safeParse({ name: 'A', payType: 'daily', dailyRate: 500, joinDate: '2026-10-01' }).success).toBe(true);
+  });
+  it('needs a start day and a valid email', () => {
+    expect(employeeSchema.safeParse({ name: 'A', salary: 1 }).success).toBe(false);
+    expect(employeeSchema.safeParse({ name: 'A', salary: 1, joinDate: '2026-10-01', email: 'nope' }).success).toBe(false);
+  });
+});
+
+describe('worker pay records', () => {
+  it('payment needs an amount above 0', () => {
+    expect(workerPaymentSchema.safeParse({ amount: 0 }).success).toBe(false);
+    expect(workerPaymentSchema.parse({ amount: '500', paidAt: '' })).toEqual({ amount: 500, paidAt: undefined, note: undefined });
+  });
+  it('absence is one day or an ordered range', () => {
+    expect(absenceSchema.safeParse({ from: '2026-10-05' }).success).toBe(true);
+    expect(absenceSchema.safeParse({ from: '2026-10-05', to: '2026-10-04' }).success).toBe(false);
+    expect(absenceSchema.safeParse({ from: '2026-01-01', to: '2027-06-01' }).success).toBe(false);
+  });
+  it('work entry allows half days only', () => {
+    expect(workEntrySchema.safeParse({ date: '2026-10-05', days: 0.5 }).success).toBe(true);
+    expect(workEntrySchema.safeParse({ date: '2026-10-05', days: 1.3 }).success).toBe(false);
+    expect(workEntrySchema.safeParse({ date: '2026-10-05', days: 0 }).success).toBe(false);
+  });
+  it('leaving with a blank date means came back', () => {
+    expect(leaveSchema.parse({ leftDate: '' })).toEqual({ leftDate: undefined });
   });
 });

@@ -204,3 +204,61 @@ export const animalEventSchema = z
   .refine((e) => e.type !== 'weight' || e.value !== undefined, { message: 'Enter the weight', path: ['value'] })
   .refine((e) => !e.nextDueDate || e.nextDueDate >= e.date, { message: 'Next due date must be after the record date', path: ['nextDueDate'] })
   .refine((e) => !e.createCalf || e.type === 'calving', { message: 'A calf can only be added with a calving', path: ['createCalf'] });
+
+export const PAY_TYPES = ['monthly', 'daily'] as const;
+
+/**
+ * A worker from the web or mobile form. Monthly workers need their monthly
+ * salary, daily workers their day rate; both need the day they started.
+ * `rateFrom` is the day a changed salary/rate applies from (edits only;
+ * defaults to today).
+ */
+export const employeeSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Name is required').max(100),
+    role: z.preprocess(blankToUndefined, z.string().trim().max(100).default('Worker')),
+    phone: optionalText(30),
+    email: z.preprocess(blankToUndefined, z.string().trim().toLowerCase().email('Enter a valid email').max(255).optional()),
+    payType: z.preprocess(blankToUndefined, z.enum(PAY_TYPES).default('monthly')),
+    salary: z.preprocess(blankToUndefined, money.optional()),
+    dailyRate: z.preprocess(blankToUndefined, money.optional()),
+    joinDate: isoDay,
+    rateFrom: optionalDay,
+  })
+  .refine((e) => e.payType !== 'monthly' || (e.salary ?? 0) > 0, { message: 'Enter the monthly salary', path: ['salary'] })
+  .refine((e) => e.payType !== 'daily' || (e.dailyRate ?? 0) > 0, { message: 'Enter the day rate', path: ['dailyRate'] });
+
+/** Money given to a worker: any amount, any day (an advance or wages). */
+export const workerPaymentSchema = z.object({
+  amount: money.refine((n) => n > 0, 'Amount must be more than 0'),
+  paidAt: optionalDay,
+  note: optionalText(300),
+});
+
+/** Days a monthly worker was absent: one day, or `from` to `to`. */
+export const absenceSchema = z
+  .object({
+    from: isoDay,
+    to: optionalDay,
+    note: optionalText(200),
+  })
+  .refine((a) => !a.to || a.to >= a.from, { message: 'The last day must be on or after the first day', path: ['to'] })
+  .refine((a) => !a.to || Date.parse(a.to) - Date.parse(a.from) <= 366 * 86_400_000, { message: 'Mark at most one year at a time', path: ['to'] });
+
+/** Work done by a daily worker. `rate` defaults to the worker's current day rate. */
+export const workEntrySchema = z.object({
+  date: isoDay,
+  days: z.coerce
+    .number()
+    .finite()
+    .positive('Days must be more than 0')
+    .max(31, 'At most 31 days in one entry')
+    .refine((n) => Number.isInteger(n * 2), 'Use whole or half days'),
+  rate: z.preprocess(blankToUndefined, money.refine((n) => n > 0, 'Rate must be more than 0').optional()),
+  note: optionalText(200),
+});
+
+/** The day a worker left. Blank means they came back (still working). */
+export const leaveSchema = z.object({
+  leftDate: optionalDay,
+});
