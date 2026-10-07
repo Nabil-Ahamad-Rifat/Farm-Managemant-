@@ -7,6 +7,8 @@ import { Sprout, ArrowLeft, Mail, CheckCircle2 } from 'lucide-react';
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  // Development machine without email: the server returns the link to show here.
+  const [devResetUrl, setDevResetUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,10 +22,9 @@ export default function ForgotPasswordPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to send reset link');
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to send reset link');
+      setDevResetUrl(typeof data.devResetUrl === 'string' ? data.devResetUrl : '');
       setSubmitted(true);
     } catch (err) {
       setError((err as Error).message);
@@ -43,7 +44,24 @@ export default function ForgotPasswordPage() {
           <span className="text-xl font-extrabold text-white tracking-tight">Farm Manager</span>
         </div>
 
-        {submitted ? (
+        {submitted && devResetUrl ? (
+          <div className="mt-8 text-center">
+            <h1 className="text-xl font-bold text-white">Set a new password</h1>
+            <p className="mt-2 text-sm text-slate-400">
+              Email is not set up on this computer, so no email was sent. Use this link for{' '}
+              <span className="font-medium text-white">{email}</span> (valid for 30 minutes):
+            </p>
+            <a
+              href={devResetUrl}
+              className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-500"
+            >
+              Set new password →
+            </a>
+            <Link href="/login" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-white">
+              <ArrowLeft className="h-4 w-4" /> Back to sign in
+            </Link>
+          </div>
+        ) : submitted ? (
           /* Success state */
           <div className="mt-8 text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-500/30">

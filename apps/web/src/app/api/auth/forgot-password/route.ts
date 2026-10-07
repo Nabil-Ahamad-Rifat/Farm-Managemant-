@@ -28,7 +28,11 @@ export async function POST(req: NextRequest) {
     }
 
     const token = await generateResetToken(email);
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    // On the development machine the app runs on whatever address and port is
+    // free, so the link uses the address the page was opened on. In production
+    // only the configured URL is trusted (a Host header could be forged).
+    const dev = process.env.NODE_ENV === 'development';
+    const appUrl = dev ? req.nextUrl.origin : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const resetUrl = `${appUrl}/reset-password?token=${token}`;
 
     const apiKey = process.env.RESEND_API_KEY;
@@ -64,6 +68,12 @@ export async function POST(req: NextRequest) {
       console.log('\n=== PASSWORD RESET LINK (dev mode) ===');
       console.log(resetUrl);
       console.log('======================================\n');
+      // No email service here: on the development machine hand the link to the
+      // page so the owner can use it right away.
+      if (dev) {
+        // A relative link, so it opens on whichever device asked (phone or computer).
+        return NextResponse.json({ message: 'Email is not set up on this computer.', devResetUrl: `/reset-password?token=${token}` });
+      }
     }
 
     return NextResponse.json({ message: 'If that email exists, a reset link has been sent.' });
