@@ -18,7 +18,7 @@ const GROUPS: { title: string; links: NavLink[] }[] = [
       { href: '/dashboard', label: 'Overview', icon: Home },
       { href: '/dashboard/cows', label: 'Animals', icon: PawPrint },
       { href: '/dashboard/feed', label: 'Feed', icon: Wheat },
-      { href: '/dashboard/employees', label: 'Employees', icon: Users },
+      { href: '/dashboard/employees', label: 'Workers', icon: Users },
     ],
   },
   {

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
-import { db } from '@/lib/db';
+import { listWorkers } from '@/lib/payroll';
 import EmployeeManager from '@/components/EmployeeManager';
 
 export default async function EmployeesPage() {
@@ -9,10 +9,5 @@ export default async function EmployeesPage() {
     redirect('/login');
   }
 
-  const employees = await db.employee.findMany({
-    where: { tenantId: session.tenantId },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  return <EmployeeManager initialEmployees={employees} />;
+  return <EmployeeManager workers={await listWorkers(session.tenantId)} />;
 }

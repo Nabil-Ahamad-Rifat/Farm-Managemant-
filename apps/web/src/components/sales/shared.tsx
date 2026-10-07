@@ -1,3 +1,4 @@
+import { farmToday } from '@farm/business-logic';
 import { CheckCircle, Clock, CircleDashed, Milk, Beef, Package, type LucideIcon } from 'lucide-react';
 
 /** Product types offered in the sale form. general/products are legacy values that still display. */
@@ -34,7 +35,8 @@ export function tk(amount: number) {
   return '৳' + amount.toLocaleString('en-IN', { minimumFractionDigits: hasPaisa ? 2 : 0, maximumFractionDigits: 2 });
 }
 
-export const todayStr = () => new Date().toISOString().slice(0, 10);
+/** Today on the farm's clock (Bangladesh), not UTC: right after midnight it is already the new day. */
+export const todayStr = () => farmToday();
 export const toDay = (d: Date | string) => new Date(d).toISOString().slice(0, 10);
 /** "October 2026" for a "YYYY-MM" month (UTC, like the month math). */
 export const monthLabel = (month: string) =>

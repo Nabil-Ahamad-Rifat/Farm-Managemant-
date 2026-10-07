@@ -1,505 +1,166 @@
 "use client";
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Trash2, Edit3, Calendar, Banknote, CheckCircle2, AlertCircle, Clock3, X } from 'lucide-react';
-import type { Employee } from '@farm/shared-types';
-import { webApiClient } from '@farm/api-client';
-import { totalActiveMonthlySalary } from '@farm/business-logic';
+import { Plus, Search, HandCoins, PiggyBank, Users, Wallet, ChevronRight, Phone } from 'lucide-react';
+import type { WorkerListItem } from '@farm/shared-types';
+import { SummaryCard, tk } from '@/components/sales/shared';
+import { WorkerFormModal, WorkerPaymentModal } from '@/components/workers/WorkerModals';
+import { BalancePill, WorkerStatusBadge, payLabel } from '@/components/workers/shared';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const now = new Date();
+const FILTERS = [
+  { value: 'active', label: 'Working' },
+  { value: 'owed', label: 'You owe' },
+  { value: 'advance', label: 'Advance' },
+  { value: 'left', label: 'Left' },
+  { value: 'all', label: 'All' },
+] as const;
+type Filter = (typeof FILTERS)[number]['value'];
 
-export default function EmployeeManager({ initialEmployees }: { initialEmployees: Employee[] }) {
+export default function EmployeeManager({ workers }: { workers: WorkerListItem[] }) {
   const router = useRouter();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [salaryEmployee, setSalaryEmployee] = useState<Employee | null>(null);
-  const [form, setForm] = useState({ name: '', role: '', email: '', phone: '', salary: '', joinDate: '', status: 'active' });
-  const [salaryForm, setSalaryForm] = useState({
-    amount: '',
-    periodMonth: (now.getMonth() + 1).toString(),
-    periodYear: now.getFullYear().toString(),
-    note: '',
-  });
-  const [error, setError] = useState('');
-  const [salaryError, setSalaryError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<Filter>('active');
+  const [adding, setAdding] = useState(false);
+  const [paying, setPaying] = useState<WorkerListItem | null>(null);
 
-  function openCreateModal() {
-    setEditingEmployee(null);
-    setForm({ name: '', role: '', email: '', phone: '', salary: '', joinDate: '', status: 'active' });
-    setError('');
-    setIsModalOpen(true);
-  }
+  // Farm-wide totals: never affected by the search box or filter.
+  const owed = workers.reduce((s, w) => s + Math.max(0, w.account.balance), 0);
+  const advances = workers.reduce((s, w) => s + Math.max(0, -w.account.balance), 0);
+  const monthEarned = workers.reduce((s, w) => s + w.thisMonth.earned, 0);
+  const monthPaid = workers.reduce((s, w) => s + w.thisMonth.paid, 0);
+  const working = workers.filter((w) => w.status !== 'left').length;
 
-  function openEditModal(emp: Employee) {
-    setEditingEmployee(emp);
-    setForm({
-      name: emp.name,
-      role: emp.role,
-      email: emp.email || '',
-      phone: emp.phone || '',
-      salary: (emp.salary ?? 0).toString(),
-      joinDate: emp.joinDate ? new Date(emp.joinDate).toISOString().slice(0, 10) : '',
-      status: emp.status || 'active',
-    });
-    setError('');
-    setIsModalOpen(true);
-  }
-
-  function openSalaryModal(emp: Employee) {
-    setSalaryEmployee(emp);
-    setSalaryForm({
-      amount: (emp.salary ?? 0).toString(),
-      periodMonth: (now.getMonth() + 1).toString(),
-      periodYear: now.getFullYear().toString(),
-      note: '',
-    });
-    setSalaryError('');
-    setIsSalaryModalOpen(true);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      if (editingEmployee) {
-        await webApiClient.put(`/api/employees/${editingEmployee.id}`, form, 'Failed to save employee');
-      } else {
-        await webApiClient.post('/api/employees', form, 'Failed to save employee');
-      }
-
-      setIsModalOpen(false);
-      router.refresh();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleSalarySubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!salaryEmployee) return;
-    setLoading(true);
-    setSalaryError('');
-
-    try {
-      await webApiClient.post(`/api/employees/${salaryEmployee.id}/salary`, salaryForm, 'Failed to record salary payment');
-      setIsSalaryModalOpen(false);
-      router.refresh();
-    } catch (err) {
-      setSalaryError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm('Are you sure you want to delete this employee?')) return;
-
-    try {
-      await webApiClient.delete(`/api/employees/${id}`);
-      router.refresh();
-    } catch {
-      alert('Failed to delete employee.');
-    }
-  }
-
-  const filteredEmployees = initialEmployees.filter((emp) => {
-    const matchesSearch =
-      emp.name.toLowerCase().includes(search.toLowerCase()) ||
-      emp.role.toLowerCase().includes(search.toLowerCase()) ||
-      (emp.email && emp.email.toLowerCase().includes(search.toLowerCase()));
-    const empStatus = emp.status || 'active';
-    const matchesStatus = statusFilter === 'all' || empStatus === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const totalMonthlySalary = totalActiveMonthlySalary(filteredEmployees);
-
-  const statusConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; className: string }> = {
-    active: { label: 'Active', icon: CheckCircle2, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    on_leave: { label: 'On Leave', icon: Clock3, className: 'bg-amber-50 text-amber-700 border-amber-200' },
-    terminated: { label: 'Terminated', icon: AlertCircle, className: 'bg-red-50 text-red-700 border-red-200' },
+  const matches: Record<Filter, (w: WorkerListItem) => boolean> = {
+    active: (w) => w.status !== 'left',
+    owed: (w) => w.account.balance > 0.004,
+    advance: (w) => w.account.balance < -0.004,
+    left: (w) => w.status === 'left',
+    all: () => true,
   };
+  const q = search.trim().toLowerCase();
+  const shown = workers.filter(
+    (w) => matches[filter](w) && (!q || w.name.toLowerCase().includes(q) || w.role.toLowerCase().includes(q) || (w.phone ?? '').includes(q)),
+  );
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Employee Management</h1>
-          <p className="mt-1 text-slate-500">Manage your farm workforce, salaries, and assignments.</p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Workers</h1>
+          <p className="mt-1 text-sm text-slate-500 sm:text-base">Pay, advances and absences of every worker. Monthly pay is salary ÷ 30 per day.</p>
         </div>
         <button
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition"
+          onClick={() => setAdding(true)}
+          className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 sm:py-2.5"
         >
-          <Plus className="h-4 w-4" />
-          Add Employee
+          <Plus className="h-4 w-4" /> Add worker
         </button>
       </div>
 
-      {/* Monthly Salary Banner */}
-      <div className="rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-500/10 via-indigo-500/5 to-transparent p-6 flex items-center justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-indigo-800">Monthly Labour Cost</p>
-          <p className="mt-1 text-3xl font-extrabold text-slate-900">
-            ৳{totalMonthlySalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          <p className="text-xs text-indigo-700 mt-1">{filteredEmployees.filter(e => (e.status || 'active') === 'active').length} active employees</p>
-        </div>
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-600/20">
-          <Banknote className="h-6 w-6" />
-        </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <SummaryCard label="You owe workers" value={tk(owed)} Icon={HandCoins} tone={owed > 0 ? 'red' : 'slate'} hint="Earned but not paid yet" />
+        <SummaryCard label="Advances given" value={tk(advances)} Icon={PiggyBank} tone="slate" hint="Paid more than earned" />
+        <SummaryCard label="Labour this month" value={tk(monthEarned)} Icon={Wallet} tone="slate" hint={`Paid ${tk(monthPaid)} this month`} />
+        <SummaryCard label="Working now" value={String(working)} Icon={Users} tone="emerald" hint={`${workers.length} in total`} />
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center justify-between">
-        <div className="relative max-w-md flex-1">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full lg:max-w-md lg:flex-1">
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
-            type="text"
-            placeholder="Search employees by name or role..."
+            type="search"
+            aria-label="Search workers"
+            placeholder="Search by name, work or phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-slate-400 focus:outline-none"
+            className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-base text-slate-900 placeholder-slate-400 shadow-sm focus:border-slate-400 focus:outline-none sm:py-2.5 sm:text-sm"
           />
         </div>
-        <div className="flex gap-2">
-          {[
-            { val: 'all', label: 'All' },
-            { val: 'active', label: 'Active' },
-            { val: 'on_leave', label: 'On Leave' },
-            { val: 'terminated', label: 'Terminated' },
-          ].map(({ val, label }) => (
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
+          {FILTERS.map((f) => (
             <button
-              key={val}
-              onClick={() => setStatusFilter(val)}
-              className={`rounded-xl px-3.5 py-2 text-xs font-semibold capitalize transition ${
-                statusFilter === val
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              aria-pressed={filter === f.value}
+              className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-semibold transition sm:py-2 sm:text-xs ${
+                filter === f.value ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
               }`}
             >
-              {label}
+              {f.label} <span className={filter === f.value ? 'text-slate-300' : 'text-slate-400'}>{workers.filter(matches[f.value]).length}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Name</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Role</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Monthly Salary</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Contact</th>
-              <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
-            {filteredEmployees.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="py-10 text-center text-sm text-slate-500">
-                  No employees found.
-                </td>
-              </tr>
-            ) : (
-              filteredEmployees.map((employee) => {
-                const sc = statusConfig[employee.status || 'active'] || statusConfig['active'];
-                const StatusIcon = sc.icon;
-                return (
-                  <tr key={employee.id} className="hover:bg-slate-50/50 transition">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs">
-                          {employee.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{employee.name}</p>
-                          {employee.joinDate && (
-                            <p className="text-[11px] text-slate-400 flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              Joined {new Date(employee.joinDate).toLocaleDateString()}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">{employee.role}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
-                      ৳{(employee.salary ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center gap-1 text-[11px] font-semibold uppercase px-2.5 py-1 rounded-full border ${sc.className}`}>
-                        <StatusIcon className="h-3 w-3" />
-                        {sc.label}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                      <div>{employee.phone || '—'}</div>
-                      <div className="text-[11px] text-slate-400">{employee.email || ''}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => openSalaryModal(employee)}
-                          className="rounded-lg px-2 py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition flex items-center gap-1"
-                          title="Record salary payment"
-                        >
-                          <Banknote className="h-3.5 w-3.5" /> Pay
-                        </button>
-                        <button
-                          onClick={() => openEditModal(employee)}
-                          className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition"
-                          title="Edit employee"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(employee.id)}
-                          className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 transition"
-                          title="Delete employee"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Employee Add/Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
-          <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-slate-100 bg-white p-5 shadow-xl sm:rounded-2xl sm:p-6">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <h2 className="text-lg font-bold text-slate-900">
-                {editingEmployee ? 'Edit Employee' : 'Add New Employee'}
-              </h2>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {error && (
-              <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-medium text-red-700 border border-red-100">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Karim Hossain"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  />
+      {shown.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-14 text-center">
+          <p className="text-sm text-slate-500">{workers.length === 0 ? 'No workers yet. Add your first worker.' : 'No workers match this search or filter.'}</p>
+        </div>
+      ) : (
+        <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          {shown.map((w) => (
+            <li key={w.id} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-slate-50 sm:px-5">
+              <Link href={`/dashboard/employees/${w.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-base font-bold text-white">
+                  {w.name.charAt(0).toUpperCase()}
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Role / Job Title</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Farm Supervisor"
-                    value={form.role}
-                    onChange={(e) => setForm({ ...form, role: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p className="truncate text-sm font-bold text-slate-900 sm:text-base">{w.name}</p>
+                    {w.status === 'left' && <WorkerStatusBadge status="left" />}
+                  </div>
+                  <p className="truncate text-xs text-slate-500">
+                    {w.role} · {payLabel(w)}
+                  </p>
+                  <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-slate-500">
+                    {w.phone && <><Phone className="h-3 w-3" /> {w.phone} · </>}
+                    This month {tk(w.thisMonth.earned)}
+                    {w.thisMonth.daysAbsent > 0 ? ` · ${w.thisMonth.daysAbsent} absent` : ''}
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Monthly Salary (৳)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="e.g. 12000"
-                    value={form.salary}
-                    onChange={(e) => setForm({ ...form, salary: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  />
+                <div className="hidden shrink-0 sm:block">
+                  <BalancePill account={w.account} />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Join Date</label>
-                  <input
-                    type="date"
-                    value={form.joinDate}
-                    onChange={(e) => setForm({ ...form, joinDate: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  />
+                <ChevronRight className="hidden h-4 w-4 shrink-0 text-slate-300 sm:block" />
+              </Link>
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <div className="sm:hidden">
+                  <BalancePill account={w.account} />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Status</label>
-                  <select
-                    value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  >
-                    <option value="active">Active</option>
-                    <option value="on_leave">On Leave</option>
-                    <option value="terminated">Terminated</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Phone Number</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 01711-123456"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    placeholder="e.g. karim@farm.com (optional)"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                  onClick={() => setPaying(w)}
+                  aria-label={`Pay ${w.name}`}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : 'Save Employee'}
+                  <Wallet className="h-4 w-4" /> Pay
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
+            </li>
+          ))}
+        </ul>
       )}
 
-      {/* Salary Payment Modal */}
-      {isSalaryModalOpen && salaryEmployee && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
-          <div className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-slate-100 bg-white p-5 shadow-xl sm:rounded-2xl sm:p-6">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">Record Salary Payment</h2>
-                <p className="text-xs text-slate-500 mt-0.5">{salaryEmployee.name} — {salaryEmployee.role}</p>
-              </div>
-              <button
-                onClick={() => setIsSalaryModalOpen(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mt-3 rounded-xl bg-indigo-50 border border-indigo-100 p-3 text-xs text-indigo-700">
-              Contracted monthly salary: <span className="font-bold">৳{(salaryEmployee.salary ?? 0).toLocaleString()}</span>
-            </div>
-
-            {salaryError && (
-              <div className="mt-3 rounded-xl bg-red-50 p-3 text-xs font-medium text-red-700 border border-red-100">
-                {salaryError}
-              </div>
-            )}
-
-            <form onSubmit={handleSalarySubmit} className="mt-4 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Amount Paid (৳)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  required
-                  value={salaryForm.amount}
-                  onChange={(e) => setSalaryForm({ ...salaryForm, amount: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Month</label>
-                  <select
-                    value={salaryForm.periodMonth}
-                    onChange={(e) => setSalaryForm({ ...salaryForm, periodMonth: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  >
-                    {MONTHS.map((m, i) => (
-                      <option key={m} value={i + 1}>{m}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Year</label>
-                  <input
-                    type="number"
-                    min="2020"
-                    max="2099"
-                    value={salaryForm.periodYear}
-                    onChange={(e) => setSalaryForm({ ...salaryForm, periodYear: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">Note (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. July 2026 salary"
-                  value={salaryForm.note}
-                  onChange={(e) => setSalaryForm({ ...salaryForm, note: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsSalaryModalOpen(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  {loading ? 'Recording...' : 'Record Payment'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {adding && (
+        <WorkerFormModal
+          onClose={() => setAdding(false)}
+          onSaved={(saved) => {
+            setAdding(false);
+            router.push(`/dashboard/employees/${saved.id}`);
+          }}
+        />
+      )}
+      {paying && (
+        <WorkerPaymentModal
+          worker={paying}
+          onClose={() => setPaying(null)}
+          onSaved={() => {
+            setPaying(null);
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );
