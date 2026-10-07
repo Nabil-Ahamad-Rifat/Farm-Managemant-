@@ -299,7 +299,8 @@ export default async function DashboardPage() {
               <PackageOpen className="h-4 w-4" />
             </div>
           </div>
-          <p className="mt-2 text-xl font-extrabold text-slate-900">{tk(month.profit.otherExpenses)}</p>
+          <p className="mt-2 text-xl font-extrabold text-slate-900">{tk(month.profit.otherExpenses + month.profit.animalCare)}</p>
+          {month.profit.animalCare > 0 && <p className="text-[11px] text-slate-500">Includes animal care {tk(month.profit.animalCare)}</p>}
           <Link href="/dashboard/expenses" className="text-[11px] text-red-600 hover:underline">View expenses →</Link>
         </div>
       </div>

@@ -909,7 +909,7 @@ export function labourBetween(workers: WorkerLike[], from: Date | string, to: Da
 // Farm money for any date range, two ways:
 // - Profit (what the farm earned and spent, paid or not): sales made + other
 //   income − feed bought (spread over its days when set) − labour earned
-//   (and advances written off) − other expenses.
+//   (and advances written off) − animal care − other expenses.
 // - Cash flow (money that actually moved): money received from customers +
 //   other income − paid to suppliers − feed paid on the spot (no supplier) −
 //   paid to workers − other expenses.
@@ -926,6 +926,8 @@ export interface FinanceData {
   feed: (ScheduledFeed & { supplierId?: string | null })[];
   supplierPayments: { amount: number; date: Date | string }[];
   workers: WorkerLike[];
+  /** Costs written on animal records (vet, medicine, vaccine, semen...), paid on the record's day. */
+  animalCosts?: { amount: number; date: Date | string }[];
 }
 
 export interface FinanceSummary {
@@ -939,6 +941,8 @@ export interface FinanceSummary {
     labour: number;
     /** Worker advances given up in the range (a loss). */
     writtenOff: number;
+    /** Costs from animal records. */
+    animalCare: number;
     otherExpenses: number;
     costs: number;
     profit: number;
@@ -950,6 +954,7 @@ export interface FinanceSummary {
     toSuppliers: number;
     feedPaidOnSpot: number;
     toWorkers: number;
+    animalCare: number;
     otherExpenses: number;
     moneyOut: number;
     net: number;
@@ -979,6 +984,7 @@ export function financeBetween(d: FinanceData, from: Date | string, to: Date | s
   }
   const otherIncome = sumIn(d.otherIncome);
   const otherExpenses = sumIn(d.otherExpenses);
+  const animalCare = sumIn(d.animalCosts ?? []);
   const feed = toPaisa(feedCostBetween(d.feed, from, to));
   const labour = labourBetween(d.workers, from, to, now);
   const labourEarned = toPaisa(labour.earned);
@@ -995,9 +1001,9 @@ export function financeBetween(d: FinanceData, from: Date | string, to: Date | s
   const toWorkers = toPaisa(labour.paid);
 
   const income = salesMade + otherIncome;
-  const costs = feed + labourEarned + writtenOff + otherExpenses;
+  const costs = feed + labourEarned + writtenOff + animalCare + otherExpenses;
   const moneyIn = fromCustomers + otherIncome;
-  const moneyOut = toSuppliers + feedPaidOnSpot + toWorkers + otherExpenses;
+  const moneyOut = toSuppliers + feedPaidOnSpot + toWorkers + animalCare + otherExpenses;
   return {
     profit: {
       salesMade: toTaka(salesMade),
@@ -1007,6 +1013,7 @@ export function financeBetween(d: FinanceData, from: Date | string, to: Date | s
       feed: toTaka(feed),
       labour: toTaka(labourEarned),
       writtenOff: toTaka(writtenOff),
+      animalCare: toTaka(animalCare),
       otherExpenses: toTaka(otherExpenses),
       costs: toTaka(costs),
       profit: toTaka(income - costs),
@@ -1018,6 +1025,7 @@ export function financeBetween(d: FinanceData, from: Date | string, to: Date | s
       toSuppliers: toTaka(toSuppliers),
       feedPaidOnSpot: toTaka(feedPaidOnSpot),
       toWorkers: toTaka(toWorkers),
+      animalCare: toTaka(animalCare),
       otherExpenses: toTaka(otherExpenses),
       moneyOut: toTaka(moneyOut),
       net: toTaka(moneyIn - moneyOut),

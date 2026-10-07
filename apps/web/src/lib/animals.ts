@@ -116,6 +116,29 @@ export async function getDueSoon(tenantId: string, now = new Date()) {
   return dueSoon(cows.map((c) => ({ ...c, events: byCow.get(c.id) ?? [] })), now);
 }
 
+/** Every animal record with a cost (vet, medicine, vaccine, semen...), newest first, for the expense list. */
+export async function listAnimalCosts(tenantId: string) {
+  const [events, cows] = await Promise.all([
+    db.animalEvent.findMany({
+      where: { tenantId, cost: { gt: 0 } },
+      select: { id: true, cowId: true, type: true, title: true, cost: true, date: true },
+      orderBy: { date: 'desc' },
+    }),
+    db.cow.findMany({ where: { tenantId }, select: { id: true, tagNumber: true, name: true } }),
+  ]);
+  const byId = new Map(cows.map((c) => [c.id, c]));
+  return events.map((e) => ({
+    id: e.id,
+    cowId: e.cowId,
+    tagNumber: byId.get(e.cowId)?.tagNumber ?? '?',
+    animalName: byId.get(e.cowId)?.name ?? '',
+    type: e.type,
+    title: e.title,
+    amount: e.cost!,
+    date: e.date,
+  }));
+}
+
 /** The suggested Cow ID for the next animal (C-001, C-002...). */
 export async function suggestAnimalId(tenantId: string) {
   const cows = await db.cow.findMany({ where: { tenantId }, select: { tagNumber: true } });

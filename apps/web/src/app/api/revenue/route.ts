@@ -43,7 +43,8 @@ export const GET = withAuth(async (req, { tenantId }) => {
         salesCount: s.salesCount,
         totalSalaryCost: s.labour + s.writtenOff,
         totalFeedCost: s.feed,
-        totalOtherCost: s.otherExpenses,
+        // Older builds show one "other costs" line: animal care is part of it.
+        totalOtherCost: s.otherExpenses + s.animalCare,
         totalCost: s.costs,
         netProfit: s.profit,
       };

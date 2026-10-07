@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Trash2, Edit3, X, PackageOpen } from 'lucide-react';
+import { Plus, Search, Trash2, Edit3, X, PackageOpen, PawPrint } from 'lucide-react';
 import type { OtherExpense } from '@farm/shared-types';
 import { webApiClient } from '@farm/api-client';
 import { LIST_PERIODS, inListPeriod, farmToday, type ListPeriod, sumAmounts } from '@farm/business-logic';
@@ -25,9 +26,36 @@ const CATEGORY_COLORS: Record<string, string> = {
   electricity: 'bg-yellow-50 text-yellow-700 border-yellow-200',
   repair: 'bg-red-50 text-red-700 border-red-200',
   other: 'bg-gray-50 text-gray-700 border-gray-200',
+  animal: 'bg-emerald-50 text-emerald-700 border-emerald-200',
 };
 
-export default function ExpenseManager({ initialExpenses }: { initialExpenses: OtherExpense[] }) {
+/** A cost written on an animal record (treatment, vaccine, AI...). Edited on the animal's page. */
+export interface AnimalCost {
+  id: string;
+  cowId: string;
+  tagNumber: string;
+  animalName: string;
+  type: string;
+  title: string | null;
+  amount: number;
+  date: string | Date;
+}
+
+const RECORD_LABELS: Record<string, string> = {
+  vaccine: 'Vaccine',
+  insemination: 'Semen / AI',
+  pregnancy_check: 'Pregnancy check',
+  calving: 'Calving',
+  treatment: 'Treatment',
+  deworming: 'Deworming',
+  weight: 'Weight',
+  other: 'Animal care',
+};
+
+/** One line in the list: an expense entered here, or an animal record's cost. */
+type Row = { key: string; description: string; detail?: string; category: string; amount: number; date: string | Date; expense?: OtherExpense; cowId?: string };
+
+export default function ExpenseManager({ initialExpenses, animalCosts = [] }: { initialExpenses: OtherExpense[]; animalCosts?: AnimalCost[] }) {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -92,15 +120,30 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
     }
   }
 
-  const filteredExpenses = initialExpenses.filter(exp => {
-    const matchesSearch = exp.description.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = categoryFilter === 'all' || exp.category === categoryFilter;
-    const matchesPeriod = inListPeriod(exp.expenseDate, period);
+  const rows: Row[] = [
+    ...initialExpenses.map((exp): Row => ({ key: 'e' + exp.id, description: exp.description, category: exp.category, amount: exp.amount, date: exp.expenseDate, expense: exp })),
+    ...animalCosts.map((a): Row => ({
+      key: 'a' + a.id,
+      description: `${RECORD_LABELS[a.type] ?? 'Animal care'}${a.title ? `: ${a.title}` : ''}`,
+      detail: `${a.tagNumber}${a.animalName && a.animalName !== a.tagNumber ? ` · ${a.animalName}` : ''}`,
+      category: 'animal',
+      amount: a.amount,
+      date: a.date,
+      cowId: a.cowId,
+    })),
+  ].sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime());
+
+  const q = search.trim().toLowerCase();
+  const filteredExpenses = rows.filter(row => {
+    const matchesSearch = !q || row.description.toLowerCase().includes(q) || (row.detail ?? '').toLowerCase().includes(q);
+    const matchesCategory = categoryFilter === 'all' || row.category === categoryFilter;
+    const matchesPeriod = inListPeriod(row.date, period);
     return matchesSearch && matchesCategory && matchesPeriod;
   });
 
   const totalAmount = sumAmounts(filteredExpenses);
-  const categoryLabel = (val: string) => CATEGORIES.find(c => c.value === val)?.label || val;
+  const animalTotal = sumAmounts(filteredExpenses.filter(r => r.category === 'animal'));
+  const categoryLabel = (val: string) => (val === 'animal' ? 'Animal care' : CATEGORIES.find(c => c.value === val)?.label || val);
 
   return (
     <div className="space-y-6">
@@ -108,7 +151,7 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Other Expenses</h1>
-          <p className="mt-1 text-slate-500">Track vet fees, equipment, medicines, transport, and miscellaneous costs.</p>
+          <p className="mt-1 text-slate-500">Vet fees, equipment, medicine, transport and other costs. Costs written on animal records show here as Animal care.</p>
         </div>
         <button
           onClick={openCreateModal}
@@ -122,11 +165,14 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
       {/* Total Banner */}
       <div className="rounded-2xl border border-red-100 bg-gradient-to-r from-red-500/10 via-red-500/5 to-transparent p-6 flex items-center justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-red-800">Total Other Costs</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-red-800">Total costs</p>
           <p className="mt-1 text-3xl font-extrabold text-slate-900">
             ৳{totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="text-xs text-red-700 mt-1">{filteredExpenses.length} expense records</p>
+          <p className="text-xs text-red-700 mt-1">
+            {filteredExpenses.length} record{filteredExpenses.length === 1 ? '' : 's'}
+            {animalTotal > 0 ? ` · includes animal care ৳${animalTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : ''}
+          </p>
         </div>
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-600 text-white shadow-md shadow-red-600/20">
           <PackageOpen className="h-6 w-6" />
@@ -164,7 +210,7 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          {[{ value: 'all', label: 'All' }, ...CATEGORIES].map(({ value, label }) => (
+          {[{ value: 'all', label: 'All' }, ...CATEGORIES, { value: 'animal', label: 'Animal care' }].map(({ value, label }) => (
             <button
               key={value}
               onClick={() => setCategoryFilter(value)}
@@ -199,8 +245,11 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
               </tr>
             ) : (
               filteredExpenses.map(exp => (
-                <tr key={exp.id} className="hover:bg-slate-50/50 transition">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-900">{exp.description}</td>
+                <tr key={exp.key} className="hover:bg-slate-50/50 transition">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-900">
+                    {exp.description}
+                    {exp.detail && <span className="block text-xs font-normal text-slate-500">{exp.detail}</span>}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex items-center text-[11px] font-semibold uppercase px-2.5 py-1 rounded-full border ${CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.other}`}>
                       {categoryLabel(exp.category)}
@@ -210,17 +259,27 @@ export default function ExpenseManager({ initialExpenses }: { initialExpenses: O
                     ৳{exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                    {new Date(exp.expenseDate).toLocaleDateString()}
+                    {new Date(exp.date).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => openEditModal(exp)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition">
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => handleDelete(exp.id)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 transition">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+                    {exp.expense ? (
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => openEditModal(exp.expense!)} aria-label="Edit expense" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition">
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                        <button onClick={() => handleDelete(exp.expense!.id)} aria-label="Delete expense" className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 transition">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <Link
+                        href={`/dashboard/cows/${exp.cowId}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                        title="Edit this cost on the animal's record"
+                      >
+                        <PawPrint className="h-3.5 w-3.5" /> Open animal
+                      </Link>
+                    )}
                   </td>
                 </tr>
               ))

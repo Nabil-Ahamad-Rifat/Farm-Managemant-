@@ -732,6 +732,8 @@ describe('financeBetween', () => {
         payments: [{ amount: 5000, date: noon('2026-10-15') }, { amount: 100, date: noon('2026-10-20'), kind: 'writeoff' }],
       },
     ],
+    // a treatment in October and a vaccine in November
+    animalCosts: [{ amount: 450, date: noon('2026-10-09') }, { amount: 99, date: noon('2026-11-02') }],
   };
 
   it('works out profit (earned basis) and cash flow for October', () => {
@@ -744,9 +746,10 @@ describe('financeBetween', () => {
       feed: 2000 + 300 + 400,
       labour: 18600,
       writtenOff: 100,
+      animalCare: 450,
       otherExpenses: 150,
-      costs: 2700 + 18600 + 100 + 150,
-      profit: 2000 - 21550,
+      costs: 2700 + 18600 + 100 + 450 + 150,
+      profit: 2000 - 22000,
     });
     expect(r.cash).toEqual({
       fromCustomers: 600 + 999 + 300,
@@ -755,9 +758,10 @@ describe('financeBetween', () => {
       toSuppliers: 700,
       feedPaidOnSpot: 300,
       toWorkers: 5000,
+      animalCare: 450,
       otherExpenses: 150,
-      moneyOut: 6150,
-      net: 2099 - 6150,
+      moneyOut: 6600,
+      net: 2099 - 6600,
     });
   });
 

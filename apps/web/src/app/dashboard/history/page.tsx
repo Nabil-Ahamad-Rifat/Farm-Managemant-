@@ -17,6 +17,7 @@ const TYPES: { value: LedgerType | null; label: string }[] = [
   { value: 'supplier', label: 'Paid suppliers' },
   { value: 'salary', label: 'Paid workers' },
   { value: 'expense', label: 'Expenses' },
+  { value: 'animal', label: 'Animal care' },
   { value: 'writeoff', label: 'Written off' },
 ];
 

@@ -12,7 +12,7 @@ import { totalPayable } from '@/lib/payables';
 
 /** Everything the money maths needs, for the whole farm. */
 export async function loadFinanceData(tenantId: string): Promise<FinanceData> {
-  const [sales, customerPayments, otherIncome, otherExpenses, feed, supplierPayments, workers] = await Promise.all([
+  const [sales, customerPayments, otherIncome, otherExpenses, feed, supplierPayments, workers, animalCosts] = await Promise.all([
     db.sale.findMany({ where: { tenantId }, select: { amount: true, createdAt: true, customerId: true, status: true } }),
     db.payment.findMany({ where: { tenantId }, select: { amount: true, paidAt: true } }),
     db.otherIncome.findMany({ where: { tenantId }, select: { amount: true, incomeDate: true } }),
@@ -23,6 +23,7 @@ export async function loadFinanceData(tenantId: string): Promise<FinanceData> {
     }),
     db.supplierPayment.findMany({ where: { tenantId }, select: { amount: true, paidAt: true } }),
     farmWorkers(tenantId),
+    db.animalEvent.findMany({ where: { tenantId, cost: { gt: 0 } }, select: { cost: true, date: true } }),
   ]);
   return {
     sales: sales.map((s) => ({ amount: s.amount, date: s.createdAt, customerId: s.customerId, status: s.status })),
@@ -32,6 +33,7 @@ export async function loadFinanceData(tenantId: string): Promise<FinanceData> {
     feed,
     supplierPayments: supplierPayments.map((p) => ({ amount: p.amount, date: p.paidAt })),
     workers,
+    animalCosts: animalCosts.map((e) => ({ amount: e.cost ?? 0, date: e.date })),
   };
 }
 

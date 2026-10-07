@@ -115,6 +115,7 @@ export default function MonthlyReport({
             ['Other income', tk(p.otherIncome)],
             ['Feed bought', '− ' + tk(p.feed)],
             ["Workers' pay earned", '− ' + tk(p.labour + p.writtenOff)],
+            ['Animal care', '− ' + tk(p.animalCare)],
             ['Other expenses', '− ' + tk(p.otherExpenses)],
             ['Cash in / out', `${tk(money.cash.moneyIn)} / ${tk(money.cash.moneyOut)}`],
           ].map(([k, v]) => (

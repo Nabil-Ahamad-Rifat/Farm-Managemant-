@@ -126,6 +126,7 @@ export default function RevenuePortal({ report }: { report: FinanceReport }) {
             <Row label="Feed bought" value={'− ' + tk(p.feed)} href={historyHref('feed')} hint="Feed with days set is spread over those days" />
             <Row label="Workers' pay earned" value={'− ' + tk(p.labour)} href="/dashboard/employees" hint="Salary ÷ 30 per day worked, plus daily labour" />
             {p.writtenOff > 0 && <Row label="Advances written off" value={'− ' + tk(p.writtenOff)} href={historyHref('writeoff')} />}
+            <Row label="Animal care" value={'− ' + tk(p.animalCare)} href={historyHref('animal')} hint="Costs on animal records: vet, medicine, vaccine, AI" />
             <Row label="Other expenses" value={'− ' + tk(p.otherExpenses)} href={historyHref('expense')} />
             <Row label="Profit" value={signed(p.profit)} strong />
           </dl>
@@ -150,6 +151,7 @@ export default function RevenuePortal({ report }: { report: FinanceReport }) {
             <Row label="Paid to suppliers" value={'− ' + tk(c.toSuppliers)} href={historyHref('supplier')} />
             {c.feedPaidOnSpot > 0 && <Row label="Feed paid on the spot" value={'− ' + tk(c.feedPaidOnSpot)} href={historyHref('feed')} />}
             <Row label="Paid to workers" value={'− ' + tk(c.toWorkers)} href={historyHref('salary')} />
+            {c.animalCare > 0 && <Row label="Animal care" value={'− ' + tk(c.animalCare)} href={historyHref('animal')} />}
             <Row label="Other expenses" value={'− ' + tk(c.otherExpenses)} href={historyHref('expense')} />
             <Row label="Money out" value={'− ' + tk(c.moneyOut)} strong />
           </dl>
