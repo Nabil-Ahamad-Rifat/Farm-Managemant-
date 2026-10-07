@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Trash2, Edit3, Wallet, HandCoins, AlertCircle, FileText, Users } from 'lucide-react';
+import { Plus, Search, Trash2, Edit3, Wallet, HandCoins, AlertCircle, FileText, Users, Milk } from 'lucide-react';
 import type { Cow, Sale } from '@farm/shared-types';
 import { webApiClient } from '@farm/api-client';
 import { LIST_PERIODS, inListPeriod, type ListPeriod } from '@farm/business-logic';
@@ -17,6 +17,7 @@ import {
   salePaid,
   tk,
   fmtDate,
+  litres,
 } from '@/components/sales/shared';
 
 const STATUS_FILTERS = [
@@ -81,6 +82,10 @@ export default function SalesManager({
 
   const sold = filtered.reduce((s, x) => s + x.amount, 0);
   const paid = filtered.reduce((s, x) => s + salePaid(x), 0);
+  // Milk litres and taka in the same filtered sales (the rule milkLitres uses in business-logic).
+  const milk = filtered.filter((x) => x.saleType === 'milk');
+  const milkLitres = milk.reduce((s, x) => s + (x.quantity ?? 0), 0);
+  const milkAmount = milk.reduce((s, x) => s + x.amount, 0);
 
   return (
     <div className="space-y-6">
@@ -107,8 +112,15 @@ export default function SalesManager({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCard label="Sold (filtered)" value={tk(sold)} Icon={Wallet} tone="slate" />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <SummaryCard label="Sold (filtered)" value={tk(sold)} Icon={Wallet} tone="slate" hint={`${filtered.length} sale${filtered.length === 1 ? '' : 's'}`} />
+        <SummaryCard
+          label="Milk sold"
+          value={litres(milkLitres)}
+          Icon={Milk}
+          tone="slate"
+          hint={milkLitres > 0 ? `${tk(milkAmount)} · avg ${tk(Math.round((milkAmount / milkLitres) * 100) / 100)}/L` : 'No milk sales in this view'}
+        />
         <SummaryCard label="Received on these sales" value={tk(paid)} Icon={HandCoins} tone="emerald" />
         <Link href="/dashboard/customers" className="block">
           <SummaryCard label="Total due — all customers" value={tk(totalDue)} Icon={AlertCircle} tone="red" hint="View who owes →" />

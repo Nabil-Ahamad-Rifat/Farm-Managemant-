@@ -3,9 +3,8 @@ import { ChevronLeft, ChevronRight, Milk, ShoppingBag, Wallet, History, AlertCir
 import { farmMonth, shiftMonth, type FinanceSummary, type MonthStatement } from '@farm/business-logic';
 import type { ReportLine } from '@/lib/monthly-report';
 import CollectButton from '@/components/sales/CollectButton';
-import { SummaryCard, CustomerTypeBadge, tk, monthLabel } from '@/components/sales/shared';
+import { SummaryCard, CustomerTypeBadge, tk, monthLabel, litres } from '@/components/sales/shared';
 
-const litres = (n: number) => `${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })} L`;
 
 /** A balance: due in red, advance in green, or "Clear". */
 function Balance({ value, strong }: { value: number; strong?: boolean }) {

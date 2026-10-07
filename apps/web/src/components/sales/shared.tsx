@@ -37,6 +37,8 @@ export function tk(amount: number) {
 
 /** Today on the farm's clock (Bangladesh), not UTC: right after midnight it is already the new day. */
 export const todayStr = () => farmToday();
+/** "1,250.5 L" */
+export const litres = (n: number) => `${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })} L`;
 export const toDay = (d: Date | string) => new Date(d).toISOString().slice(0, 10);
 /** "October 2026" for a "YYYY-MM" month (UTC, like the month math). */
 export const monthLabel = (month: string) =>
