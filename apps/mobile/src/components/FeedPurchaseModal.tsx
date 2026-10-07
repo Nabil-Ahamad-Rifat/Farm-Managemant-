@@ -91,8 +91,6 @@ export function FeedPurchaseModal({
     setError('');
     if (!form.name.trim()) return setError('Enter the feed name.');
     if (!(qty > 0)) return setError('Enter the quantity bought.');
-    // Older batches have no days set and may stay that way when edited.
-    if (!(days >= 1) && !(editing && !batch!.coverDays)) return setError('Choose how many days this feed will last.');
     if (!editing && paidNow > total) return setError('Paid now cannot be more than the total.');
     if (!editing && owed > 0 && !supplier) return setError('Choose who you bought from, so the due is tracked against them.');
 
@@ -159,6 +157,9 @@ export function FeedPurchaseModal({
       <View>
         <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-600">How many days will it last?</Text>
         <View className="flex-row flex-wrap gap-2">
+          <Pressable onPress={() => setForm({ ...form, coverDays: '' })} className={`rounded-xl px-3.5 py-2 ${form.coverDays === '' ? 'bg-slate-900' : 'border border-slate-200 bg-white'}`}>
+            <Text className={`text-xs font-semibold ${form.coverDays === '' ? 'text-white' : 'text-slate-600'}`}>Don&apos;t know</Text>
+          </Pressable>
           {DAY_CHIPS.map((d) => {
             const active = days === d && !customDays;
             return (
@@ -179,6 +180,11 @@ export function FeedPurchaseModal({
             accessibilityLabel="Other number of days"
           />
         </View>
+        {form.coverDays === '' && total > 0 ? (
+          <Text className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
+            The full {tk(total)} counts as feed cost on the day you bought it.
+          </Text>
+        ) : null}
         {days >= 1 && qty > 0 ? (
           <Text className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
             ≈ {round2(qty / days)} kg/day · {tk(round2(total / days))}/day · lasts until {fmtDate(lastDay)}

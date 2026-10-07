@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  loginSchema, registerSchema, forgotPasswordSchema, customerSchema, paymentSchema, saleSchema, supplierSchema, feedPurchaseSchema, farmSettingsSchema,
+  loginSchema, registerSchema, forgotPasswordSchema, customerSchema, paymentSchema, saleSchema, supplierSchema, feedPurchaseSchema, farmSettingsSchema, animalSchema, animalEventSchema,
 } from './index';
 
 describe('loginSchema', () => {
@@ -155,5 +155,49 @@ describe('farmSettingsSchema', () => {
   it('rejects zero or a missing price', () => {
     expect(farmSettingsSchema.safeParse({ defaultMilkPrice: 0 }).success).toBe(false);
     expect(farmSettingsSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('animalSchema', () => {
+  const photo = { data: 'A'.repeat(200), mimeType: 'image/jpeg', width: 800, height: 600 };
+
+  it('accepts a minimal animal and fills defaults', () => {
+    const a = animalSchema.parse({ tagNumber: ' C-001 ', name: '', photo });
+    expect(a).toMatchObject({ tagNumber: 'C-001', gender: 'female', status: 'active' });
+    expect(a.name).toBeUndefined();
+  });
+
+  it('requires a Cow ID', () => {
+    expect(animalSchema.safeParse({ tagNumber: '  ' }).success).toBe(false);
+  });
+
+  it('rejects bad dates, genders and photo data', () => {
+    expect(animalSchema.safeParse({ tagNumber: 'C-1', birthDate: '06/10/2026' }).success).toBe(false);
+    expect(animalSchema.safeParse({ tagNumber: 'C-1', gender: 'other' }).success).toBe(false);
+    expect(animalSchema.safeParse({ tagNumber: 'C-1', photo: { data: 'not base64 !!'.repeat(20) } }).success).toBe(false);
+  });
+});
+
+describe('animalEventSchema', () => {
+  it('accepts a vaccine with a next due date', () => {
+    const e = animalEventSchema.parse({ type: 'vaccine', date: '2026-10-01', title: 'FMD', nextDueDate: '2027-04-01', cost: '150' });
+    expect(e).toMatchObject({ type: 'vaccine', title: 'FMD', cost: 150 });
+  });
+
+  it('needs the details each type depends on', () => {
+    expect(animalEventSchema.safeParse({ type: 'vaccine', date: '2026-10-01' }).success).toBe(false);
+    expect(animalEventSchema.safeParse({ type: 'pregnancy_check', date: '2026-10-01' }).success).toBe(false);
+    expect(animalEventSchema.safeParse({ type: 'weight', date: '2026-10-01' }).success).toBe(false);
+    expect(animalEventSchema.safeParse({ type: 'insemination', date: '2026-10-01' }).success).toBe(true);
+  });
+
+  it('rejects a next due date before the record date', () => {
+    expect(animalEventSchema.safeParse({ type: 'vaccine', date: '2026-10-01', title: 'FMD', nextDueDate: '2026-09-01' }).success).toBe(false);
+  });
+
+  it('only allows adding a calf with a calving', () => {
+    const calf = { tagNumber: 'C-010', gender: 'male', photo: { data: 'A'.repeat(200) } };
+    expect(animalEventSchema.safeParse({ type: 'calving', date: '2026-10-01', createCalf: calf }).success).toBe(true);
+    expect(animalEventSchema.safeParse({ type: 'treatment', date: '2026-10-01', createCalf: calf }).success).toBe(false);
   });
 });

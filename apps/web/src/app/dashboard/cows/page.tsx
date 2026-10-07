@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
-import { db } from '@/lib/db';
+import { getDueSoon, listAnimals, suggestAnimalId } from '@/lib/animals';
 import CowManager from '@/components/CowManager';
 
 export default async function CowsPage() {
@@ -9,10 +9,11 @@ export default async function CowsPage() {
     redirect('/login');
   }
 
-  const cows = await db.cow.findMany({
-    where: { tenantId: session.tenantId },
-    orderBy: { createdAt: 'desc' },
-  });
+  const [cows, suggestedId, dueSoon] = await Promise.all([
+    listAnimals(session.tenantId),
+    suggestAnimalId(session.tenantId),
+    getDueSoon(session.tenantId),
+  ]);
 
-  return <CowManager initialCows={cows} />;
+  return <CowManager initialCows={cows} suggestedId={suggestedId} dueSoon={dueSoon} />;
 }

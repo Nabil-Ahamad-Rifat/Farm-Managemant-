@@ -5,6 +5,8 @@ import { db } from '@/lib/db';
 import { collectedBetween, legacySaleFilter, listCustomersWithBalances } from '@/lib/receivables';
 import { listFeed, listSuppliersWithBalances } from '@/lib/payables';
 import { feedCostBetween } from '@/lib/feed-cost';
+import { getDueSoon } from '@/lib/animals';
+import DueSoonPanel from '@/components/animals/DueSoonPanel';
 import { PaymentStatusPill, CustomerTypeBadge, tk } from '@/components/sales/shared';
 import CollectButton from '@/components/sales/CollectButton';
 import { Users, BadgeCheck, Wheat, DollarSign, ArrowRight, TrendingUp, PackageOpen, Banknote, HandCoins, Phone, Store, AlertTriangle } from 'lucide-react';
@@ -44,6 +46,7 @@ export default async function DashboardPage() {
     customers,
     suppliers,
     monthlyFeedCost,
+    animalsDue,
   ] = await Promise.all([
     db.employee.findMany({ where: { tenantId } }),
     db.cow.count({ where: { tenantId } }),
@@ -104,6 +107,8 @@ export default async function DashboardPage() {
     listSuppliersWithBalances(tenantId),
     // Purchases spread over their days, plus usage of older batches, this month so far
     feedCostBetween(tenantId, startOfMonthUTC, now),
+    // Vaccines, calvings and pregnancy checks coming up
+    getDueSoon(tenantId, now),
   ]);
 
   const employeeCount = allEmployees.length;
@@ -223,6 +228,8 @@ export default async function DashboardPage() {
           </span>
         </Link>
       )}
+
+      {animalsDue.length > 0 && <DueSoonPanel items={animalsDue} />}
 
       <div className="grid gap-6 xl:grid-cols-2">
       {/* Who owes me */}
@@ -437,7 +444,7 @@ export default async function DashboardPage() {
               <p className="py-6 text-center text-sm text-slate-500">No cows registered in herd yet.</p>
             ) : (
               recentCows.map((cow) => (
-                <div key={cow.id} className="flex items-center justify-between py-3">
+                <Link key={cow.id} href={`/dashboard/cows/${cow.id}`} className="flex items-center justify-between rounded-lg px-2 py-3 transition hover:bg-slate-50">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{cow.name} <span className="text-xs font-normal text-slate-500">({cow.tagNumber})</span></p>
                     <p className="text-xs text-slate-500">{cow.breed || 'Breed unspecified'}</p>
@@ -448,7 +455,7 @@ export default async function DashboardPage() {
                   }`}>
                     {cow.status}
                   </span>
-                </div>
+                </Link>
               ))
             )}
           </div>

@@ -27,6 +27,8 @@ model Tenant {
   payments       Payment[]
   suppliers        Supplier[]
   supplierPayments SupplierPayment[]
+  animalPhotos     AnimalPhoto[]
+  animalEvents     AnimalEvent[]
 }
 
 model User {
@@ -114,20 +116,88 @@ model SalaryPayment {
   createdAt   DateTime @default(now())
 }
 
+// An animal. tagNumber is the "Cow ID" shown everywhere (auto-suggested as
+// C-001, C-002…, editable, unique per farm). Everything after status is
+// optional so documents from before the animal records keep working.
 model Cow {
   id            String   @id @default(auto()) @map("_id") @db.ObjectId
   tagNumber     String
   name          String
   breed         String?
   purchasePrice Float?
-  status        String   @default("active")
+  status        String   @default("active") // active | sold | dead
   tenantId      String   @db.ObjectId
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   sales         Sale[]
 
+  gender       String?   // female | male
+  category     String?   // cow | heifer | calf | bull
+  birthDate    DateTime?
+  color        String?
+  source       String?   // born | purchased
+  purchaseDate DateTime?
+  notes        String?
+  // The photo shown on cards; one of this animal's photos.
+  mainPhotoId  String?   @db.ObjectId
+  motherId     String?   @db.ObjectId
+  mother       Cow?      @relation("CowMother", fields: [motherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  calves       Cow[]     @relation("CowMother")
+
+  photos AnimalPhoto[]
+  events AnimalEvent[]
+
   @@unique([tagNumber, tenantId])
+}
+
+// A photo of an animal, stored in the database itself (resized JPEG bytes,
+// about 150-300 KB) so it is backed up and moved together with the data.
+model AnimalPhoto {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  cowId     String   @db.ObjectId
+  cow       Cow      @relation(fields: [cowId], references: [id], onDelete: Cascade)
+  tenantId  String   @db.ObjectId
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  data      Bytes
+  mimeType  String   @default("image/jpeg")
+  width     Int?
+  height    Int?
+  size      Int
+  caption   String?
+  takenAt   DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, cowId])
+}
+
+// One line of an animal's history: vaccine, insemination (semen/AI),
+// pregnancy_check, calving, treatment, deworming, weight or other.
+model AnimalEvent {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  cowId       String    @db.ObjectId
+  cow         Cow       @relation(fields: [cowId], references: [id], onDelete: Cascade)
+  tenantId    String    @db.ObjectId
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  type        String
+  date        DateTime
+  // Vaccine name / bull or semen straw / treatment or medicine.
+  title       String?
+  // When the next dose is due (vaccine, deworming) — drives the reminders.
+  nextDueDate DateTime?
+  // Pregnancy check: positive | negative.
+  result      String?
+  // Weight in kg.
+  value       Float?
+  cost        Float?
+  // Calving: the calf added as its own animal.
+  calfId      String?   @db.ObjectId
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([tenantId, cowId])
+  @@index([tenantId, type])
 }
 
 model FeedBatch {

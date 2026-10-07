@@ -397,20 +397,280 @@ export function customerMonths(sales: StatementSale[], payments: StatementPaymen
 }
 
 /**
- * Feed cost of scheduled batches that falls in [from, to] (whole UTC days,
- * both ends included): each batch adds total ÷ days for every covered day in
- * the range. Legacy batches are skipped — their cost comes from usage records.
+ * Feed cost for profit in [from, to] (whole UTC days, both ends included):
+ * - a batch with days set adds total ÷ days for every covered day in the range;
+ * - a batch without days (the owner usually doesn't know how long it lasts)
+ *   adds its full total on its purchase day.
+ * Usage records never add cost; they only move stock.
  */
-export function spreadFeedCost(batches: ScheduledFeed[], from: Date | string, to: Date | string): number {
+export function feedCostBetween(batches: ScheduledFeed[], from: Date | string, to: Date | string): number {
   const first = utcDayIndex(from);
   const last = utcDayIndex(to);
   let total = 0;
   for (const b of batches) {
-    if (!isScheduledFeed(b)) continue;
     const start = startDayOf(b);
+    if (!isScheduledFeed(b)) {
+      if (start >= first && start <= last) total += b.quantity * b.unitPrice;
+      continue;
+    }
     const end = start + b.coverDays - 1;
     const overlap = Math.min(end, last) - Math.max(start, first) + 1;
     if (overlap > 0) total += ((b.quantity * b.unitPrice) / b.coverDays) * overlap;
   }
   return round2(total);
+}
+
+export interface FeedMonthBatch extends ScheduledFeed {
+  name: string;
+  supplierId?: string | null;
+  paidAmount?: number | null;
+}
+
+/**
+ * Feed bought in one "YYYY-MM" month (by purchase date): totals, a subtotal
+ * per feed name (largest spend first) and the purchases, newest first.
+ * Paid/owed follow the supplier payment matching; a purchase with no
+ * supplier was paid in full.
+ */
+export function feedMonthSummary<T extends FeedMonthBatch>(batches: T[], month: string) {
+  const dayOf = (b: T) => utcDayIndex(b.purchasedAt ?? b.createdAt ?? new Date());
+  const purchases = batches
+    .filter((b) => monthKey(b.purchasedAt ?? b.createdAt ?? new Date()) === month)
+    .sort((a, b) => dayOf(b) - dayOf(a));
+
+  // Oldest first, so a feed type keeps the spelling it was first bought under.
+  const byName = new Map<string, { name: string; kg: number; spent: number; count: number }>();
+  let kg = 0;
+  let spent = 0;
+  let paid = 0;
+  for (const b of [...purchases].reverse()) {
+    const cost = toPaisa(b.quantity * b.unitPrice);
+    const paidPaisa = b.supplierId ? Math.min(cost, toPaisa(b.paidAmount ?? 0)) : cost;
+    kg += b.quantity;
+    spent += cost;
+    paid += paidPaisa;
+    const key = b.name.trim().toLowerCase();
+    const row = byName.get(key) ?? { name: b.name.trim(), kg: 0, spent: 0, count: 0 };
+    row.kg += b.quantity;
+    row.spent += cost;
+    row.count += 1;
+    byName.set(key, row);
+  }
+
+  return {
+    month,
+    totals: { kg: round2(kg), spent: toTaka(spent), paid: toTaka(paid), owed: toTaka(spent - paid), count: purchases.length },
+    byFeed: [...byName.values()]
+      .map((r) => ({ ...r, kg: round2(r.kg), spent: toTaka(r.spent) }))
+      .sort((a, b) => b.spent - a.spent),
+    purchases,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Animal records: IDs, breeding and health status, and what is due soon.
+// Dates are compared as UTC calendar days, like the rest of this file.
+// ---------------------------------------------------------------------------
+
+export const ANIMAL_EVENT_TYPES = [
+  'vaccine',
+  'insemination',
+  'pregnancy_check',
+  'calving',
+  'treatment',
+  'deworming',
+  'weight',
+  'other',
+] as const;
+export type AnimalEventType = (typeof ANIMAL_EVENT_TYPES)[number];
+
+/** Average cow gestation: insemination to calving. */
+export const GESTATION_DAYS = 283;
+/** When a pregnancy check is worth doing after insemination. */
+export const PREGNANCY_CHECK_AFTER_DAYS = 60;
+
+/** The next free "C-001"-style ID. IDs in other formats are left alone (and never repeated). */
+export function nextAnimalId(tags: string[], prefix = 'C'): string {
+  const taken = new Set(tags.map((t) => t.trim().toUpperCase()));
+  const pattern = new RegExp(`^${prefix}-(\\d+)$`, 'i');
+  let n = tags.reduce((max, t) => {
+    const m = t.trim().match(pattern);
+    return m ? Math.max(max, Number(m[1])) : max;
+  }, 0);
+  let id: string;
+  do {
+    n += 1;
+    id = `${prefix}-${String(n).padStart(3, '0')}`;
+  } while (taken.has(id));
+  return id;
+}
+
+const isoDay = (d: Date | string) => dayIndexToIso(utcDayIndex(d));
+
+/** `d` plus `days` calendar days, as "YYYY-MM-DD". */
+export function addDaysIso(d: Date | string, days: number): string {
+  return dayIndexToIso(utcDayIndex(d) + days);
+}
+
+/** Expected calving day ("YYYY-MM-DD") for an insemination on `inseminationDate`. */
+export function expectedCalving(inseminationDate: Date | string): string {
+  return addDaysIso(inseminationDate, GESTATION_DAYS);
+}
+
+/** Age as "2 y 3 m", "5 m" or "12 d". */
+export function ageLabel(birthDate: Date | string, now: Date | string = new Date()): string {
+  const b = new Date(birthDate);
+  const n = new Date(now);
+  let months = (n.getUTCFullYear() - b.getUTCFullYear()) * 12 + (n.getUTCMonth() - b.getUTCMonth());
+  if (n.getUTCDate() < b.getUTCDate()) months -= 1;
+  if (months <= 0) return `${Math.max(0, utcDayIndex(n) - utcDayIndex(b))} d`;
+  const years = Math.floor(months / 12);
+  const rest = months % 12;
+  if (years === 0) return `${rest} m`;
+  return rest ? `${years} y ${rest} m` : `${years} y`;
+}
+
+export interface AnimalEventLike {
+  type: string;
+  date: Date | string;
+  title?: string | null;
+  nextDueDate?: Date | string | null;
+  result?: string | null;
+  value?: number | null;
+  cost?: number | null;
+}
+
+export type PregnancyStatus = 'pregnant' | 'inseminated' | 'open' | 'unknown';
+
+export interface AnimalSummary {
+  lastVaccine: { title: string; date: string } | null;
+  /** Each vaccine/deworming whose latest dose has a next due date, soonest first. */
+  dueDoses: { type: string; title: string; dueDate: string }[];
+  lastInsemination: { title: string | null; date: string } | null;
+  pregnancy: PregnancyStatus;
+  /** Set while inseminated or pregnant after a known insemination. */
+  expectedCalving: string | null;
+  /** Insemination + 60 days, while no check has been recorded since. */
+  pregnancyCheckDue: string | null;
+  lastCalving: string | null;
+  latestWeight: { value: number; date: string } | null;
+  /** Sum of the cost of every record (vet, medicine, semen...). */
+  careCost: number;
+}
+
+/** Breeding and health status worked out from an animal's records. */
+export function animalSummary(events: AnimalEventLike[]): AnimalSummary {
+  const ordered = [...events].sort((a, b) => utcDayIndex(a.date) - utcDayIndex(b.date));
+  let pregnancy: PregnancyStatus = 'unknown';
+  let aiDate: string | null = null;
+  let lastInsemination: AnimalSummary['lastInsemination'] = null;
+  let lastVaccine: AnimalSummary['lastVaccine'] = null;
+  let lastCalving: string | null = null;
+  let latestWeight: AnimalSummary['latestWeight'] = null;
+  let careCost = 0;
+  // Latest dose per vaccine/deworming name: a newer dose replaces the older due date.
+  const doses = new Map<string, { type: string; title: string; dueDate: string | null }>();
+
+  for (const e of ordered) {
+    careCost += toPaisa(e.cost ?? 0);
+    const day = isoDay(e.date);
+    switch (e.type) {
+      case 'vaccine':
+      case 'deworming': {
+        const title = e.title?.trim() || (e.type === 'vaccine' ? 'Vaccine' : 'Deworming');
+        if (e.type === 'vaccine') lastVaccine = { title, date: day };
+        doses.set(`${e.type}:${title.toLowerCase()}`, { type: e.type, title, dueDate: e.nextDueDate ? isoDay(e.nextDueDate) : null });
+        break;
+      }
+      case 'insemination':
+        pregnancy = 'inseminated';
+        aiDate = day;
+        lastInsemination = { title: e.title?.trim() || null, date: day };
+        break;
+      case 'pregnancy_check':
+        if (e.result === 'positive') pregnancy = 'pregnant';
+        else if (e.result === 'negative') {
+          pregnancy = 'open';
+          aiDate = null;
+        }
+        break;
+      case 'calving':
+        pregnancy = 'open';
+        aiDate = null;
+        lastCalving = day;
+        break;
+      case 'weight':
+        if (typeof e.value === 'number') latestWeight = { value: e.value, date: day };
+        break;
+    }
+  }
+
+  // A check is due only if nothing was checked on or after the last insemination.
+  const ai = aiDate;
+  const checkedSinceAi = ai !== null && ordered.some((e) => e.type === 'pregnancy_check' && isoDay(e.date) >= ai);
+  const dueDoses = [...doses.values()]
+    .filter((d): d is { type: string; title: string; dueDate: string } => d.dueDate !== null)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+  return {
+    lastVaccine,
+    dueDoses,
+    lastInsemination,
+    pregnancy,
+    expectedCalving: ai && (pregnancy === 'pregnant' || pregnancy === 'inseminated') ? expectedCalving(ai) : null,
+    pregnancyCheckDue: ai && pregnancy === 'inseminated' && !checkedSinceAi ? addDaysIso(ai, PREGNANCY_CHECK_AFTER_DAYS) : null,
+    lastCalving,
+    latestWeight,
+    careCost: toTaka(careCost),
+  };
+}
+
+export interface DueItem {
+  cowId: string;
+  tagNumber: string;
+  name: string;
+  kind: 'vaccine' | 'deworming' | 'calving' | 'pregnancy_check';
+  title: string;
+  dueDate: string;
+  /** Negative when overdue. */
+  daysLeft: number;
+}
+
+/**
+ * What needs attention soon across animals, soonest first: vaccine and
+ * deworming doses overdue or due within `doseDays`, calvings expected within
+ * `calvingDays` (or up to `calvingDays` late), and pregnancy checks due
+ * within `doseDays`.
+ */
+export function dueSoon(
+  animals: { id: string; tagNumber: string; name: string; events: AnimalEventLike[] }[],
+  now: Date | string = new Date(),
+  { doseDays = 7, calvingDays = 30 }: { doseDays?: number; calvingDays?: number } = {},
+): DueItem[] {
+  const today = utcDayIndex(now);
+  const daysTo = (iso: string) => utcDayIndex(iso + 'T12:00:00Z') - today;
+  const items: DueItem[] = [];
+  for (const a of animals) {
+    const s = animalSummary(a.events);
+    const base = { cowId: a.id, tagNumber: a.tagNumber, name: a.name };
+    for (const d of s.dueDoses) {
+      const left = daysTo(d.dueDate);
+      if (left <= doseDays) {
+        items.push({ ...base, kind: d.type === 'deworming' ? 'deworming' : 'vaccine', title: d.title, dueDate: d.dueDate, daysLeft: left });
+      }
+    }
+    if (s.expectedCalving) {
+      const left = daysTo(s.expectedCalving);
+      if (left <= calvingDays && left >= -calvingDays) {
+        items.push({ ...base, kind: 'calving', title: 'Expected calving', dueDate: s.expectedCalving, daysLeft: left });
+      }
+    }
+    if (s.pregnancyCheckDue) {
+      const left = daysTo(s.pregnancyCheckDue);
+      if (left <= doseDays) {
+        items.push({ ...base, kind: 'pregnancy_check', title: 'Pregnancy check', dueDate: s.pregnancyCheckDue, daysLeft: left });
+      }
+    }
+  }
+  return items.sort((x, y) => x.daysLeft - y.daysLeft);
 }

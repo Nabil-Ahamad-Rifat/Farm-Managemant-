@@ -3,13 +3,15 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Trash2, Edit3, Wheat, AlertTriangle, X, BarChart2, Droplets, CalendarClock, Store } from 'lucide-react';
+import {
+  Plus, Search, Trash2, Edit3, Wheat, AlertTriangle, X, BarChart2, Droplets, CalendarClock, Store, ShoppingBag, Wallet, ChevronLeft, ChevronRight,
+} from 'lucide-react';
 import type { FeedBatch } from '@farm/shared-types';
 import { webApiClient } from '@farm/api-client';
-import { isLowStock, stockPercentage, totalStockValue } from '@farm/business-logic';
+import { feedMonthSummary, isLowStock, monthKey, shiftMonth, stockPercentage, totalStockValue } from '@farm/business-logic';
 import FeedPurchaseModal, { PRESET_FEED_NAMES } from '@/components/feed/FeedPurchaseModal';
 import type { PickerCustomer } from '@/components/sales/CustomerPicker';
-import { PaymentStatusPill, SummaryCard, tk, fmtDate } from '@/components/sales/shared';
+import { PaymentStatusPill, SummaryCard, tk, fmtDate, monthLabel } from '@/components/sales/shared';
 import { feedPayStatus } from '@/components/feed/shared';
 
 export default function FeedManager({
@@ -17,15 +19,19 @@ export default function FeedManager({
   suppliers,
   feedCostToday,
   totalPayable,
+  month,
 }: {
   initialFeed: FeedBatch[];
   suppliers: PickerCustomer[];
-  /** Today's share of all scheduled purchases plus today's usage of older batches. */
+  /** Today's feed cost: per-day share of purchases with days set, plus purchases without days bought today. */
   feedCostToday: number;
   totalPayable: number;
+  /** "YYYY-MM" shown in the feed account. */
+  month: string;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState('');
+  const [view, setView] = useState<'month' | 'stock'>('month');
   const [purchaseModal, setPurchaseModal] = useState<{ batch: FeedBatch | null } | null>(null);
   const [usageFeed, setUsageFeed] = useState<FeedBatch | null>(null);
   const [usageForm, setUsageForm] = useState({ quantity: '', note: '' });
@@ -67,11 +73,17 @@ export default function FeedManager({
     }
   }
 
+  const summary = feedMonthSummary(initialFeed, month);
+  const current = monthKey(new Date());
   const q = search.toLowerCase();
-  const filteredFeed = initialFeed.filter(
+  // "This month" lists that month's purchases; "In stock" lists everything with stock left, from any month.
+  const shown = view === 'stock' ? initialFeed.filter((b) => b.remainingQuantity > 0) : summary.purchases;
+  const filteredFeed = shown.filter(
     (item) => item.name.toLowerCase().includes(q) || (item.supplier?.name ?? '').toLowerCase().includes(q),
   );
   const runningLow = initialFeed.filter((b) => b.schedule && b.schedule.remaining > 0 && b.schedule.daysLeft <= 1);
+  const monthHref = (m: string) => `/dashboard/feed?month=${m}`;
+  const navBtn = 'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50';
 
   return (
     <div className="space-y-6">
@@ -79,25 +91,96 @@ export default function FeedManager({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Feed Inventory</h1>
-          <p className="mt-1 text-slate-500">What you bought, from whom, how long it lasts, and what it costs per day.</p>
+          <p className="mt-1 text-slate-500">What you bought each month, from whom, what it cost and what is still owed.</p>
         </div>
-        <button
-          onClick={() => setPurchaseModal({ batch: null })}
-          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
-        >
-          <Plus className="h-4 w-4" />
-          Buy feed
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <nav aria-label="Choose month" className="flex items-center gap-2">
+            <Link href={monthHref(shiftMonth(month, -1))} className={navBtn} aria-label="Previous month">
+              <ChevronLeft className="h-4 w-4" />
+            </Link>
+            <p className="min-w-36 text-center text-base font-bold text-slate-900" aria-live="polite">{monthLabel(month)}</p>
+            {month < current ? (
+              <Link href={monthHref(shiftMonth(month, 1))} className={navBtn} aria-label="Next month">
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            ) : (
+              <span className={`${navBtn} cursor-not-allowed opacity-40`} aria-hidden="true">
+                <ChevronRight className="h-4 w-4" />
+              </span>
+            )}
+          </nav>
+          <button
+            onClick={() => setPurchaseModal({ batch: null })}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          >
+            <Plus className="h-4 w-4" />
+            Buy feed
+          </button>
+        </div>
       </div>
 
-      {/* Summary */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCard label="Feed cost today" value={tk(feedCostToday)} Icon={CalendarClock} tone="slate" hint="Each purchase split over its days" />
-        <SummaryCard label="Current stock value" value={tk(Math.round(totalStockValue(initialFeed)))} Icon={BarChart2} tone="emerald" />
-        <Link href="/dashboard/suppliers" className="block">
-          <SummaryCard label="You owe suppliers" value={tk(totalPayable)} Icon={Store} tone="red" hint="Open suppliers →" />
-        </Link>
+      {/* This month's feed account */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard
+          label="Feed bought"
+          value={`${summary.totals.kg.toLocaleString('en-IN')} kg`}
+          Icon={Wheat}
+          tone="slate"
+          hint={`${summary.totals.count} purchase${summary.totals.count === 1 ? '' : 's'} in ${monthLabel(month)}`}
+        />
+        <SummaryCard label="Total spent" value={tk(summary.totals.spent)} Icon={ShoppingBag} tone="slate" hint="All feed bought this month" />
+        <SummaryCard label="Paid" value={tk(summary.totals.paid)} Icon={Wallet} tone="emerald" />
+        <SummaryCard label="Still owed" value={tk(summary.totals.owed)} Icon={Store} tone="red" hint="For this month's feed" />
       </div>
+
+      {summary.byFeed.length > 0 && (
+        <section aria-label="Subtotal per feed" className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
+              <tr>
+                {['Feed', 'Purchases', 'Quantity', 'Avg price', 'Spent'].map((h) => (
+                  <th key={h} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {summary.byFeed.map((f) => (
+                <tr key={f.name}>
+                  <td className="whitespace-nowrap px-5 py-3 text-sm font-semibold text-slate-900">{f.name}</td>
+                  <td className="whitespace-nowrap px-5 py-3 text-sm text-slate-600">{f.count}</td>
+                  <td className="whitespace-nowrap px-5 py-3 text-sm text-slate-600">{f.kg.toLocaleString('en-IN')} kg</td>
+                  <td className="whitespace-nowrap px-5 py-3 text-sm text-slate-600">{tk(Math.round((f.spent / f.kg) * 100) / 100)}/kg</td>
+                  <td className="whitespace-nowrap px-5 py-3 text-sm font-bold text-slate-900">{tk(f.spent)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="bg-slate-50">
+              <tr className="text-sm font-bold text-slate-900">
+                <td className="px-5 py-3">Total</td>
+                <td className="px-5 py-3">{summary.totals.count}</td>
+                <td className="px-5 py-3">{summary.totals.kg.toLocaleString('en-IN')} kg</td>
+                <td />
+                <td className="px-5 py-3">{tk(summary.totals.spent)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </section>
+      )}
+
+      <p className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
+        <span>
+          <CalendarClock className="mr-1 inline h-3.5 w-3.5" />
+          Feed cost today: <strong className="text-slate-700">{tk(feedCostToday)}</strong>
+        </span>
+        <span>
+          <BarChart2 className="mr-1 inline h-3.5 w-3.5" />
+          Stock value now: <strong className="text-slate-700">{tk(Math.round(totalStockValue(initialFeed)))}</strong>
+        </span>
+        <Link href="/dashboard/suppliers" className="hover:underline">
+          <Store className="mr-1 inline h-3.5 w-3.5" />
+          You owe suppliers in total: <strong className="text-red-600">{tk(totalPayable)}</strong> →
+        </Link>
+      </p>
 
       {runningLow.length > 0 && (
         <div role="status" className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -124,7 +207,26 @@ export default function FeedManager({
           </button>
         ))}
       </div>
-      <div className="relative max-w-md">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex gap-2" role="tablist" aria-label="Which feed to list">
+        {[
+          { value: 'month', label: `Bought in ${monthLabel(month)}` },
+          { value: 'stock', label: 'All in stock now' },
+        ].map((v) => (
+          <button
+            key={v.value}
+            role="tab"
+            aria-selected={view === v.value}
+            onClick={() => setView(v.value as 'month' | 'stock')}
+            className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
+              view === v.value ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+      <div className="relative max-w-md flex-1">
         <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <input
           type="text"
@@ -134,6 +236,7 @@ export default function FeedManager({
           onChange={(e) => setSearch(e.target.value)}
           className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-slate-400 focus:outline-none"
         />
+      </div>
       </div>
 
       {/* Table */}
@@ -151,7 +254,13 @@ export default function FeedManager({
             {filteredFeed.length === 0 ? (
               <tr>
                 <td colSpan={8} className="py-10 text-center text-sm text-slate-500">
-                  {initialFeed.length === 0 ? 'No feed bought yet. Use “Buy feed” to record your first purchase.' : 'No feed matches.'}
+                  {initialFeed.length === 0
+                    ? 'No feed bought yet. Use “Buy feed” to record your first purchase.'
+                    : shown.length === 0
+                      ? view === 'month'
+                        ? `No feed bought in ${monthLabel(month)}.`
+                        : 'No feed in stock.'
+                      : 'No feed matches.'}
                 </td>
               </tr>
             ) : (
@@ -308,7 +417,7 @@ function FeedRow({
             <p className="text-[11px] text-slate-500">{s.perDayQty.toLocaleString()} kg/day</p>
           </>
         ) : (
-          <span className="text-xs text-slate-400">By usage</span>
+          <span className="text-xs text-slate-400">Days not set</span>
         )}
       </td>
       <td className="whitespace-nowrap px-5 py-4 text-sm">

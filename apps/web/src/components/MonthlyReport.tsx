@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Milk, ShoppingBag, Wallet, History, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Milk, ShoppingBag, Wallet, History, AlertCircle, Wheat, ArrowRight } from 'lucide-react';
 import { monthKey, shiftMonth, type MonthStatement } from '@farm/business-logic';
 import type { ReportLine } from '@/lib/monthly-report';
 import CollectButton from '@/components/sales/CollectButton';
@@ -18,10 +18,13 @@ export default function MonthlyReport({
   month,
   totals,
   lines,
+  feed,
 }: {
   month: string;
   totals: MonthStatement['totals'];
   lines: ReportLine[];
+  /** Feed bought this month. */
+  feed: { kg: number; spent: number; paid: number; owed: number; count: number };
 }) {
   const current = monthKey(new Date());
   const navBtn = 'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50';
@@ -69,6 +72,27 @@ export default function MonthlyReport({
           hint={owing ? `${owing} customer${owing === 1 ? '' : 's'} still owe` : 'Nothing owed'}
         />
       </div>
+
+      <Link
+        href={`/dashboard/feed?month=${month}`}
+        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-white p-4 shadow-sm transition hover:bg-amber-50/40"
+      >
+        <span className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+            <Wheat className="h-4 w-4" />
+          </span>
+          <span>
+            <span className="block text-sm font-bold text-slate-900">Feed bought: {tk(feed.spent)}</span>
+            <span className="block text-xs text-slate-500">
+              {feed.kg.toLocaleString('en-IN')} kg in {feed.count} purchase{feed.count === 1 ? '' : 's'} · paid {tk(feed.paid)}
+              {feed.owed > 0 ? ` · still owed ${tk(feed.owed)}` : ''}
+            </span>
+          </span>
+        </span>
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700">
+          Feed details <ArrowRight className="h-3.5 w-3.5" />
+        </span>
+      </Link>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200">

@@ -75,8 +75,6 @@ export default function FeedPurchaseModal({
     setError('');
     if (!form.name.trim()) return setError('Enter the feed name.');
     if (!(qty > 0)) return setError('Enter the quantity bought.');
-    // Older batches have no days set; they may stay that way when edited.
-    if (!(days >= 1) && !(editing && !batch!.coverDays)) return setError('Choose how many days this feed will last.');
     if (!editing) {
       if (paidNow > total) return setError('Paid now cannot be more than the total.');
       if (owed > 0 && !supplier) return setError('Choose who you bought from, so the due is tracked against them.');
@@ -197,6 +195,17 @@ export default function FeedPurchaseModal({
         <div>
           <span className={labelCls}>How many days will it last?</span>
           <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Days it will last">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={form.coverDays === ''}
+              onClick={() => set({ coverDays: '' })}
+              className={`rounded-xl border px-3.5 py-2 text-sm font-semibold transition ${
+                form.coverDays === '' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              Don&apos;t know
+            </button>
             {DAY_CHIPS.map((d) => (
               <button
                 key={d}
@@ -224,6 +233,11 @@ export default function FeedPurchaseModal({
               className={`w-24 rounded-xl border px-3 py-2 text-sm ${customDays ? 'border-slate-900 font-semibold' : 'border-slate-200'} focus:outline-none focus:ring-2 focus:ring-slate-200`}
             />
           </div>
+          {form.coverDays === '' && total > 0 && (
+            <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+              The full {tk(total)} counts as feed cost on the day you bought it.
+            </p>
+          )}
           {days >= 1 && qty > 0 && (
             <p className="mt-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800" aria-live="polite">
               ≈ {round2(qty / days).toLocaleString()} kg/day · {tk(round2(total / days))}/day · lasts until{' '}

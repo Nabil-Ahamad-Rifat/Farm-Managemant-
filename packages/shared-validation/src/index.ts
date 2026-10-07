@@ -121,3 +121,86 @@ export const feedPurchaseSchema = z
 export const farmSettingsSchema = z.object({
   defaultMilkPrice: money.refine((n) => n > 0, 'Price must be more than 0'),
 });
+
+export const ANIMAL_STATUSES = ['active', 'sold', 'dead'] as const;
+export const ANIMAL_GENDERS = ['female', 'male'] as const;
+export const ANIMAL_CATEGORIES = ['cow', 'heifer', 'calf', 'bull'] as const;
+export const ANIMAL_SOURCES = ['born', 'purchased'] as const;
+export const ANIMAL_EVENT_KINDS = [
+  'vaccine',
+  'insemination',
+  'pregnancy_check',
+  'calving',
+  'treatment',
+  'deworming',
+  'weight',
+  'other',
+] as const;
+
+/** Base64 of a JPEG/PNG/WebP photo, already resized by the client. About 2 MB decoded at most. */
+export const animalPhotoSchema = z.object({
+  data: z
+    .string()
+    .min(100, 'Photo is empty')
+    .max(2_800_000, 'Photo is too large; please use a smaller picture')
+    .regex(/^[A-Za-z0-9+/=\s]+$/, 'Photo data is not valid'),
+  mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']).default('image/jpeg'),
+  width: z.coerce.number().int().positive().max(10000).optional(),
+  height: z.coerce.number().int().positive().max(10000).optional(),
+  caption: optionalText(200),
+});
+
+const optionalId = z.preprocess(blankToUndefined, z.string().trim().max(50).optional());
+const optionalDay = z.preprocess(blankToUndefined, isoDay.optional());
+
+/**
+ * An animal from the web or mobile form. `tagNumber` is the Cow ID. The
+ * photo is required when adding an animal; the route checks that, since the
+ * same schema is used for edits (where photos are managed separately).
+ */
+export const animalSchema = z.object({
+  tagNumber: z.string().trim().min(1, 'Cow ID is required').max(30),
+  name: optionalText(100),
+  breed: optionalText(100),
+  color: optionalText(50),
+  gender: z.preprocess(blankToUndefined, z.enum(ANIMAL_GENDERS).default('female')),
+  category: z.preprocess(blankToUndefined, z.enum(ANIMAL_CATEGORIES).optional()),
+  birthDate: optionalDay,
+  source: z.preprocess(blankToUndefined, z.enum(ANIMAL_SOURCES).optional()),
+  purchaseDate: optionalDay,
+  purchasePrice: z.preprocess(blankToUndefined, money.optional()),
+  motherId: optionalId,
+  status: z.preprocess(blankToUndefined, z.enum(ANIMAL_STATUSES).default('active')),
+  notes: optionalText(1000),
+  photo: animalPhotoSchema.optional(),
+});
+
+/**
+ * One history record. Required details depend on the type: a vaccine needs
+ * its name, a pregnancy check its result, a weight its value. A calving can
+ * add the calf as a new animal at the same time.
+ */
+export const animalEventSchema = z
+  .object({
+    type: z.enum(ANIMAL_EVENT_KINDS),
+    date: isoDay,
+    title: optionalText(150),
+    nextDueDate: optionalDay,
+    result: z.preprocess(blankToUndefined, z.enum(['positive', 'negative']).optional()),
+    value: z.preprocess(blankToUndefined, z.coerce.number().finite().positive().max(5000).optional()),
+    cost: z.preprocess(blankToUndefined, money.optional()),
+    notes: optionalText(1000),
+    createCalf: z
+      .object({
+        tagNumber: z.string().trim().min(1, 'Calf ID is required').max(30),
+        name: optionalText(100),
+        gender: z.enum(ANIMAL_GENDERS).default('female'),
+        photo: animalPhotoSchema,
+      })
+      .optional(),
+  })
+  .refine((e) => e.type !== 'vaccine' || e.title, { message: 'Enter the vaccine name', path: ['title'] })
+  .refine((e) => e.type !== 'pregnancy_check' || e.result, { message: 'Choose the check result', path: ['result'] })
+  .refine((e) => e.type !== 'weight' || e.value !== undefined, { message: 'Enter the weight', path: ['value'] })
+  .refine((e) => !e.nextDueDate || e.nextDueDate >= e.date, { message: 'Next due date must be after the record date', path: ['nextDueDate'] })
+  .refine((e) => !e.createCalf || e.type === 'calving', { message: 'A calf can only be added with a calving', path: ['createCalf'] });

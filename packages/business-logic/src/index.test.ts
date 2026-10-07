@@ -13,7 +13,14 @@ import {
   allocatePayments,
   feedSchedule,
   storedFeedRemaining,
-  spreadFeedCost,
+  feedCostBetween,
+  feedMonthSummary,
+  nextAnimalId,
+  expectedCalving,
+  ageLabel,
+  animalSummary,
+  dueSoon,
+  type AnimalEventLike,
   monthKey,
   monthBounds,
   shiftMonth,
@@ -266,36 +273,46 @@ describe('storedFeedRemaining', () => {
   });
 });
 
-describe('spreadFeedCost', () => {
+describe('feedCostBetween', () => {
   const b = { quantity: 300, unitPrice: 10, coverDays: 3, purchasedAt: '2026-10-01T12:00:00Z' };
 
   it('counts one day of a 3-day batch as a third of the cost', () => {
-    expect(spreadFeedCost([b], '2026-10-02T00:00:00Z', '2026-10-02T23:59:59Z')).toBe(1000);
+    expect(feedCostBetween([b], '2026-10-02T00:00:00Z', '2026-10-02T23:59:59Z')).toBe(1000);
   });
 
   it('counts only the days that overlap the period', () => {
-    expect(spreadFeedCost([b], '2026-10-03T00:00:00Z', '2026-10-10T00:00:00Z')).toBe(1000);
-    expect(spreadFeedCost([b], '2026-09-25T00:00:00Z', '2026-10-02T00:00:00Z')).toBe(2000);
+    expect(feedCostBetween([b], '2026-10-03T00:00:00Z', '2026-10-10T00:00:00Z')).toBe(1000);
+    expect(feedCostBetween([b], '2026-09-25T00:00:00Z', '2026-10-02T00:00:00Z')).toBe(2000);
   });
 
   it('counts the whole cost for a period covering the batch', () => {
-    expect(spreadFeedCost([b], '2026-09-01T00:00:00Z', '2026-10-31T00:00:00Z')).toBe(3000);
+    expect(feedCostBetween([b], '2026-09-01T00:00:00Z', '2026-10-31T00:00:00Z')).toBe(3000);
   });
 
   it('counts nothing for a batch that ended before the period', () => {
-    expect(spreadFeedCost([b], '2026-10-04T00:00:00Z', '2026-10-05T00:00:00Z')).toBe(0);
+    expect(feedCostBetween([b], '2026-10-04T00:00:00Z', '2026-10-05T00:00:00Z')).toBe(0);
   });
 
-  it('handles a 1-day batch and skips legacy ones', () => {
-    const oneDay = { ...b, coverDays: 1 };
-    const legacy = { ...b, coverDays: null };
-    expect(spreadFeedCost([oneDay, legacy], '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')).toBe(3000);
+  it('handles a 1-day batch', () => {
+    expect(feedCostBetween([{ ...b, coverDays: 1 }], '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')).toBe(3000);
+  });
+
+  it('counts a batch with no days in full on its purchase day only', () => {
+    const unknown = { ...b, coverDays: null };
+    expect(feedCostBetween([unknown], '2026-10-01T00:00:00Z', '2026-10-01T23:59:59Z')).toBe(3000);
+    expect(feedCostBetween([unknown], '2026-10-02T00:00:00Z', '2026-10-31T00:00:00Z')).toBe(0);
+    expect(feedCostBetween([unknown], '2026-09-01T00:00:00Z', '2026-10-31T00:00:00Z')).toBe(3000);
+  });
+
+  it('uses createdAt when an old batch has no purchase date', () => {
+    const old = { quantity: 10, unitPrice: 20, coverDays: null, purchasedAt: null, createdAt: '2026-09-05T08:00:00Z' };
+    expect(feedCostBetween([old], '2026-09-01T00:00:00Z', '2026-09-30T00:00:00Z')).toBe(200);
   });
 
   it('rounds uneven splits to paisa', () => {
     const uneven = { quantity: 1, unitPrice: 1000, coverDays: 3, purchasedAt: '2026-10-01T12:00:00Z' };
-    expect(spreadFeedCost([uneven], '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')).toBe(333.33);
-    expect(spreadFeedCost([uneven], '2026-10-01T00:00:00Z', '2026-10-03T00:00:00Z')).toBe(1000);
+    expect(feedCostBetween([uneven], '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')).toBe(333.33);
+    expect(feedCostBetween([uneven], '2026-10-01T00:00:00Z', '2026-10-03T00:00:00Z')).toBe(1000);
   });
 });
 
@@ -396,6 +413,169 @@ describe('customerMonths', () => {
     expect(months).toEqual([
       { month: '2026-10', milkLitres: 5, sold: 500, paid: 0, closing: 1100 },
       { month: '2026-08', milkLitres: 10, sold: 1000, paid: 400, closing: 600 },
+    ]);
+  });
+});
+
+describe('feedMonthSummary', () => {
+  const batches = [
+    { id: 'a', name: 'Bushi', quantity: 500, unitPrice: 35, purchasedAt: '2026-10-02T12:00:00Z', supplierId: 's1', paidAmount: 10000 },
+    { id: 'b', name: 'bushi ', quantity: 100, unitPrice: 35, purchasedAt: '2026-10-20T12:00:00Z', supplierId: null, paidAmount: null },
+    { id: 'c', name: 'Gom', quantity: 200, unitPrice: 40, purchasedAt: '2026-10-05T12:00:00Z', supplierId: 's1', paidAmount: 0 },
+    { id: 'd', name: 'Gom', quantity: 50, unitPrice: 40, purchasedAt: '2026-09-28T12:00:00Z', supplierId: null, paidAmount: null },
+  ];
+
+  it('totals only the purchases of that month', () => {
+    const m = feedMonthSummary(batches, '2026-10');
+    expect(m.totals).toEqual({ kg: 800, spent: 29000, paid: 13500, owed: 15500, count: 3 });
+  });
+
+  it('subtotals per feed name, ignoring case and spaces, largest spend first', () => {
+    const m = feedMonthSummary(batches, '2026-10');
+    expect(m.byFeed).toEqual([
+      { name: 'Bushi', kg: 600, spent: 21000, count: 2 },
+      { name: 'Gom', kg: 200, spent: 8000, count: 1 },
+    ]);
+  });
+
+  it('lists purchases newest first', () => {
+    expect(feedMonthSummary(batches, '2026-10').purchases.map((p) => p.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('is empty for a month with no purchases', () => {
+    expect(feedMonthSummary(batches, '2026-08')).toMatchObject({ totals: { kg: 0, spent: 0, paid: 0, owed: 0, count: 0 }, byFeed: [], purchases: [] });
+  });
+});
+
+describe('nextAnimalId', () => {
+  it('starts at C-001', () => {
+    expect(nextAnimalId([])).toBe('C-001');
+  });
+
+  it('continues after the highest C- number and ignores other formats', () => {
+    expect(nextAnimalId(['C-001', 'c-007', 'EAR-55', 'C-3'])).toBe('C-008');
+  });
+
+  it('never repeats an ID that is already taken', () => {
+    expect(nextAnimalId(['C-002', 'C-001'])).toBe('C-003');
+  });
+});
+
+describe('expectedCalving and ageLabel', () => {
+  it('adds 283 days to the insemination date', () => {
+    expect(expectedCalving('2026-01-10T12:00:00Z')).toBe('2026-10-20');
+  });
+
+  it('shows age in days, months, or years and months', () => {
+    expect(ageLabel('2026-10-01T12:00:00Z', '2026-10-13T12:00:00Z')).toBe('12 d');
+    expect(ageLabel('2026-05-06T12:00:00Z', '2026-10-06T12:00:00Z')).toBe('5 m');
+    expect(ageLabel('2024-07-06T12:00:00Z', '2026-10-06T12:00:00Z')).toBe('2 y 3 m');
+    expect(ageLabel('2024-10-06T12:00:00Z', '2026-10-06T12:00:00Z')).toBe('2 y');
+  });
+});
+
+describe('animalSummary', () => {
+  it('is empty for an animal with no records', () => {
+    expect(animalSummary([])).toMatchObject({ pregnancy: 'unknown', expectedCalving: null, dueDoses: [], careCost: 0 });
+  });
+
+  it('marks an animal inseminated with expected calving and a pregnancy check due', () => {
+    const s = animalSummary([{ type: 'insemination', date: '2026-01-10T12:00:00Z', title: 'Sahiwal straw 12', cost: 500 }]);
+    expect(s.pregnancy).toBe('inseminated');
+    expect(s.expectedCalving).toBe('2026-10-20');
+    expect(s.pregnancyCheckDue).toBe('2026-03-11');
+    expect(s.lastInsemination).toEqual({ title: 'Sahiwal straw 12', date: '2026-01-10' });
+    expect(s.careCost).toBe(500);
+  });
+
+  it('a positive check makes it pregnant and clears the check reminder', () => {
+    const s = animalSummary([
+      { type: 'insemination', date: '2026-01-10T12:00:00Z' },
+      { type: 'pregnancy_check', date: '2026-03-15T12:00:00Z', result: 'positive' },
+    ]);
+    expect(s.pregnancy).toBe('pregnant');
+    expect(s.expectedCalving).toBe('2026-10-20');
+    expect(s.pregnancyCheckDue).toBeNull();
+  });
+
+  it('a negative check or a calving makes it open again', () => {
+    const neg = animalSummary([
+      { type: 'insemination', date: '2026-01-10T12:00:00Z' },
+      { type: 'pregnancy_check', date: '2026-03-15T12:00:00Z', result: 'negative' },
+    ]);
+    expect(neg).toMatchObject({ pregnancy: 'open', expectedCalving: null });
+    const calved = animalSummary([
+      { type: 'insemination', date: '2025-01-10T12:00:00Z' },
+      { type: 'calving', date: '2025-10-18T12:00:00Z' },
+    ]);
+    expect(calved).toMatchObject({ pregnancy: 'open', expectedCalving: null, lastCalving: '2025-10-18' });
+  });
+
+  it('works from the records in date order, whatever order they come in', () => {
+    const s = animalSummary([
+      { type: 'pregnancy_check', date: '2026-03-15T12:00:00Z', result: 'positive' },
+      { type: 'insemination', date: '2026-01-10T12:00:00Z' },
+    ]);
+    expect(s.pregnancy).toBe('pregnant');
+  });
+
+  it('keeps only the latest dose of each vaccine for the next due date', () => {
+    const s = animalSummary([
+      { type: 'vaccine', date: '2026-01-01T12:00:00Z', title: 'FMD', nextDueDate: '2026-07-01T12:00:00Z' },
+      { type: 'vaccine', date: '2026-07-02T12:00:00Z', title: 'fmd', nextDueDate: '2027-01-02T12:00:00Z' },
+      { type: 'deworming', date: '2026-08-01T12:00:00Z', nextDueDate: '2026-11-01T12:00:00Z' },
+      { type: 'vaccine', date: '2026-08-05T12:00:00Z', title: 'Anthrax' },
+    ]);
+    expect(s.dueDoses).toEqual([
+      { type: 'deworming', title: 'Deworming', dueDate: '2026-11-01' },
+      { type: 'vaccine', title: 'fmd', dueDate: '2027-01-02' },
+    ]);
+    expect(s.lastVaccine).toEqual({ title: 'Anthrax', date: '2026-08-05' });
+  });
+
+  it('tracks the latest weight', () => {
+    const s = animalSummary([
+      { type: 'weight', date: '2026-01-01T12:00:00Z', value: 300 },
+      { type: 'weight', date: '2026-06-01T12:00:00Z', value: 340 },
+    ]);
+    expect(s.latestWeight).toEqual({ value: 340, date: '2026-06-01' });
+  });
+});
+
+describe('dueSoon', () => {
+  const now = '2026-10-06T09:00:00Z';
+  const animal = (id: string, events: AnimalEventLike[]) => ({ id, tagNumber: id.toUpperCase(), name: id, events });
+
+  it('lists doses overdue or due within 7 days, soonest first', () => {
+    const items = dueSoon(
+      [
+        animal('a', [{ type: 'vaccine', date: '2026-04-01T12:00:00Z', title: 'FMD', nextDueDate: '2026-10-09T12:00:00Z' }]),
+        animal('b', [{ type: 'deworming', date: '2026-07-01T12:00:00Z', nextDueDate: '2026-10-01T12:00:00Z' }]),
+        animal('c', [{ type: 'vaccine', date: '2026-04-01T12:00:00Z', title: 'LSD', nextDueDate: '2026-12-01T12:00:00Z' }]),
+      ],
+      now,
+    );
+    expect(items.map((i) => [i.cowId, i.kind, i.daysLeft])).toEqual([
+      ['b', 'deworming', -5],
+      ['a', 'vaccine', 3],
+    ]);
+  });
+
+  it('lists calvings expected within 30 days and pregnancy checks due', () => {
+    const items = dueSoon(
+      [
+        animal('cow', [
+          { type: 'insemination', date: '2026-01-10T12:00:00Z' },
+          { type: 'pregnancy_check', date: '2026-03-15T12:00:00Z', result: 'positive' },
+        ]),
+        animal('heifer', [{ type: 'insemination', date: '2026-08-05T12:00:00Z' }]),
+        animal('far', [{ type: 'insemination', date: '2026-06-01T12:00:00Z' }, { type: 'pregnancy_check', date: '2026-08-01T12:00:00Z', result: 'positive' }]),
+      ],
+      now,
+    );
+    expect(items).toEqual([
+      { cowId: 'heifer', tagNumber: 'HEIFER', name: 'heifer', kind: 'pregnancy_check', title: 'Pregnancy check', dueDate: '2026-10-04', daysLeft: -2 },
+      { cowId: 'cow', tagNumber: 'COW', name: 'cow', kind: 'calving', title: 'Expected calving', dueDate: '2026-10-20', daysLeft: 14 },
     ]);
   });
 });

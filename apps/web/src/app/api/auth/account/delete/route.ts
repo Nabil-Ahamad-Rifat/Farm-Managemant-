@@ -49,6 +49,10 @@ export const POST = withAuth(async (req: NextRequest, { userId, tenantId }) => {
       await tx.payment.deleteMany({ where: { tenantId } });
       await tx.customer.deleteMany({ where: { tenantId } });
       await tx.employee.deleteMany({ where: { tenantId } });
+      // Animal photos and history before the animals themselves.
+      await tx.animalEvent.deleteMany({ where: { tenantId } });
+      await tx.animalPhoto.deleteMany({ where: { tenantId } });
+      await tx.cow.updateMany({ where: { tenantId }, data: { motherId: null } });
       await tx.cow.deleteMany({ where: { tenantId } });
       await tx.feedBatch.deleteMany({ where: { tenantId } });
       // After feed batches, which point at suppliers.

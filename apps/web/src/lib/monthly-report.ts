@@ -1,4 +1,4 @@
-import { customerMonths, monthBounds, monthKey, monthlyStatement, type MonthLine } from '@farm/business-logic';
+import { customerMonths, feedMonthSummary, monthBounds, monthKey, monthlyStatement, type MonthLine } from '@farm/business-logic';
 import { db } from '@/lib/db';
 
 /** "YYYY-MM" if valid, else the current month. */
@@ -14,7 +14,7 @@ export interface ReportLine extends MonthLine {
 /** The month's statement for the whole farm, with each line's customer attached. */
 export async function getMonthlyReport(tenantId: string, month: string) {
   const { end } = monthBounds(month);
-  const [sales, payments, customers] = await Promise.all([
+  const [sales, payments, customers, feedBatches] = await Promise.all([
     db.sale.findMany({
       where: { tenantId, createdAt: { lte: end } },
       select: { customerId: true, amount: true, createdAt: true, saleType: true, quantity: true, status: true },
@@ -24,6 +24,10 @@ export async function getMonthlyReport(tenantId: string, month: string) {
       select: { customerId: true, amount: true, paidAt: true },
     }),
     db.customer.findMany({ where: { tenantId }, select: { id: true, name: true, type: true, phone: true } }),
+    db.feedBatch.findMany({
+      where: { tenantId },
+      select: { name: true, quantity: true, unitPrice: true, purchasedAt: true, createdAt: true, supplierId: true, paidAmount: true },
+    }),
   ]);
 
   const statement = monthlyStatement(
@@ -41,7 +45,9 @@ export async function getMonthlyReport(tenantId: string, month: string) {
 
   const byId = new Map(customers.map((c) => [c.id, c]));
   const lines: ReportLine[] = statement.lines.map((l) => ({ ...l, customer: l.partyId ? byId.get(l.partyId) ?? null : null }));
-  return { month, totals: statement.totals, lines };
+  // Feed bought this month (cost, paid, owed), for the report's feed line.
+  const feed = feedMonthSummary(feedBatches, month).totals;
+  return { month, totals: statement.totals, lines, feed };
 }
 
 /** One customer's months with activity, newest first, for the grouped history on their page. */

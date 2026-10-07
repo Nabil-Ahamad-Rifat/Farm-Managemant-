@@ -13,12 +13,85 @@ export interface AuthUser {
 
 export interface Cow {
   id: string;
+  /** The Cow ID shown everywhere (e.g. C-001 or an ear-tag number). */
   tagNumber: string;
   name: string;
   breed: string | null;
   purchasePrice: number | null;
   status: string;
   createdAt: Date | string;
+  gender?: 'female' | 'male' | string | null;
+  category?: 'cow' | 'heifer' | 'calf' | 'bull' | string | null;
+  birthDate?: Date | string | null;
+  color?: string | null;
+  source?: 'born' | 'purchased' | string | null;
+  purchaseDate?: Date | string | null;
+  notes?: string | null;
+  mainPhotoId?: string | null;
+  motherId?: string | null;
+}
+
+/** Breeding and health status worked out from an animal's records (animalSummary in @farm/business-logic). */
+export interface AnimalSummaryInfo {
+  lastVaccine: { title: string; date: string } | null;
+  dueDoses: { type: string; title: string; dueDate: string }[];
+  lastInsemination: { title: string | null; date: string } | null;
+  pregnancy: 'pregnant' | 'inseminated' | 'open' | 'unknown';
+  expectedCalving: string | null;
+  pregnancyCheckDue: string | null;
+  lastCalving: string | null;
+  latestWeight: { value: number; date: string } | null;
+  careCost: number;
+}
+
+/** GET /api/cows: each animal with its status and main photo URL (null for animals added before photos). */
+export interface CowListItem extends Cow {
+  photoUrl: string | null;
+  summary: AnimalSummaryInfo;
+}
+
+export interface AnimalPhotoInfo {
+  id: string;
+  url: string;
+  width: number | null;
+  height: number | null;
+  size: number;
+  caption: string | null;
+  takenAt: Date | string;
+}
+
+export interface AnimalEvent {
+  id: string;
+  cowId: string;
+  type: 'vaccine' | 'insemination' | 'pregnancy_check' | 'calving' | 'treatment' | 'deworming' | 'weight' | 'other' | string;
+  date: Date | string;
+  title: string | null;
+  nextDueDate: Date | string | null;
+  result: string | null;
+  value: number | null;
+  cost: number | null;
+  calfId: string | null;
+  notes: string | null;
+}
+
+/** GET /api/cows/:id */
+export interface AnimalDetail extends CowListItem {
+  mother: Pick<Cow, 'id' | 'tagNumber' | 'name'> | null;
+  calves: (Pick<Cow, 'id' | 'tagNumber' | 'name' | 'gender' | 'birthDate'> & { photoUrl: string | null })[];
+  photos: AnimalPhotoInfo[];
+  /** Newest first. */
+  events: AnimalEvent[];
+}
+
+/** GET /api/animals/due-soon (dueSoon in @farm/business-logic). */
+export interface AnimalDueItem {
+  cowId: string;
+  tagNumber: string;
+  name: string;
+  kind: 'vaccine' | 'deworming' | 'calving' | 'pregnancy_check';
+  title: string;
+  dueDate: string;
+  daysLeft: number;
 }
 
 export interface SalaryPayment {

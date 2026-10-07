@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
-import { Plus, Search, Edit3, Trash2, Droplets, AlertTriangle, Wheat, Store } from 'lucide-react-native';
+import { Plus, Search, Edit3, Trash2, Droplets, AlertTriangle, Wheat, Store, ChevronLeft, ChevronRight, ShoppingBag, Wallet } from 'lucide-react-native';
 import type { FeedBatch, SupplierSummary } from '@farm/shared-types';
-import { isLowStock, stockPercentage, totalStockValue } from '@farm/business-logic';
+import { feedMonthSummary, isLowStock, monthKey, shiftMonth, stockPercentage, totalStockValue } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { useCrudList } from '@/src/hooks/useCrudList';
-import { tk, fmtDate } from '@/src/lib/format';
-import { FormModal, TextField, PrimaryButton, IconButton, EmptyState, StatCard, useConfirm } from '@/src/components/ui';
+import { tk, fmtDate, monthLabel } from '@/src/lib/format';
+import { FormModal, TextField, PrimaryButton, IconButton, EmptyState, StatCard, ChipGroup, useConfirm } from '@/src/components/ui';
 import { StatusPill } from '@/src/components/StatusPill';
 import { FeedPurchaseModal } from '@/src/components/FeedPurchaseModal';
 
@@ -31,6 +31,9 @@ export default function FeedScreen() {
   }, []);
 
   const [search, setSearch] = useState('');
+  const currentMonth = monthKey(new Date());
+  const [month, setMonth] = useState(currentMonth);
+  const [view, setView] = useState('month');
   const [purchase, setPurchase] = useState<{ batch: FeedBatch | null } | null>(null);
   const [error, setError] = useState('');
 
@@ -78,8 +81,11 @@ export default function FeedScreen() {
     }
   }
 
+  const summary = feedMonthSummary(feed, month);
   const q = search.toLowerCase();
-  const filtered = feed.filter((item) => item.name.toLowerCase().includes(q) || (item.supplier?.name ?? '').toLowerCase().includes(q));
+  // "This month" lists that month's purchases; "In stock" lists everything with stock left.
+  const shown = view === 'stock' ? feed.filter((b) => b.remainingQuantity > 0) : summary.purchases;
+  const filtered = shown.filter((item) => item.name.toLowerCase().includes(q) || (item.supplier?.name ?? '').toLowerCase().includes(q));
   const owed = suppliers.reduce((s, x) => s + x.totalDue, 0);
   const runningLow = feed.filter((b) => b.schedule && b.schedule.remaining > 0 && b.schedule.daysLeft <= 1);
 
@@ -93,37 +99,80 @@ export default function FeedScreen() {
 
   return (
     <View className="flex-1 bg-slate-50">
-      <View className="gap-3 border-b border-slate-100 bg-white p-4">
-        <View className="flex-row gap-3">
-          <StatCard label="Stock Value" value={tk(Math.round(totalStockValue(feed)))} icon={Wheat} color="#059669" />
-          <StatCard label="You owe" value={tk(owed)} icon={Store} color="#dc2626" />
-        </View>
-        {runningLow.length ? (
-          <View className="flex-row items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-            <AlertTriangle size={14} color="#b45309" />
-            <Text className="flex-1 text-xs text-amber-900">
-              Running out soon: {runningLow.map((b) => `${b.name} (${b.schedule!.remaining} kg)`).join(', ')}
-            </Text>
-          </View>
-        ) : null}
-        <View className="flex-row items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-          <Search size={16} color="#94a3b8" />
-          <TextInput value={search} onChangeText={setSearch} placeholder="Search feed or supplier..." placeholderTextColor="#94a3b8" className="flex-1 text-sm text-slate-900" />
-        </View>
-      </View>
-
-      {error ? (
-        <View className="mx-4 mt-3 rounded-xl border border-red-100 bg-red-50 p-3">
-          <Text className="text-xs font-medium text-red-700">{error}</Text>
-        </View>
-      ) : null}
-
       <FlatList
         data={filtered}
+        ListHeaderComponent={
+          <View className="-mx-4 -mt-4 mb-1">
+            <View className="gap-3 border-b border-slate-100 bg-white p-4">
+              <View className="flex-row items-center justify-between rounded-xl border border-slate-200 p-1">
+                <Pressable onPress={() => setMonth(shiftMonth(month, -1))} className="rounded-lg p-2" accessibilityLabel="Previous month">
+                  <ChevronLeft size={18} color="#475569" />
+                </Pressable>
+                <Text className="text-sm font-bold text-slate-900">{monthLabel(month)}</Text>
+                <Pressable
+                  onPress={() => month < currentMonth && setMonth(shiftMonth(month, 1))}
+                  className={`rounded-lg p-2 ${month < currentMonth ? '' : 'opacity-30'}`}
+                  accessibilityLabel="Next month"
+                >
+                  <ChevronRight size={18} color="#475569" />
+                </Pressable>
+              </View>
+              <View className="flex-row gap-3">
+                <StatCard label="Bought" value={`${summary.totals.kg} kg`} subtext={`${summary.totals.count} purchases`} icon={Wheat} color="#d97706" />
+                <StatCard label="Spent" value={tk(summary.totals.spent)} icon={ShoppingBag} color="#475569" />
+              </View>
+              <View className="flex-row gap-3">
+                <StatCard label="Paid" value={tk(summary.totals.paid)} icon={Wallet} color="#059669" />
+                <StatCard label="Still owed" value={tk(summary.totals.owed)} icon={Store} color="#dc2626" />
+              </View>
+              {summary.byFeed.length ? (
+                <View className="rounded-xl border border-slate-200">
+                  {summary.byFeed.map((f, i) => (
+                    <View key={f.name} className={`flex-row items-center justify-between px-3 py-2 ${i > 0 ? 'border-t border-slate-100' : ''}`}>
+                      <Text className="text-xs font-semibold text-slate-900">{f.name}</Text>
+                      <Text className="text-xs text-slate-600">
+                        {f.kg} kg · <Text className="font-bold text-slate-900">{tk(f.spent)}</Text>
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+              <Text className="text-[11px] text-slate-500">
+                Stock value now {tk(Math.round(totalStockValue(feed)))} · you owe suppliers {tk(owed)} in total
+              </Text>
+              <ChipGroup
+                options={[
+                  { value: 'month', label: 'Bought this month' },
+                  { value: 'stock', label: 'All in stock' },
+                ]}
+                value={view}
+                onChange={setView}
+              />
+              {runningLow.length ? (
+                <View className="flex-row items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <AlertTriangle size={14} color="#b45309" />
+                  <Text className="flex-1 text-xs text-amber-900">
+                    Running out soon: {runningLow.map((b) => `${b.name} (${b.schedule!.remaining} kg)`).join(', ')}
+                  </Text>
+                </View>
+              ) : null}
+              <View className="flex-row items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
+                <Search size={16} color="#94a3b8" />
+                <TextInput value={search} onChangeText={setSearch} placeholder="Search feed or supplier..." placeholderTextColor="#94a3b8" className="flex-1 text-sm text-slate-900" />
+              </View>
+            </View>
+      
+            {error ? (
+              <View className="mx-4 mt-3 rounded-xl border border-red-100 bg-red-50 p-3">
+                <Text className="text-xs font-medium text-red-700">{error}</Text>
+              </View>
+            ) : null}
+          </View>
+        }
         keyExtractor={(item) => item.id}
         contentContainerClassName="gap-3 p-4 pb-24"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-        ListEmptyComponent={<EmptyState message="No feed bought yet." />}
+        ListEmptyComponent={<EmptyState message={view === 'month' ? `No feed bought in ${monthLabel(month)}.` : 'No feed in stock.'} />}
         renderItem={({ item }) => {
           const s = item.schedule;
           const total = item.quantity * item.unitPrice;
