@@ -4,6 +4,7 @@ import { Link, router } from 'expo-router';
 import { Sprout } from 'lucide-react-native';
 import { loginSchema } from '@farm/shared-validation';
 import { useSession } from '@/src/context/AuthContext';
+import { GoogleSignInButton } from '@/src/components/GoogleSignInButton';
 
 export default function LoginScreen() {
   const { signIn } = useSession();
@@ -93,6 +94,8 @@ export default function LoginScreen() {
                 <Text className="font-semibold text-white">Continue to Dashboard</Text>
               )}
             </Pressable>
+
+            <GoogleSignInButton onError={setError} />
           </View>
 
           <View className="mt-6 flex-row justify-center gap-1">

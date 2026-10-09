@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  # Dummy values — nothing in typecheck/lint/build/test ever connects to a
+  # real database or verifies a real token, but apps/web/src/lib/db.ts and
+  # apps/web/src/lib/auth/jwt.ts both fail fast (by design) if these are
+  # unset, and `next build` imports every API route module while collecting
+  # page data, so a build with no .env present needs *some* value here.
+  DATABASE_URL: "mongodb://localhost:27017/farm_management_ci"
+  JWT_SECRET: "ci-only-placeholder-secret-do-not-use-in-production"
+  NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema apps/web/prisma/schema.prisma
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm run test

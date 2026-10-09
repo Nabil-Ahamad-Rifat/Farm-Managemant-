@@ -4,6 +4,7 @@ import { Plus, Search, Edit3, Trash2, Droplets, AlertTriangle, Wheat } from 'luc
 import type { FeedBatch } from '@farm/shared-types';
 import { isLowStock, stockPercentage, totalStockValue, totalBatchCost, formatCurrency } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';
+import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { useCrudList } from '@/src/hooks/useCrudList';
 import { FormModal, TextField, PrimaryButton, IconButton, EmptyState, StatCard, useConfirm } from '@/src/components/ui';
 
@@ -27,10 +28,14 @@ export default function FeedScreen() {
   const [usageForm, setUsageForm] = useState({ quantity: '', note: '' });
   const [usageError, setUsageError] = useState('');
 
+  const [createKey, setCreateKey] = useState(generateIdempotencyKey);
+  const [usageKey, setUsageKey] = useState(generateIdempotencyKey);
+
   function openCreate() {
     setEditing(null);
     setForm(emptyForm);
     setError('');
+    setCreateKey(generateIdempotencyKey());
     setModalOpen(true);
   }
 
@@ -50,17 +55,22 @@ export default function FeedScreen() {
     setUsageFeed(item);
     setUsageForm({ quantity: '', note: '' });
     setUsageError('');
+    setUsageKey(generateIdempotencyKey());
     setUsageOpen(true);
   }
 
   async function handleSubmit() {
+    if (!form.name.trim() || !form.quantity || !form.unitPrice) {
+      setError('Feed name, quantity, and unit price are required.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
       if (editing) {
         await mobileApiClient.put(`/api/feed/${editing.id}`, form, 'Failed to save feed batch');
       } else {
-        await mobileApiClient.post('/api/feed', form, 'Failed to save feed batch');
+        await mobileApiClient.post('/api/feed', form, 'Failed to save feed batch', { idempotencyKey: createKey });
       }
       setModalOpen(false);
       await reload();
@@ -76,7 +86,9 @@ export default function FeedScreen() {
     setSaving(true);
     setUsageError('');
     try {
-      await mobileApiClient.post('/api/feed/usage', { feedBatchId: usageFeed.id, ...usageForm }, 'Failed to record usage');
+      await mobileApiClient.post('/api/feed/usage', { feedBatchId: usageFeed.id, ...usageForm }, 'Failed to record usage', {
+        idempotencyKey: usageKey,
+      });
       setUsageOpen(false);
       await reload();
     } catch (err) {

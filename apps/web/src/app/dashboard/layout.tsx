@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Home, Users, BadgeCheck, Wheat, DollarSign, Sprout, TrendingUp, PackageOpen, Coins } from 'lucide-react';
+import { Home, Users, BadgeCheck, Wheat, DollarSign, Sprout, TrendingUp, PackageOpen, Coins, Settings } from 'lucide-react';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import LogoutButton from '@/components/LogoutButton';
@@ -13,6 +13,7 @@ const links = [
   { href: '/dashboard/income', label: 'Other Income', icon: Coins },
   { href: '/dashboard/revenue', label: 'Revenue Portal', icon: TrendingUp },
   { href: '/dashboard/expenses', label: 'Other Expenses', icon: PackageOpen },
+  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {

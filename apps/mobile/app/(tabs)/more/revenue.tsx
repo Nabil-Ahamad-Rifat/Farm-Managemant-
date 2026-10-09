@@ -65,6 +65,10 @@ export default function RevenueScreen() {
   }, [activePeriod]);
 
   useEffect(() => {
+    // fetchData sets loading/error synchronously before its await — that's
+    // intentional here (a period-chip tap must show the spinner again for
+    // the new range), not the derived-state anti-pattern this rule targets.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData]);
 

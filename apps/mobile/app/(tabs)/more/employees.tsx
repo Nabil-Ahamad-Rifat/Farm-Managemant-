@@ -4,6 +4,7 @@ import { Plus, Search, Edit3, Trash2, Banknote } from 'lucide-react-native';
 import type { Employee } from '@farm/shared-types';
 import { totalActiveMonthlySalary, formatCurrency } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';
+import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { useCrudList } from '@/src/hooks/useCrudList';
 import { FormModal, TextField, ChipGroup, DateField, PrimaryButton, IconButton, EmptyState, StatCard, useConfirm } from '@/src/components/ui';
 
@@ -35,10 +36,14 @@ export default function EmployeesScreen() {
   const [salaryForm, setSalaryForm] = useState(emptySalaryForm);
   const [salaryError, setSalaryError] = useState('');
 
+  const [createKey, setCreateKey] = useState(generateIdempotencyKey);
+  const [salaryKey, setSalaryKey] = useState(generateIdempotencyKey);
+
   function openCreate() {
     setEditing(null);
     setForm(emptyForm);
     setError('');
+    setCreateKey(generateIdempotencyKey());
     setModalOpen(true);
   }
 
@@ -61,17 +66,22 @@ export default function EmployeesScreen() {
     setSalaryEmployee(emp);
     setSalaryForm({ ...emptySalaryForm, amount: String(emp.salary ?? 0) });
     setSalaryError('');
+    setSalaryKey(generateIdempotencyKey());
     setSalaryOpen(true);
   }
 
   async function handleSubmit() {
+    if (!form.name.trim() || !form.role.trim()) {
+      setError('Full name and role are required.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
       if (editing) {
         await mobileApiClient.put(`/api/employees/${editing.id}`, form, 'Failed to save employee');
       } else {
-        await mobileApiClient.post('/api/employees', form, 'Failed to save employee');
+        await mobileApiClient.post('/api/employees', form, 'Failed to save employee', { idempotencyKey: createKey });
       }
       setModalOpen(false);
       await reload();
@@ -87,7 +97,9 @@ export default function EmployeesScreen() {
     setSaving(true);
     setSalaryError('');
     try {
-      await mobileApiClient.post(`/api/employees/${salaryEmployee.id}/salary`, salaryForm, 'Failed to record salary payment');
+      await mobileApiClient.post(`/api/employees/${salaryEmployee.id}/salary`, salaryForm, 'Failed to record salary payment', {
+        idempotencyKey: salaryKey,
+      });
       setSalaryOpen(false);
       await reload();
     } catch (err) {

@@ -2,17 +2,24 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Plus, Sprout } from 'lucide-react';
+import { AlertTriangle, Plus, Sprout } from 'lucide-react';
 
 export default function RanchesPage() {
   const router = useRouter();
   const [ranchName, setRanchName] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   async function handleCreateRanch(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+
+    if (!confirmed) {
+      setError('Please confirm you understand this switches your account away from the current ranch.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -48,7 +55,15 @@ export default function RanchesPage() {
         </div>
       </div>
 
-      <form onSubmit={handleCreateRanch} className="mt-8 space-y-5">
+      <div className="mt-6 flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
+        <p className="text-sm text-amber-800">
+          This switches your account to a brand-new, empty workspace. You will lose access to your current
+          ranch&apos;s cows, employees, sales, and every other record — there is no way to switch back from here.
+        </p>
+      </div>
+
+      <form onSubmit={handleCreateRanch} className="mt-6 space-y-5">
         <div>
           <label className="mb-2 block text-sm font-semibold text-slate-700">Ranch Name</label>
           <input
@@ -60,11 +75,21 @@ export default function RanchesPage() {
           />
         </div>
 
+        <label className="flex items-start gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(e) => setConfirmed(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+          />
+          I understand this abandons access to my current ranch&apos;s data.
+        </label>
+
         {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p> : null}
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !confirmed}
           className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-60"
         >
           <Plus className="h-4 w-4" />

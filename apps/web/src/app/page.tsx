@@ -92,6 +92,12 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      <footer className="border-t border-white/10 px-6 py-8 text-center text-xs text-slate-500">
+        <Link href="/privacy" className="hover:text-slate-300 hover:underline">
+          Privacy Policy
+        </Link>
+      </footer>
     </main>
   );
 }

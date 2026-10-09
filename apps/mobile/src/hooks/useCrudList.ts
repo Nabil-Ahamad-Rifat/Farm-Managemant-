@@ -21,7 +21,11 @@ export function useCrudList<T>(endpoint: string) {
   }, [endpoint]);
 
   useEffect(() => {
-    setLoading(true);
+    // `loading` already starts true and `endpoint` is always a literal at
+    // every call site (this effect only ever runs once, on mount) — no need
+    // to re-arm it here. setLoading(false) only runs once the promise
+    // settles, not synchronously within this effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchItems().finally(() => setLoading(false));
   }, [fetchItems]);
 

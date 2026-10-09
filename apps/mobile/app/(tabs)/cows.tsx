@@ -3,6 +3,7 @@ import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityInd
 import { Plus, Search, Edit3, Trash2 } from 'lucide-react-native';
 import type { Cow } from '@farm/shared-types';
 import { mobileApiClient } from '@/src/lib/apiClient';
+import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { useCrudList } from '@/src/hooks/useCrudList';
 import { FormModal, TextField, ChipGroup, PrimaryButton, IconButton, EmptyState, useConfirm } from '@/src/components/ui';
 
@@ -32,11 +33,13 @@ export default function CowsScreen() {
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [createKey, setCreateKey] = useState(generateIdempotencyKey);
 
   function openCreate() {
     setEditing(null);
     setForm(emptyForm);
     setError('');
+    setCreateKey(generateIdempotencyKey());
     setModalOpen(true);
   }
 
@@ -54,13 +57,17 @@ export default function CowsScreen() {
   }
 
   async function handleSubmit() {
+    if (!form.tagNumber.trim() || !form.name.trim()) {
+      setError('Tag number and cow name are required.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
       if (editing) {
         await mobileApiClient.put(`/api/cows/${editing.id}`, form, 'Failed to save cow details');
       } else {
-        await mobileApiClient.post('/api/cows', form, 'Failed to save cow details');
+        await mobileApiClient.post('/api/cows', form, 'Failed to save cow details', { idempotencyKey: createKey });
       }
       setModalOpen(false);
       await reload();
