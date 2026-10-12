@@ -12,7 +12,7 @@ export const GET = withAuth(async (_req, { tenantId }) => {
   return Response.json(expenses);
 });
 
-export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, tenantId, 'expenses:create', async () => {
+export const POST = withAuth(async (req, { tenantId, userId }) => withIdempotency(req, tenantId, 'expenses:create', async () => {
   const body = await req.json();
   const { description, amount, category, expenseDate } = body;
 
@@ -25,7 +25,7 @@ export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, t
   if ('error' in day) return Response.json({ error: day.error }, { status: 400 });
 
   const expense = await db.otherExpense.create({
-    data: {
+    data: { createdById: userId,
       description,
       amount: parsedAmount,
       category: category || 'other',

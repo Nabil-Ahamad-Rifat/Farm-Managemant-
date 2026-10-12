@@ -92,6 +92,7 @@ export async function GET(req: NextRequest) {
       role: user.role,
       email: user.email,
       name: user.name,
+      tv: user.tokenVersion ?? 0,
     });
 
     const response = NextResponse.redirect(`${appUrl}/dashboard`);

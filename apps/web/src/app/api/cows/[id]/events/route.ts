@@ -6,7 +6,7 @@ import { dayOrNull, decodePhoto, eventData, savePhoto, tagTaken } from '@/lib/an
 
 // Add a history record (vaccine, AI, pregnancy check, calving...). A calving
 // can add the calf as its own animal, linked to this one as its mother.
-export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdempotency(req, tenantId, 'cows:event', async () => {
+export const POST = withAuth(async (req, { tenantId, userId }, routeContext) => withIdempotency(req, tenantId, 'cows:event', async () => {
   try {
     const cowId = await getIdFromParams(routeContext, req);
     if (!cowId) return Response.json({ error: 'Missing id' }, { status: 400 });
@@ -38,7 +38,7 @@ export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdem
       if (e.createCalf && calfPhoto) {
         const c = e.createCalf;
         const calf = await tx.cow.create({
-          data: {
+          data: { createdById: userId,
             tenantId,
             tagNumber: c.tagNumber,
             name: c.name ?? c.tagNumber,
@@ -55,7 +55,7 @@ export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdem
         await tx.cow.update({ where: { id: calf.id }, data: { mainPhotoId: photoId } });
         calfId = calf.id;
       }
-      const event = await tx.animalEvent.create({ data: { ...eventData(e), tenantId, cowId, calfId } });
+      const event = await tx.animalEvent.create({ data: { createdById: userId, ...eventData(e), tenantId, cowId, calfId } });
       return { event, calfId };
     });
 

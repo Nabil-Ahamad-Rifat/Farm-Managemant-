@@ -17,6 +17,8 @@ export interface JwtPayload {
   role: string;
   email: string;
   name: string;
+  /** User.tokenVersion when the token was made; a reset or removal bumps it so old tokens stop working. */
+  tv?: number;
 }
 
 // Web keeps the original 7-day cookie-only token. Mobile access tokens are

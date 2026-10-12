@@ -31,9 +31,18 @@ export const POST = withAuth(async (req: NextRequest, { userId, tenantId }) => {
     }
   }
 
-  const otherTenantMembers = await db.user.count({ where: { tenantId, id: { not: userId } } });
+  // A manager deleting their account only removes their login. When the only
+  // owner deletes theirs, the farm goes with it, and so do its managers.
+  const otherOwners = user.role === 'manager' ? 1 : await db.user.count({ where: { tenantId, id: { not: userId }, role: { not: 'manager' } } });
+  const otherTenantMembers = otherOwners;
 
   await db.$transaction(async (tx) => {
+    if (otherOwners === 0) {
+      const managers = await tx.user.findMany({ where: { tenantId, role: 'manager' }, select: { id: true, email: true } });
+      await tx.refreshToken.deleteMany({ where: { userId: { in: managers.map((m) => m.id) } } });
+      await tx.passwordResetToken.deleteMany({ where: { email: { in: managers.map((m) => m.email) } } });
+      await tx.user.deleteMany({ where: { tenantId, role: 'manager' } });
+    }
     // The user goes first: User.tenant is a required relation, so Prisma
     // refuses to delete a Tenant while any User still points at it (P2014).
     // RefreshTokens cascade automatically via the User relation.

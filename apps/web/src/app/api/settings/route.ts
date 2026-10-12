@@ -1,6 +1,6 @@
 import { farmSettingsSchema } from '@farm/shared-validation';
 import { db } from '@/lib/db';
-import { withAuth } from '@/lib/middleware/withAuth';
+import { withAuth, withOwner } from '@/lib/middleware/withAuth';
 import { getDefaultMilkPrice } from '@/lib/settings';
 
 export const GET = withAuth(async (_req, { tenantId }) => {
@@ -12,7 +12,7 @@ export const GET = withAuth(async (_req, { tenantId }) => {
   }
 });
 
-export const PUT = withAuth(async (req, { tenantId }) => {
+export const PUT = withOwner(async (req, { tenantId }) => {
   try {
     const parsed = farmSettingsSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {

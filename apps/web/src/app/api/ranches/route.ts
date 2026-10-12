@@ -32,6 +32,7 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       role: updatedUser.role,
       email: updatedUser.email,
       name: updatedUser.name,
+      tv: updatedUser.tokenVersion ?? 0,
     },
     mobile ? MOBILE_ACCESS_TOKEN_TTL : undefined
   );

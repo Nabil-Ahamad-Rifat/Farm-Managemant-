@@ -36,16 +36,18 @@ model Tenant {
 }
 
 model User {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
-  email     String   @unique
-  password  String?
-  googleId  String?  @unique
-  role      String   @default("owner")
-  tenantId  String   @db.ObjectId
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  email        String   @unique
+  password     String?
+  googleId     String?  @unique
+  role         String   @default("owner")
+  // Bumped when the password is reset or the member is changed, so older logins stop working.
+  tokenVersion Int?
+  tenantId     String   @db.ObjectId
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   refreshTokens RefreshToken[]
 }
@@ -134,6 +136,7 @@ model SalaryPayment {
   note        String?
   paidAt      DateTime @default(now())
   createdAt   DateTime @default(now())
+  createdById String?  @db.ObjectId // who entered it (owner or manager)
 
   @@index([tenantId, paidAt])
 }
@@ -155,14 +158,15 @@ model PayRate {
 
 // A day a monthly worker did not work (unpaid).
 model EmployeeAbsence {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  employeeId String   @db.ObjectId
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  tenantId   String   @db.ObjectId
-  tenant     Tenant   @relation(fields: [tenantId], references: [id])
-  date       DateTime
-  note       String?
-  createdAt  DateTime @default(now())
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId  String   @db.ObjectId
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  tenantId    String   @db.ObjectId
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  date        DateTime
+  note        String?
+  createdAt   DateTime @default(now())
+  createdById String?  @db.ObjectId // who entered it (owner or manager)
 
   @@unique([employeeId, date])
   @@index([tenantId])
@@ -170,16 +174,17 @@ model EmployeeAbsence {
 
 // Work done by a daily worker: `days` (0.5 allowed) at the rate of that time.
 model WorkEntry {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  employeeId String   @db.ObjectId
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  tenantId   String   @db.ObjectId
-  tenant     Tenant   @relation(fields: [tenantId], references: [id])
-  date       DateTime
-  days       Float
-  rate       Float
-  note       String?
-  createdAt  DateTime @default(now())
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId  String   @db.ObjectId
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  tenantId    String   @db.ObjectId
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  date        DateTime
+  days        Float
+  rate        Float
+  note        String?
+  createdAt   DateTime @default(now())
+  createdById String?  @db.ObjectId // who entered it (owner or manager)
 
   @@index([tenantId, date])
 }
@@ -213,8 +218,9 @@ model Cow {
   mother       Cow?      @relation("CowMother", fields: [motherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   calves       Cow[]     @relation("CowMother")
 
-  photos AnimalPhoto[]
-  events AnimalEvent[]
+  photos      AnimalPhoto[]
+  events      AnimalEvent[]
+  createdById String?       @db.ObjectId // who entered it (owner or manager)
 
   @@unique([tagNumber, tenantId])
 }
@@ -263,6 +269,7 @@ model AnimalEvent {
   notes       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  createdById String?   @db.ObjectId // who entered it (owner or manager)
 
   @@index([tenantId, cowId])
   @@index([tenantId, type])
@@ -292,7 +299,8 @@ model FeedBatch {
   paidAmount        Float?
   payStatus         String? // "paid" | "partial" | "pending"
 
-  usages FeedUsage[]
+  usages      FeedUsage[]
+  createdById String?     @db.ObjectId // who entered it (owner or manager)
 
   @@index([tenantId, supplierId])
 }
@@ -329,6 +337,7 @@ model Sale {
   paidAmount   Float?    @default(0)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  createdById  String?   @db.ObjectId // who entered it (owner or manager)
 
   @@index([tenantId, customerId])
 }
@@ -355,17 +364,18 @@ model Customer {
 // first (see allocatePayments in @farm/business-logic); anything beyond the
 // total sold is advance credit for future sales.
 model Payment {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  customerId String   @db.ObjectId
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  amount     Float
-  method     String   @default("cash") // cash | bkash | nagad | bank | other
-  note       String?
-  paidAt     DateTime @default(now())
-  tenantId   String   @db.ObjectId
-  tenant     Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  customerId  String   @db.ObjectId
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  amount      Float
+  method      String   @default("cash") // cash | bkash | nagad | bank | other
+  note        String?
+  paidAt      DateTime @default(now())
+  tenantId    String   @db.ObjectId
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?  @db.ObjectId // who entered it (owner or manager)
 
   @@index([tenantId, customerId])
 }
@@ -390,17 +400,18 @@ model Supplier {
 // Money paid to a supplier. Applied to their purchases oldest first, the same
 // way customer payments are; anything beyond the total bought is advance.
 model SupplierPayment {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  supplierId String   @db.ObjectId
-  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  amount     Float
-  method     String   @default("cash") // cash | bkash | nagad | bank | other
-  note       String?
-  paidAt     DateTime @default(now())
-  tenantId   String   @db.ObjectId
-  tenant     Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  supplierId  String   @db.ObjectId
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  amount      Float
+  method      String   @default("cash") // cash | bkash | nagad | bank | other
+  note        String?
+  paidAt      DateTime @default(now())
+  tenantId    String   @db.ObjectId
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?  @db.ObjectId // who entered it (owner or manager)
 
   @@index([tenantId, supplierId])
 }
@@ -415,6 +426,7 @@ model OtherExpense {
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  createdById String?  @db.ObjectId // who entered it (owner or manager)
 }
 
 model OtherIncome {
@@ -427,4 +439,5 @@ model OtherIncome {
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  createdById String?  @db.ObjectId // who entered it (owner or manager)
 }

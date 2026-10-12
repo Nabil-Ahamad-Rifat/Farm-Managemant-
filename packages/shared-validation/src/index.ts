@@ -262,3 +262,16 @@ export const workEntrySchema = z.object({
 export const leaveSchema = z.object({
   leftDate: optionalDay,
 });
+
+/** A manager the owner adds: their login email and a password the owner gives them. */
+export const teamMemberSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(100),
+  email: z.string().trim().toLowerCase().email('Enter a valid email').max(255),
+  password: z.string().min(8, 'Password must be at least 8 characters').max(200),
+});
+
+/** Change a manager's name or set a new password (which logs them out everywhere). */
+export const teamMemberUpdateSchema = z.object({
+  name: z.preprocess(blankToUndefined, z.string().trim().min(1).max(100).optional()),
+  password: z.preprocess(blankToUndefined, z.string().min(8, 'Password must be at least 8 characters').max(200).optional()),
+});

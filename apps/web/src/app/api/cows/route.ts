@@ -14,7 +14,7 @@ export const GET = withAuth(async (_req, { tenantId }) => {
 });
 
 // Add an animal. A photo is required so every animal can be recognised.
-export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, tenantId, 'cows:create', async () => {
+export const POST = withAuth(async (req, { tenantId, userId }) => withIdempotency(req, tenantId, 'cows:create', async () => {
   try {
     const parsed = animalSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
@@ -32,7 +32,7 @@ export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, t
     if (motherError) return Response.json({ error: motherError }, { status: 400 });
 
     const id = await db.$transaction(async (tx) => {
-      const cow = await tx.cow.create({ data: { ...animalData(a), tenantId } });
+      const cow = await tx.cow.create({ data: { createdById: userId, ...animalData(a), tenantId } });
       const photoId = await savePhoto(tx, tenantId, cow.id, decoded.bytes, a.photo!);
       await tx.cow.update({ where: { id: cow.id }, data: { mainPhotoId: photoId } });
       return cow.id;

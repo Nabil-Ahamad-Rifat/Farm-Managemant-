@@ -21,7 +21,7 @@ export const GET = withAuth(async (req, { tenantId }, routeContext) => {
   }
 });
 
-export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
+export const PUT = withAuth(async (req, { tenantId, userId }, routeContext) => {
   try {
     const id = await getIdFromParams(routeContext, req);
     if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
@@ -61,7 +61,7 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
       // so it doesn't suddenly show up as owed.
       if (!existing.customerId && customerId && existing.status === 'paid') {
         await tx.payment.create({
-          data: {
+          data: { createdById: userId,
             tenantId,
             customerId,
             amount: existing.amount,

@@ -7,10 +7,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   let tenantName = 'Farm Manager';
   let userName = 'User';
   let userEmail = '';
+  let role = 'owner';
 
   if (session) {
     userName = session.name;
     userEmail = session.email;
+    role = session.role;
     const tenant = await db.tenant.findUnique({ where: { id: session.tenantId } });
     if (tenant) {
       tenantName = tenant.name;
@@ -18,7 +20,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <DashboardShell tenantName={tenantName} userName={userName} userEmail={userEmail}>
+    <DashboardShell tenantName={tenantName} userName={userName} userEmail={userEmail} role={role}>
       {children}
     </DashboardShell>
   );

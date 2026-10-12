@@ -18,7 +18,7 @@ export const GET = withAuth(async (_req, { tenantId }) => {
   }
 });
 
-export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, tenantId, 'sales:create', async () => {
+export const POST = withAuth(async (req, { tenantId, userId }) => withIdempotency(req, tenantId, 'sales:create', async () => {
   try {
     const parsed = saleSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
@@ -47,7 +47,7 @@ export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, t
         : await findOrCreateCustomerByName(tx, tenantId, s.customerName!, s.customerType);
 
       const created = await tx.sale.create({
-        data: {
+        data: { createdById: userId,
           tenantId,
           customerId: customer.id,
           customerName: customer.name,
@@ -65,7 +65,7 @@ export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, t
 
       if (paidNow > 0) {
         await tx.payment.create({
-          data: {
+          data: { createdById: userId,
             tenantId,
             customerId: customer.id,
             amount: paidNow,

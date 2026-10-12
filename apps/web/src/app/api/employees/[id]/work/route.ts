@@ -6,7 +6,7 @@ import { withIdempotency } from '@/lib/idempotency';
 import { findWorker, getWorkerDetail, payDay } from '@/lib/payroll';
 
 // Add work done by a daily worker (e.g. 3 days). The rate defaults to theirs.
-export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdempotency(req, tenantId, 'employees:work', async () => {
+export const POST = withAuth(async (req, { tenantId, userId }, routeContext) => withIdempotency(req, tenantId, 'employees:work', async () => {
   try {
     const worker = await findWorker(tenantId, await getIdFromParams(routeContext, req));
     if (!worker) return Response.json({ error: 'Employee not found' }, { status: 404 });
@@ -24,7 +24,7 @@ export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdem
     if (rate <= 0) return Response.json({ error: 'Set a day rate for this worker first' }, { status: 400 });
 
     const entry = await db.workEntry.create({
-      data: { tenantId, employeeId: worker.id, date: payDay(w.date), days: w.days, rate, note: w.note ?? null },
+      data: { createdById: userId, tenantId, employeeId: worker.id, date: payDay(w.date), days: w.days, rate, note: w.note ?? null },
     });
     return Response.json({ entry, worker: await getWorkerDetail(tenantId, worker.id) }, { status: 201 });
   } catch (err: unknown) {

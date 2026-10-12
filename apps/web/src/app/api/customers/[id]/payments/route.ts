@@ -6,7 +6,7 @@ import { recomputeCustomer, dayToDate } from '@/lib/receivables';
 
 // Record money received from a customer. It is applied to their oldest unpaid
 // sales first; anything left over becomes advance credit.
-export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdempotency(req, tenantId, 'customers:payment', async () => {
+export const POST = withAuth(async (req, { tenantId, userId }, routeContext) => withIdempotency(req, tenantId, 'customers:payment', async () => {
   try {
     const customerId = await getIdFromParams(routeContext, req);
     if (!customerId) return Response.json({ error: 'Missing id' }, { status: 400 });
@@ -22,7 +22,7 @@ export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdem
     const { amount, method, note, paidAt } = parsed.data;
     const { payment, balance } = await db.$transaction(async (tx) => {
       const payment = await tx.payment.create({
-        data: { tenantId, customerId, amount, method, note: note ?? null, paidAt: dayToDate(paidAt) },
+        data: { createdById: userId, tenantId, customerId, amount, method, note: note ?? null, paidAt: dayToDate(paidAt) },
       });
       const balance = await recomputeCustomer(tx, tenantId, customerId);
       return { payment, balance };

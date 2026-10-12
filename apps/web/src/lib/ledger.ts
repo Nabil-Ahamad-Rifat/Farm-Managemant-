@@ -23,6 +23,8 @@ export interface LedgerEntry {
   detail: string | null;
   amount: number;
   href: string;
+  /** Who entered it (null for records from before "added by"). */
+  byId: string | null;
 }
 
 export interface LedgerQuery {
@@ -31,12 +33,14 @@ export interface LedgerQuery {
   type: LedgerType | null;
   q: string | null;
   limit: number;
+  /** Only entries added by this user. */
+  by: string | null;
 }
 
 const isDay = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
 
 /** Filters from the URL; defaults to this month (farm calendar) and all types. */
-export function parseLedgerQuery(p: { from?: string | null; to?: string | null; month?: string | null; type?: string | null; q?: string | null; limit?: string | null }): LedgerQuery {
+export function parseLedgerQuery(p: { from?: string | null; to?: string | null; month?: string | null; type?: string | null; q?: string | null; limit?: string | null; by?: string | null }): LedgerQuery {
   const today = farmToday();
   let from: string;
   let to: string;
@@ -51,7 +55,7 @@ export function parseLedgerQuery(p: { from?: string | null; to?: string | null; 
   }
   const type = (LEDGER_TYPES as readonly string[]).includes(p.type ?? '') ? (p.type as LedgerType) : null;
   const limit = Math.min(1000, Math.max(50, parseInt(p.limit ?? '') || 100));
-  return { from, to, type, q: p.q?.trim().slice(0, 100) || null, limit };
+  return { from, to, type, q: p.q?.trim().slice(0, 100) || null, limit, by: p.by && /^[a-f0-9]{24}$/i.test(p.by) ? p.by : null };
 }
 
 /** Record types as the animal page names them. */
@@ -76,22 +80,22 @@ export async function getLedger(tenantId: string, query: LedgerQuery) {
   const none = Promise.resolve([] as never[]);
 
   const [sales, payments, income, expenses, feed, supplierPays, salaryPays, animalCosts] = await Promise.all([
-    want('sale') ? db.sale.findMany({ where: { tenantId, createdAt: range }, select: { id: true, amount: true, createdAt: true, customerName: true, customerId: true, saleType: true, quantity: true, status: true } }) : none,
-    want('payment') ? db.payment.findMany({ where: { tenantId, paidAt: range }, select: { id: true, amount: true, paidAt: true, method: true, note: true, customerId: true, customer: { select: { name: true } } } }) : none,
-    want('income') ? db.otherIncome.findMany({ where: { tenantId, incomeDate: range }, select: { id: true, amount: true, incomeDate: true, description: true, category: true } }) : none,
-    want('expense') ? db.otherExpense.findMany({ where: { tenantId, expenseDate: range }, select: { id: true, amount: true, expenseDate: true, description: true, category: true } }) : none,
+    want('sale') ? db.sale.findMany({ where: { tenantId, createdAt: range }, select: { id: true, createdById: true, amount: true, createdAt: true, customerName: true, customerId: true, saleType: true, quantity: true, status: true } }) : none,
+    want('payment') ? db.payment.findMany({ where: { tenantId, paidAt: range }, select: { id: true, createdById: true, amount: true, paidAt: true, method: true, note: true, customerId: true, customer: { select: { name: true } } } }) : none,
+    want('income') ? db.otherIncome.findMany({ where: { tenantId, incomeDate: range }, select: { id: true, createdById: true, amount: true, incomeDate: true, description: true, category: true } }) : none,
+    want('expense') ? db.otherExpense.findMany({ where: { tenantId, expenseDate: range }, select: { id: true, createdById: true, amount: true, expenseDate: true, description: true, category: true } }) : none,
     want('feed')
       ? db.feedBatch.findMany({
           where: { tenantId, OR: [{ purchasedAt: range }, { purchasedAt: null, createdAt: range }, { purchasedAt: { isSet: false }, createdAt: range }] },
-          select: { id: true, name: true, quantity: true, unitPrice: true, purchasedAt: true, createdAt: true, supplierId: true, supplier: { select: { name: true } } },
+          select: { id: true, createdById: true, name: true, quantity: true, unitPrice: true, purchasedAt: true, createdAt: true, supplierId: true, supplier: { select: { name: true } } },
         })
       : none,
-    want('supplier') ? db.supplierPayment.findMany({ where: { tenantId, paidAt: range }, select: { id: true, amount: true, paidAt: true, method: true, note: true, supplierId: true, supplier: { select: { name: true } } } }) : none,
+    want('supplier') ? db.supplierPayment.findMany({ where: { tenantId, paidAt: range }, select: { id: true, createdById: true, amount: true, paidAt: true, method: true, note: true, supplierId: true, supplier: { select: { name: true } } } }) : none,
     want('salary') || want('writeoff')
-      ? db.salaryPayment.findMany({ where: { employee: { tenantId }, paidAt: range }, select: { id: true, amount: true, paidAt: true, kind: true, note: true, employeeId: true, employee: { select: { name: true } } } })
+      ? db.salaryPayment.findMany({ where: { employee: { tenantId }, paidAt: range }, select: { id: true, createdById: true, amount: true, paidAt: true, kind: true, note: true, employeeId: true, employee: { select: { name: true } } } })
       : none,
     want('animal')
-      ? db.animalEvent.findMany({ where: { tenantId, cost: { gt: 0 }, date: range }, select: { id: true, cowId: true, type: true, title: true, cost: true, date: true, cow: { select: { tagNumber: true, name: true } } } })
+      ? db.animalEvent.findMany({ where: { tenantId, cost: { gt: 0 }, date: range }, select: { id: true, createdById: true, cowId: true, type: true, title: true, cost: true, date: true, cow: { select: { tagNumber: true, name: true } } } })
       : none,
   ]);
 
@@ -105,6 +109,7 @@ export async function getLedger(tenantId: string, query: LedgerQuery) {
       detail: [s.saleType === 'milk' && s.quantity ? `${tkPlain(s.quantity)} L milk` : s.saleType === 'cow_sale' ? 'Cow' : null, s.status === 'paid' ? 'paid' : s.status === 'partial' ? 'part paid' : 'not paid yet'].filter(Boolean).join(' · '),
       amount: s.amount,
       href: s.customerId ? `/dashboard/customers/${s.customerId}` : '/dashboard/sales',
+      byId: s.createdById ?? null,
     })),
     ...payments.map((p): LedgerEntry => ({
       id: 'p' + p.id,
@@ -115,9 +120,10 @@ export async function getLedger(tenantId: string, query: LedgerQuery) {
       detail: [p.method !== 'cash' ? p.method : null, p.note].filter(Boolean).join(' · ') || null,
       amount: p.amount,
       href: `/dashboard/customers/${p.customerId}`,
+      byId: p.createdById ?? null,
     })),
-    ...income.map((i): LedgerEntry => ({ id: 'i' + i.id, type: 'income', flow: 'in', date: i.incomeDate, title: i.description, detail: `Other income · ${i.category}`, amount: i.amount, href: '/dashboard/income' })),
-    ...expenses.map((e): LedgerEntry => ({ id: 'e' + e.id, type: 'expense', flow: 'out', date: e.expenseDate, title: e.description, detail: `Expense · ${e.category}`, amount: e.amount, href: '/dashboard/expenses' })),
+    ...income.map((i): LedgerEntry => ({ id: 'i' + i.id, type: 'income', flow: 'in', date: i.incomeDate, title: i.description, detail: `Other income · ${i.category}`, amount: i.amount, href: '/dashboard/income', byId: i.createdById ?? null })),
+    ...expenses.map((e): LedgerEntry => ({ id: 'e' + e.id, type: 'expense', flow: 'out', date: e.expenseDate, title: e.description, detail: `Expense · ${e.category}`, amount: e.amount, href: '/dashboard/expenses', byId: e.createdById ?? null })),
     ...animalCosts.map((a): LedgerEntry => ({
       id: 'a' + a.id,
       type: 'animal',
@@ -127,6 +133,7 @@ export async function getLedger(tenantId: string, query: LedgerQuery) {
       detail: `Animal care · ${a.cow.tagNumber}${a.cow.name !== a.cow.tagNumber ? ` ${a.cow.name}` : ''}`,
       amount: a.cost ?? 0,
       href: `/dashboard/cows/${a.cowId}`,
+      byId: a.createdById ?? null,
     })),
     ...feed.map((f): LedgerEntry => ({
       id: 'f' + f.id,
@@ -138,6 +145,7 @@ export async function getLedger(tenantId: string, query: LedgerQuery) {
       detail: `${tkPlain(f.quantity)} kg × ৳${tkPlain(f.unitPrice)}${f.supplier ? ` · from ${f.supplier.name}` : ' · paid on the spot'}`,
       amount: Math.round(f.quantity * f.unitPrice * 100) / 100,
       href: f.supplierId ? `/dashboard/suppliers/${f.supplierId}` : '/dashboard/feed',
+      byId: f.createdById ?? null,
     })),
     ...supplierPays.map((p): LedgerEntry => ({
       id: 'sp' + p.id,
@@ -148,6 +156,7 @@ export async function getLedger(tenantId: string, query: LedgerQuery) {
       detail: [p.method !== 'cash' ? p.method : null, p.note].filter(Boolean).join(' · ') || null,
       amount: p.amount,
       href: `/dashboard/suppliers/${p.supplierId}`,
+      byId: p.createdById ?? null,
     })),
     ...salaryPays
       .filter((p) => (p.kind === 'writeoff' ? want('writeoff') : want('salary')))
@@ -160,11 +169,13 @@ export async function getLedger(tenantId: string, query: LedgerQuery) {
         detail: p.note,
         amount: p.amount,
         href: `/dashboard/employees/${p.employeeId}`,
+        byId: p.createdById ?? null,
       })),
   ];
 
   const q = query.q?.toLowerCase();
-  const matched = (q ? entries.filter((e) => e.title.toLowerCase().includes(q) || (e.detail ?? '').toLowerCase().includes(q)) : entries).sort(
+  const people = query.by ? entries.filter((e) => e.byId === query.by) : entries;
+  const matched = (q ? people.filter((e) => e.title.toLowerCase().includes(q) || (e.detail ?? '').toLowerCase().includes(q)) : people).sort(
     (a, b) => b.date.getTime() - a.date.getTime() || a.id.localeCompare(b.id),
   );
 

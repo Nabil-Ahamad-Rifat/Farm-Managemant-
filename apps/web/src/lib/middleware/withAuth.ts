@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { verifyToken } from '@/lib/auth/jwt';
+import { currentUser, isOwner } from '@/lib/auth/session';
 
 export interface AuthContext {
   userId: string;
@@ -20,7 +21,7 @@ export function withAuth<T = unknown>(
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = verifyToken(token);
+    const payload = await currentUser(verifyToken(token));
     if (!payload) {
       return Response.json({ error: 'Invalid token' }, { status: 401 });
     }
@@ -48,4 +49,16 @@ export async function getIdFromParams(routeContext: unknown, req: NextRequest): 
     return segments.pop() || null;
   }
   return last || null;
+}
+
+/** Like withAuth, for routes only the farm owner may use (money reports, settings, team). Managers get 403. */
+export function withOwner<T = unknown>(
+  handler: (req: NextRequest, ctx: AuthContext, routeContext: T) => Promise<Response>
+) {
+  return withAuth<T>(async (req, ctx, routeContext) => {
+    if (!isOwner(ctx.role)) {
+      return Response.json({ error: 'Only the farm owner can see this' }, { status: 403 });
+    }
+    return handler(req, ctx, routeContext);
+  });
 }

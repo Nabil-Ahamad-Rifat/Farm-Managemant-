@@ -1,7 +1,7 @@
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowDownLeft, ArrowUpRight, ShoppingBag, PackagePlus, Ban, Search } from 'lucide-react';
-import { getSession } from '@/lib/auth/session';
+import { db } from '@/lib/db';
+import { requireOwnerPage } from '@/lib/auth/session';
 import { getLedger, parseLedgerQuery, type LedgerFlow, type LedgerType } from '@/lib/ledger';
 import { fmtDate, tk } from '@/components/sales/shared';
 
@@ -30,18 +30,20 @@ const FLOW: Record<LedgerFlow, { Icon: typeof ArrowDownLeft; tone: string; sign:
 };
 
 export default async function HistoryPage({ searchParams }: { searchParams: Search }) {
-  const session = await getSession();
-  if (!session) {
-    redirect('/login');
-  }
+  // Money reports are for the owner only.
+  const session = await requireOwnerPage();
 
   const sp = await searchParams;
-  const query = parseLedgerQuery({ from: one(sp.from), to: one(sp.to), month: one(sp.month), type: one(sp.type), q: one(sp.q), limit: one(sp.limit) });
-  const ledger = await getLedger(session.tenantId, query);
+  const query = parseLedgerQuery({ from: one(sp.from), to: one(sp.to), month: one(sp.month), type: one(sp.type), q: one(sp.q), limit: one(sp.limit), by: one(sp.by) });
+  const [ledger, team] = await Promise.all([
+    getLedger(session.tenantId, query),
+    db.user.findMany({ where: { tenantId: session.tenantId }, select: { id: true, name: true, role: true }, orderBy: { createdAt: 'asc' } }),
+  ]);
+  const nameOf = new Map(team.map((u) => [u.id, u.name]));
   const t = ledger.totals;
 
   const link = (patch: Record<string, string | null>) => {
-    const params = new URLSearchParams({ from: query.from, to: query.to, ...(query.type ? { type: query.type } : {}), ...(query.q ? { q: query.q } : {}) });
+    const params = new URLSearchParams({ from: query.from, to: query.to, ...(query.type ? { type: query.type } : {}), ...(query.q ? { q: query.q } : {}), ...(query.by ? { by: query.by } : {}) });
     for (const [k, v] of Object.entries(patch)) {
       if (v === null) params.delete(k);
       else params.set(k, v);
@@ -66,6 +68,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Sear
       {/* Filters: a plain form, so every view has its own link. */}
       <form method="get" className="space-y-3 rounded-card border border-line bg-white p-4 shadow-sm">
         {query.type && <input type="hidden" name="type" value={query.type} />}
+        {query.by && <input type="hidden" name="by" value={query.by} />}
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_2fr_auto] sm:items-end">
           <div>
             <label htmlFor="h-from" className="mb-1 block text-xs font-semibold uppercase text-slate-600">From</label>
@@ -99,6 +102,26 @@ export default async function HistoryPage({ searchParams }: { searchParams: Sear
             );
           })}
         </div>
+        {team.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
+            <span className="text-xs font-semibold text-slate-500">Added by</span>
+            {[{ id: null as string | null, name: 'Everyone' }, ...team].map((u) => {
+              const active = query.by === u.id;
+              return (
+                <Link
+                  key={u.id ?? 'all'}
+                  href={link({ by: u.id, limit: null })}
+                  aria-current={active ? 'page' : undefined}
+                  className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                    active ? 'bg-ink text-white shadow-card' : 'border border-line bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {u.name}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </form>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -134,6 +157,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Sear
                             <p className="truncate text-xs text-slate-500">
                               <span className="sr-only">{f.note}. </span>
                               {e.detail}
+                              {e.byId && nameOf.has(e.byId) && team.length > 1 ? ` · by ${nameOf.get(e.byId)}` : ''}
                             </p>
                           </div>
                           <p className={`shrink-0 text-sm font-bold ${f.amount}`}>

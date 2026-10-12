@@ -5,14 +5,15 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Home, Users, PawPrint, Wheat, DollarSign, TrendingUp, PackageOpen, Coins, Settings, HandCoins, Store, CalendarRange, History, Menu, X,
-  CalendarDays, type LucideIcon,
+  CalendarDays, UserCog, type LucideIcon,
 } from 'lucide-react';
 import { farmToday } from '@farm/business-logic';
 import LogoutButton from '@/components/LogoutButton';
 import { BrandMark } from '@/components/ui/Brand';
 import { FeedbackProvider } from '@/components/ui/Feedback';
 
-type NavLink = { href: string; label: string; icon: LucideIcon };
+/** `owner`: hidden from managers (money reports, settings, team). */
+type NavLink = { href: string; label: string; icon: LucideIcon; owner?: boolean };
 
 const GROUPS: { title: string; links: NavLink[] }[] = [
   {
@@ -42,10 +43,11 @@ const GROUPS: { title: string; links: NavLink[] }[] = [
   {
     title: 'Reports',
     links: [
-      { href: '/dashboard/revenue', label: 'Revenue Portal', icon: TrendingUp },
-      { href: '/dashboard/history', label: 'History', icon: History },
-      { href: '/dashboard/reports', label: 'Monthly Report', icon: CalendarRange },
-      { href: '/dashboard/settings', label: 'Settings', icon: Settings },
+      { href: '/dashboard/revenue', label: 'Revenue Portal', icon: TrendingUp, owner: true },
+      { href: '/dashboard/history', label: 'History', icon: History, owner: true },
+      { href: '/dashboard/reports', label: 'Monthly Report', icon: CalendarRange, owner: true },
+      { href: '/dashboard/settings/team', label: 'Team', icon: UserCog, owner: true },
+      { href: '/dashboard/settings', label: 'Settings', icon: Settings, owner: true },
     ],
   },
 ];
@@ -58,8 +60,17 @@ const TABS: NavLink[] = [
   { href: '/dashboard/customers', label: 'Dues', icon: HandCoins },
 ];
 
-const isActive = (pathname: string, href: string) =>
+const matches = (pathname: string, href: string) =>
   href === '/dashboard' ? pathname === '/dashboard' : pathname === href || pathname.startsWith(href + '/');
+
+/** The most specific link for the page (Team beats Settings on /dashboard/settings/team). */
+const activeHref = (pathname: string) =>
+  GROUPS.flatMap((g) => g.links)
+    .filter((l) => matches(pathname, l.href))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+
+// Every bottom tab is also a menu link, so one rule serves both.
+const isActive = (pathname: string, href: string) => activeHref(pathname) === href;
 
 /** Where the user is, for the desktop top bar: "Selling / Sales". */
 function locate(pathname: string) {
@@ -70,10 +81,11 @@ function locate(pathname: string) {
   return { group: 'Farm', label: 'Overview' };
 }
 
-function NavList({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function NavList({ pathname, owner, onNavigate }: { pathname: string; owner: boolean; onNavigate?: () => void }) {
+  const groups = GROUPS.map((g) => ({ ...g, links: g.links.filter((l) => owner || !l.owner) })).filter((g) => g.links.length > 0);
   return (
     <nav className="space-y-6" aria-label="Main">
-      {GROUPS.map((g) => (
+      {groups.map((g) => (
         <div key={g.title}>
           <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">{g.title}</p>
           <div className="space-y-0.5">
@@ -139,13 +151,17 @@ export default function DashboardShell({
   tenantName,
   userName,
   userEmail,
+  role = 'owner',
   children,
 }: {
   tenantName: string;
   userName: string;
   userEmail: string;
+  /** "manager" hides the money reports, settings and team. */
+  role?: string;
   children: React.ReactNode;
 }) {
+  const owner = role !== 'manager';
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const where = locate(pathname);
@@ -179,7 +195,7 @@ export default function DashboardShell({
             <div className="px-1">
               <FarmBadge tenantName={tenantName} />
             </div>
-            <NavList pathname={pathname} />
+            <NavList pathname={pathname} owner={owner} />
           </div>
           <UserBox userName={userName} userEmail={userEmail} />
         </aside>
@@ -221,7 +237,7 @@ export default function DashboardShell({
                     <X className="h-6 w-6" />
                   </button>
                 </div>
-                <NavList pathname={pathname} onNavigate={() => setMenuOpen(false)} />
+                <NavList pathname={pathname} owner={owner} onNavigate={() => setMenuOpen(false)} />
               </div>
               <div className="pt-6">
                 <UserBox userName={userName} userEmail={userEmail} />

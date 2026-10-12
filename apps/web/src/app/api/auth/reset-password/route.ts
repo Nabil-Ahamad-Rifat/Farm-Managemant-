@@ -28,10 +28,12 @@ export async function POST(req: NextRequest) {
 
     const hashed = await hashPassword(newPassword);
 
-    await db.user.update({
-      where: { email: record.email },
-      data: { password: hashed },
-    });
+    // A new password logs out every old session (web and phone).
+    const user = await db.user.findUnique({ where: { email: record.email }, select: { id: true, tokenVersion: true } });
+    if (user) {
+      await db.user.update({ where: { id: user.id }, data: { password: hashed, tokenVersion: (user.tokenVersion ?? 0) + 1 } });
+      await db.refreshToken.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } });
+    }
 
     await markTokenUsed(token);
 

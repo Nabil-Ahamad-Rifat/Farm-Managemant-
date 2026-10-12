@@ -18,7 +18,7 @@ export const GET = withAuth(async (_req, { tenantId }) => {
 });
 
 // POST /api/income - create a new other income record
-export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, tenantId, 'income:create', async () => {
+export const POST = withAuth(async (req, { tenantId, userId }) => withIdempotency(req, tenantId, 'income:create', async () => {
   try {
     const body = await req.json();
     const { description, amount, category, incomeDate } = body;
@@ -36,7 +36,7 @@ export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, t
     if ('error' in day) return Response.json({ error: day.error }, { status: 400 });
 
     const income = await db.otherIncome.create({
-      data: {
+      data: { createdById: userId,
         description,
         amount: parsedAmount,
         category: category || 'other',

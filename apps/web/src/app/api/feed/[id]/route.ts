@@ -17,7 +17,7 @@ export const GET = withAuth(async (req, { tenantId }, routeContext) => {
   return Response.json(presentFeed(feed));
 });
 
-export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
+export const PUT = withAuth(async (req, { tenantId, userId }, routeContext) => {
   try {
     const id = await getIdFromParams(routeContext, req);
     if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
@@ -55,7 +55,7 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
       // A batch from before supplier tracking was paid in full: keep it that way when linking it.
       if (!existing.supplierId && supplierId) {
         await tx.supplierPayment.create({
-          data: {
+          data: { createdById: userId,
             tenantId,
             supplierId,
             amount: purchaseTotal(existing),

@@ -1,5 +1,5 @@
 import { addDaysIso, farmToday } from '@farm/business-logic';
-import { withAuth } from '@/lib/middleware/withAuth';
+import { withOwner } from '@/lib/middleware/withAuth';
 import { getFinanceReport, resolveRange, summaryFor, loadFinanceData } from '@/lib/finance';
 
 /** Day counts the older mobile screen shows side by side. */
@@ -14,7 +14,7 @@ const LEGACY_PERIODS = [1, 3, 5, 7, 15, 30];
  * `dailyBreakdown`, `totalDue` and `totalPayable`; those keep working, now
  * on the profit basis (sales made, labour earned).
  */
-export const GET = withAuth(async (req, { tenantId }) => {
+export const GET = withOwner(async (req, { tenantId }) => {
   try {
     const url = new URL(req.url);
     const q = (k: string) => url.searchParams.get(k);

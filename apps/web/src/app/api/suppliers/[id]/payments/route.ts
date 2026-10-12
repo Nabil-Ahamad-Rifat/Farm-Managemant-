@@ -7,7 +7,7 @@ import { recomputeSupplier } from '@/lib/payables';
 
 // Record money paid to a supplier. It is applied to the oldest unpaid
 // purchases first; anything left over becomes advance with that supplier.
-export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdempotency(req, tenantId, 'suppliers:payment', async () => {
+export const POST = withAuth(async (req, { tenantId, userId }, routeContext) => withIdempotency(req, tenantId, 'suppliers:payment', async () => {
   try {
     const supplierId = await getIdFromParams(routeContext, req);
     if (!supplierId) return Response.json({ error: 'Missing id' }, { status: 400 });
@@ -23,7 +23,7 @@ export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdem
     const { amount, method, note, paidAt } = parsed.data;
     const { payment, balance } = await db.$transaction(async (tx) => {
       const payment = await tx.supplierPayment.create({
-        data: { tenantId, supplierId, amount, method, note: note ?? null, paidAt: dayToDate(paidAt) },
+        data: { createdById: userId, tenantId, supplierId, amount, method, note: note ?? null, paidAt: dayToDate(paidAt) },
       });
       const balance = await recomputeSupplier(tx, tenantId, supplierId);
       return { payment, balance };

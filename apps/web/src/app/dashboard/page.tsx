@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getSession } from '@/lib/auth/session';
+import { getSession, isOwner } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { addDaysIso, daysBetween, farmToday } from '@farm/business-logic';
 import { listCustomersWithBalances } from '@/lib/receivables';
@@ -26,6 +26,8 @@ export default async function DashboardPage() {
   }
 
   const { tenantId } = session;
+  // Managers see the daily work and the dues, but not profit, cash or costs.
+  const owner = isOwner(session.role);
 
   // Days and months on the farm's clock (Bangladesh), the same as every other screen.
   const now = new Date();
@@ -64,11 +66,11 @@ export default async function DashboardPage() {
     listSuppliersWithBalances(tenantId),
     // Vaccines, calvings and pregnancy checks coming up
     getDueSoon(tenantId, now),
-    loadFinanceData(tenantId),
+    owner ? loadFinanceData(tenantId) : null,
   ]);
 
   // This month so far: the same numbers as the Revenue Portal.
-  const month = summaryFor(money, monthStart, today, now);
+  const month = money && summaryFor(money, monthStart, today, now);
   const activeEmployeeCount = workers.filter((w) => w.status !== 'left').length;
   const totalRemainingFeed = feedBatches.reduce((acc, f) => acc + f.remainingQuantity, 0);
   const totalFeedValue = feedBatches.reduce((acc, f) => acc + f.remainingQuantity * f.unitPrice, 0);
@@ -80,16 +82,18 @@ export default async function DashboardPage() {
   const signed = (n: number) => (n < 0 ? '− ' + tk(-n) : tk(n));
 
   // Money received per day over the last 30 days (customers + other income).
-  const chartDays = daysBetween(chartFrom, today).map((date) => {
-    const s = summaryFor(money, date, date, now).profit;
-    return { key: date, income: s.income, costs: s.costs, profit: s.profit };
-  });
+  const chartDays = money
+    ? daysBetween(chartFrom, today).map((date) => {
+        const s = summaryFor(money, date, date, now).profit;
+        return { key: date, income: s.income, costs: s.costs, profit: s.profit };
+      })
+    : [];
 
   const greeting = (() => {
     const h = (now.getUTCHours() + 6) % 24;
     return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   })();
-  const costRows = [
+  const costRows = !month ? [] : [
     { label: 'Feed bought', value: month.profit.feed, href: '/dashboard/feed' },
     { label: "Workers' pay earned", value: month.profit.labour + month.profit.writtenOff, href: '/dashboard/employees' },
     { label: 'Animal care', value: month.profit.animalCare, href: '/dashboard/history?type=animal' },
@@ -102,12 +106,14 @@ export default async function DashboardPage() {
       <PageHeader
         eyebrow={greeting}
         title="Farm overview"
-        subtitle="What needs attention today and how this month is going."
+        subtitle={owner ? 'What needs attention today and how this month is going.' : 'What needs attention today.'}
         actions={
           <>
-            <ButtonLink href="/dashboard/revenue" variant="secondary">
-              <TrendingUp className="h-4 w-4" aria-hidden="true" /> Revenue Portal
-            </ButtonLink>
+            {owner && (
+              <ButtonLink href="/dashboard/revenue" variant="secondary">
+                <TrendingUp className="h-4 w-4" aria-hidden="true" /> Revenue Portal
+              </ButtonLink>
+            )}
             <ButtonLink href="/dashboard/sales">
               <ShoppingCart className="h-4 w-4" aria-hidden="true" /> Record sale
             </ButtonLink>
@@ -116,16 +122,20 @@ export default async function DashboardPage() {
       />
 
       {/* This month */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard
-          label="Profit this month"
-          value={signed(month.profit.profit)}
-          Icon={TrendingUp}
-          tone={month.profit.profit < 0 ? 'danger' : 'brand'}
-          hint={`Sales ${tk(month.profit.salesMade)} · costs ${tk(month.profit.costs)}`}
-          href="/dashboard/revenue"
-        />
-        <StatCard label="Received this month" value={tk(month.cash.moneyIn)} Icon={Banknote} tone="brand" hint={`Paid out ${tk(month.cash.moneyOut)}`} href="/dashboard/revenue" />
+      <div className={`grid grid-cols-2 gap-3 sm:gap-4 ${month ? 'lg:grid-cols-4' : ''}`}>
+        {month && (
+          <>
+            <StatCard
+              label="Profit this month"
+              value={signed(month.profit.profit)}
+              Icon={TrendingUp}
+              tone={month.profit.profit < 0 ? 'danger' : 'brand'}
+              hint={`Sales ${tk(month.profit.salesMade)} · costs ${tk(month.profit.costs)}`}
+              href="/dashboard/revenue"
+            />
+            <StatCard label="Received this month" value={tk(month.cash.moneyIn)} Icon={Banknote} tone="brand" hint={`Paid out ${tk(month.cash.moneyOut)}`} href="/dashboard/revenue" />
+          </>
+        )}
         <StatCard label="Customers owe you" value={tk(totalDue)} Icon={HandCoins} tone={totalDue > 0 ? 'danger' : 'neutral'} hint={`${owing.length} customer${owing.length === 1 ? '' : 's'}`} href="/dashboard/customers" />
         <StatCard label="You owe suppliers" value={tk(totalPayable)} Icon={Store} tone={totalPayable > 0 ? 'warning' : 'neutral'} hint={`${owedSuppliers.length} supplier${owedSuppliers.length === 1 ? '' : 's'}`} href="/dashboard/suppliers" />
       </div>
@@ -237,33 +247,35 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <IncomeCostChart
-          chart={chartDays}
-          title="Last 30 days"
-          action={<ButtonLink href="/dashboard/revenue" variant="secondary" size="sm">Details <ArrowRight className="h-3.5 w-3.5" /></ButtonLink>}
-        />
+      {month && (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <IncomeCostChart
+            chart={chartDays}
+            title="Last 30 days"
+            action={<ButtonLink href="/dashboard/revenue" variant="secondary" size="sm">Details <ArrowRight className="h-3.5 w-3.5" /></ButtonLink>}
+          />
 
-        {/* This month's costs */}
-        <Card>
-          <CardHeader title="This month's costs" subtitle={`${tk(month.profit.costs)} so far`} />
-          <ul className="space-y-4 px-5 py-5 sm:px-6">
-            {costRows.map((r) => (
-              <li key={r.label}>
-                <Link href={r.href} className="group block">
-                  <div className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="text-slate-600 group-hover:text-ink">{r.label}</span>
-                    <span className="font-semibold tabular-nums text-ink">{tk(r.value)}</span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 rounded-full bg-slate-100">
-                    <div className="h-1.5 rounded-full bg-slate-400 transition-colors group-hover:bg-ink" style={{ width: `${(r.value / maxCost) * 100}%` }} />
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
+          {/* This month's costs */}
+          <Card>
+            <CardHeader title="This month's costs" subtitle={`${tk(month.profit.costs)} so far`} />
+            <ul className="space-y-4 px-5 py-5 sm:px-6">
+              {costRows.map((r) => (
+                <li key={r.label}>
+                  <Link href={r.href} className="group block">
+                    <div className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="text-slate-600 group-hover:text-ink">{r.label}</span>
+                      <span className="font-semibold tabular-nums text-ink">{tk(r.value)}</span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 rounded-full bg-slate-100">
+                      <div className="h-1.5 rounded-full bg-slate-400 transition-colors group-hover:bg-ink" style={{ width: `${(r.value / maxCost) * 100}%` }} />
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+      )}
 
       {/* Recent */}
       <div className="grid gap-6 lg:grid-cols-2">

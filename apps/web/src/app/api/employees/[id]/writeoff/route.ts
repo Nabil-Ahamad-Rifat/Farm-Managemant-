@@ -5,7 +5,7 @@ import { findWorker, getWorkerDetail, payDay } from '@/lib/payroll';
 
 // Give up an advance the worker will not pay back (e.g. left without notice).
 // The amount becomes a loss in the reports and the balance returns to zero.
-export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdempotency(req, tenantId, 'employees:writeoff', async () => {
+export const POST = withAuth(async (req, { tenantId, userId }, routeContext) => withIdempotency(req, tenantId, 'employees:writeoff', async () => {
   try {
     const worker = await findWorker(tenantId, await getIdFromParams(routeContext, req));
     if (!worker) return Response.json({ error: 'Employee not found' }, { status: 404 });
@@ -16,7 +16,7 @@ export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdem
 
     const body = ((await req.json().catch(() => null)) ?? {}) as { note?: unknown };
     await db.salaryPayment.create({
-      data: {
+      data: { createdById: userId,
         tenantId,
         employeeId: worker.id,
         kind: 'writeoff',

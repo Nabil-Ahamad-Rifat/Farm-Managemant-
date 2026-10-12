@@ -1,13 +1,10 @@
-import { redirect } from 'next/navigation';
-import { getSession } from '@/lib/auth/session';
+import { requireOwnerPage } from '@/lib/auth/session';
 import { getMonthlyReport, parseMonth } from '@/lib/monthly-report';
 import MonthlyReport from '@/components/MonthlyReport';
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ month?: string | string[] }> }) {
-  const session = await getSession();
-  if (!session) {
-    redirect('/login');
-  }
+  // Money reports are for the owner only.
+  const session = await requireOwnerPage();
 
   const month = parseMonth((await searchParams).month);
   const report = await getMonthlyReport(session.tenantId, month);

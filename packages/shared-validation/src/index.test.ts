@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   loginSchema, registerSchema, forgotPasswordSchema, customerSchema, paymentSchema, saleSchema, supplierSchema, feedPurchaseSchema, farmSettingsSchema, animalSchema, animalEventSchema,
-  employeeSchema, workerPaymentSchema, absenceSchema, workEntrySchema, leaveSchema,
+  employeeSchema, workerPaymentSchema, absenceSchema, workEntrySchema, leaveSchema, teamMemberSchema, teamMemberUpdateSchema,
 } from './index';
 
 describe('loginSchema', () => {
@@ -236,5 +236,16 @@ describe('worker pay records', () => {
   });
   it('leaving with a blank date means came back', () => {
     expect(leaveSchema.parse({ leftDate: '' })).toEqual({ leftDate: undefined });
+  });
+});
+
+describe('team members', () => {
+  it('needs a name, a valid email and an 8+ character password', () => {
+    expect(teamMemberSchema.parse({ name: ' Karim ', email: ' Karim@Farm.com ', password: 'secret123' })).toEqual({ name: 'Karim', email: 'karim@farm.com', password: 'secret123' });
+    expect(teamMemberSchema.safeParse({ name: 'K', email: 'k@farm.com', password: 'short' }).success).toBe(false);
+    expect(teamMemberSchema.safeParse({ name: '', email: 'k@farm.com', password: 'secret123' }).success).toBe(false);
+  });
+  it('update accepts a blank password as "no change"', () => {
+    expect(teamMemberUpdateSchema.parse({ name: 'Karim', password: '' })).toEqual({ name: 'Karim', password: undefined });
   });
 });

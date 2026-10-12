@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
       role: user.role,
       email: user.email,
       name: user.name,
+      tv: user.tokenVersion ?? 0,
     },
     MOBILE_ACCESS_TOKEN_TTL
   );

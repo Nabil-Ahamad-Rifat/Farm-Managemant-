@@ -17,7 +17,7 @@ export const GET = withAuth(async (_req, { tenantId }) => {
   }
 });
 
-export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, tenantId, 'feed:create', async () => {
+export const POST = withAuth(async (req, { tenantId, userId }) => withIdempotency(req, tenantId, 'feed:create', async () => {
   try {
     const parsed = feedPurchaseSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
@@ -48,7 +48,7 @@ export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, t
           : null;
 
       const created = await tx.feedBatch.create({
-        data: {
+        data: { createdById: userId,
           tenantId,
           name: f.name,
           quantity: f.quantity,
@@ -66,7 +66,7 @@ export const POST = withAuth(async (req, { tenantId }) => withIdempotency(req, t
       if (supplier) {
         if (paidNow > 0) {
           await tx.supplierPayment.create({
-            data: {
+            data: { createdById: userId,
               tenantId,
               supplierId: supplier.id,
               amount: paidNow,

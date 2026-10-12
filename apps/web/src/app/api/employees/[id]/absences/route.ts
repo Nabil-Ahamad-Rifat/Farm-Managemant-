@@ -6,7 +6,7 @@ import { findWorker, getWorkerDetail, payDay } from '@/lib/payroll';
 
 // Mark a monthly worker absent for one day or a range (unpaid days).
 // Days already marked are left as they are.
-export const POST = withAuth(async (req, { tenantId }, routeContext) => {
+export const POST = withAuth(async (req, { tenantId, userId }, routeContext) => {
   try {
     const worker = await findWorker(tenantId, await getIdFromParams(routeContext, req));
     if (!worker) return Response.json({ error: 'Employee not found' }, { status: 404 });
@@ -30,7 +30,7 @@ export const POST = withAuth(async (req, { tenantId }, routeContext) => {
     const fresh = days.filter((d) => !taken.has(d));
     if (fresh.length) {
       await db.employeeAbsence.createMany({
-        data: fresh.map((d) => ({ tenantId, employeeId: worker.id, date: payDay(d), note: a.note ?? null })),
+        data: fresh.map((d) => ({ createdById: userId, tenantId, employeeId: worker.id, date: payDay(d), note: a.note ?? null })),
       });
     }
     return Response.json({ added: fresh.length, worker: await getWorkerDetail(tenantId, worker.id) }, { status: 201 });

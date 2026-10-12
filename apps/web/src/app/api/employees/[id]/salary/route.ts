@@ -18,7 +18,7 @@ export const GET = withAuth(async (req, { tenantId }, routeContext) => {
 });
 
 // Older builds send a month/year with each payment; it is kept as a note only.
-export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdempotency(req, tenantId, 'salary:create', async () => {
+export const POST = withAuth(async (req, { tenantId, userId }, routeContext) => withIdempotency(req, tenantId, 'salary:create', async () => {
   try {
     const worker = await findWorker(tenantId, await getIdFromParams(routeContext, req));
     if (!worker) return Response.json({ error: 'Employee not found' }, { status: 404 });
@@ -34,7 +34,7 @@ export const POST = withAuth(async (req, { tenantId }, routeContext) => withIdem
     const day = typeof body.paidAt === 'string' && /^\d{4}-\d{2}-\d{2}/.test(body.paidAt) ? body.paidAt.slice(0, 10) : undefined;
 
     const payment = await db.salaryPayment.create({
-      data: {
+      data: { createdById: userId,
         tenantId,
         employeeId: worker.id,
         kind: 'payment',
