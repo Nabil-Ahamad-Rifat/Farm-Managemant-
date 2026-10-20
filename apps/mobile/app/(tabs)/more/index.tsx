@@ -1,7 +1,7 @@
 import { View, Text, Pressable, Linking } from 'react-native';
 import { router } from 'expo-router';
 import {
-  Users, Coins, PackageOpen, TrendingUp, Sprout, FileText, Trash2, ChevronRight, HandCoins, Store, CalendarRange, Milk,
+  Users, Coins, PackageOpen, TrendingUp, Sprout, FileText, Trash2, ChevronRight, HandCoins, Store, CalendarRange, Milk, History,
 } from 'lucide-react-native';
 import { API_URL } from '@/src/lib/apiClient';
 import { useSession } from '@/src/context/AuthContext';
@@ -15,6 +15,7 @@ const ITEMS = [
   { href: '/(tabs)/more/income', label: 'Other Income', icon: Coins },
   { href: '/(tabs)/more/expenses', label: 'Other Expenses', icon: PackageOpen },
   { href: '/(tabs)/more/revenue', label: 'Revenue Portal', icon: TrendingUp, ownerOnly: true },
+  { href: '/(tabs)/more/history', label: 'History', icon: History, ownerOnly: true },
   { href: '/(tabs)/more/ranch', label: 'Create New Ranch', icon: Sprout, ownerOnly: true },
 ] as const;
 

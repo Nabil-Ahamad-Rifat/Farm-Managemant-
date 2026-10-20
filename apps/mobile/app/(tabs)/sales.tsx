@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
-import { Plus, Search, Edit3, Trash2, Wallet, AlertCircle, Tag, FileText } from 'lucide-react-native';
+import { Plus, Search, Edit3, Trash2, Wallet, AlertCircle, Tag, FileText, Milk } from 'lucide-react-native';
 import type { Sale } from '@farm/shared-types';
-import { daysAgo } from '@farm/business-logic';
+import { LIST_PERIODS, inListPeriod, type ListPeriod } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { useCrudList } from '@/src/hooks/useCrudList';
 import { useSaleOptions } from '@/src/hooks/useSaleOptions';
@@ -13,12 +13,10 @@ import { SaleFormModal } from '@/src/components/SaleFormModal';
 
 const PRODUCT_LABELS: Record<string, string> = { milk: 'Milk', cow_sale: 'Cow', other: 'Other', general: 'General', products: 'Products' };
 
-const PERIOD_FILTERS = [
-  { value: '1', label: 'Today' },
-  { value: '7', label: '7 Days' },
-  { value: '30', label: '30 Days' },
-  { value: '0', label: 'All' },
-];
+const PERIOD_FILTERS = LIST_PERIODS.map((p) => ({ value: p.value, label: p.label }));
+
+/** "1,250.5 L" */
+const litres = (n: number) => `${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })} L`;
 
 /** Paid amount for any sale: derived for customer sales, hand-set status for older ones. */
 const salePaid = (s: Sale) => (s.customerId ? s.paidAmount ?? 0 : s.status === 'paid' ? s.amount : 0);
@@ -31,7 +29,7 @@ export default function SalesScreen() {
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [periodDays, setPeriodDays] = useState('1');
+  const [period, setPeriod] = useState<ListPeriod>('month');
   const [modal, setModal] = useState<{ sale: Sale | null } | null>(null);
   const [error, setError] = useState('');
 
@@ -50,15 +48,19 @@ export default function SalesScreen() {
   }
 
   const q = search.toLowerCase();
-  const period = Number(periodDays);
   const filtered = sales.filter(
     (s) =>
       (s.customerName.toLowerCase().includes(q) || (s.cow ? `${s.cow.name} ${s.cow.tagNumber}`.toLowerCase().includes(q) : false)) &&
       (statusFilter === 'all' || saleStatus(s) === statusFilter) &&
-      (period === 0 || new Date(s.createdAt) >= daysAgo(period)),
+      // Days counted on the farm's clock (Bangladesh), same as the web Sales page.
+      inListPeriod(s.createdAt, period),
   );
   const received = filtered.reduce((sum, s) => sum + salePaid(s), 0);
   const due = filtered.reduce((sum, s) => sum + Math.max(0, s.amount - salePaid(s)), 0);
+  // Milk litres and taka in the same filtered sales (the rule milkLitres uses in business-logic).
+  const milk = filtered.filter((s) => s.saleType === 'milk');
+  const milkLitres = milk.reduce((sum, s) => sum + (s.quantity ?? 0), 0);
+  const milkAmount = milk.reduce((sum, s) => sum + s.amount, 0);
 
   if (loading) {
     return (
@@ -75,7 +77,14 @@ export default function SalesScreen() {
           <StatCard label="Received" value={tk(received)} icon={Wallet} color="#059669" />
           <StatCard label="Unpaid" value={tk(due)} icon={AlertCircle} color="#dc2626" />
         </View>
-        <ChipGroup options={PERIOD_FILTERS} value={periodDays} onChange={setPeriodDays} />
+        <StatCard
+          label="Milk sold"
+          value={litres(milkLitres)}
+          subtext={milkLitres > 0 ? `${tk(milkAmount)} · avg ${tk(Math.round((milkAmount / milkLitres) * 100) / 100)}/L` : 'No milk sales in this view'}
+          icon={Milk}
+          color="#0369a1"
+        />
+        <ChipGroup options={PERIOD_FILTERS} value={period} onChange={(v) => setPeriod(v as ListPeriod)} />
         <View className="flex-row items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
           <Search size={16} color="#94a3b8" />
           <TextInput value={search} onChangeText={setSearch} placeholder="Search by customer or cow tag..." placeholderTextColor="#94a3b8" className="flex-1 text-sm text-slate-900" />
