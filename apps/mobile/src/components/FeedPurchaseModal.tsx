@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, TextInput } from 'react-native';
+import { View, Pressable } from 'react-native';
+import { Text, TextInput } from '@/src/components/ui/Text';
 import type { FeedBatch } from '@farm/shared-types';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { generateIdempotencyKey } from '@/src/lib/idempotency';

@@ -6,10 +6,11 @@ SplashScreen.preventAutoHideAsync();
 // Keeps the native splash screen up while we check SecureStore for an
 // existing session, so the login screen never flashes before redirecting an
 // already-authenticated user into the app.
-export function SplashScreenController() {
+// Also waits for the app font (ready) so text never jumps from the system font.
+export function SplashScreenController({ ready = true }: { ready?: boolean }) {
   const { isLoading } = useSession();
 
-  if (!isLoading) {
+  if (!isLoading && ready) {
     SplashScreen.hide();
   }
 

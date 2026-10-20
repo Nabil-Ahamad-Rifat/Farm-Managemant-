@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { Text, TextInput } from '@/src/components/ui/Text';
 import { Plus, Search, Edit3, Trash2, Wallet, AlertCircle, Tag, FileText, Milk } from 'lucide-react-native';
 import type { Sale } from '@farm/shared-types';
 import { LIST_PERIODS, inListPeriod, type ListPeriod } from '@farm/business-logic';

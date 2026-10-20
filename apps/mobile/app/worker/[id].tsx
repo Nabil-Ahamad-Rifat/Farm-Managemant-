@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, RefreshControl, ActivityIndicator, Linking } from 'react-native';
+import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator, Linking } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import {
   Wallet, CalendarX, Hammer, Edit3, LogOut, Undo2, Trash2, Phone, CalendarDays, Ban, TrendingUp, type LucideIcon,

@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { View, Text, Pressable, Modal, FlatList } from 'react-native';
+import { View, Pressable, Modal, FlatList } from 'react-native';
+import { Text } from './Text';
+import { FieldLabel } from './TextField';
+import { colors } from '@/src/theme';
 import { ChevronDown, Check } from 'lucide-react-native';
 
 export interface SelectOption {
@@ -29,21 +32,21 @@ export function SelectField({
 
   return (
     <View>
-      <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-600">{label}</Text>
+      <FieldLabel label={label} />
       <Pressable
         onPress={() => setOpen(true)}
-        className="flex-row items-center justify-between rounded-xl border border-slate-200 px-3.5 py-2.5"
+        className="h-11 flex-row items-center justify-between rounded-control border border-line bg-white px-3.5"
       >
-        <Text className={`text-sm ${selected ? 'text-slate-900' : 'text-slate-400'}`}>
+        <Text className={`flex-1 text-base ${selected ? 'text-ink' : 'text-slate-400'}`} numberOfLines={1}>
           {selected?.label ?? placeholder}
         </Text>
         <ChevronDown size={16} color="#94a3b8" />
       </Pressable>
 
       <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-        <Pressable className="flex-1 justify-end bg-slate-900/40" onPress={() => setOpen(false)}>
-          <Pressable className="max-h-[70%] rounded-t-3xl bg-white p-4" onPress={(e) => e.stopPropagation()}>
-            <Text className="mb-2 px-2 text-sm font-bold text-slate-900">{label}</Text>
+        <Pressable className="flex-1 justify-end bg-navy-950/50" onPress={() => setOpen(false)}>
+          <Pressable className="max-h-[70%] rounded-t-2xl bg-white p-4" onPress={(e) => e.stopPropagation()}>
+            <Text className="mb-2 px-2 text-base font-bold text-ink">{label}</Text>
             <FlatList
               data={options}
               keyExtractor={(item) => item.value}
@@ -53,13 +56,13 @@ export function SelectField({
                     onChange(item.value);
                     setOpen(false);
                   }}
-                  className="flex-row items-center justify-between rounded-xl px-3 py-3"
+                  className="flex-row items-center justify-between rounded-control px-3 py-3"
                 >
                   <View>
                     <Text className="text-sm font-medium text-slate-900">{item.label}</Text>
                     {item.sublabel ? <Text className="text-xs text-slate-400">{item.sublabel}</Text> : null}
                   </View>
-                  {item.value === value ? <Check size={16} color="#059669" /> : null}
+                  {item.value === value ? <Check size={16} color={colors.brand600} /> : null}
                 </Pressable>
               )}
               ListEmptyComponent={<Text className="px-3 py-6 text-center text-sm text-slate-400">No options available</Text>}

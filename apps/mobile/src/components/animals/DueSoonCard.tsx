@@ -1,4 +1,5 @@
-import { View, Text, Pressable } from 'react-native';
+import { View, Pressable } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import { router } from 'expo-router';
 import { BellRing } from 'lucide-react-native';
 import type { AnimalDueItem } from '@farm/shared-types';

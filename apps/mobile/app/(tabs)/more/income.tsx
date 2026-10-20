@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { Text, TextInput } from '@/src/components/ui/Text';
 import { Plus, Search, Edit3, Trash2, Coins } from 'lucide-react-native';
 import type { OtherIncome } from '@farm/shared-types';
 import { daysAgo, sumAmounts, formatCurrency, farmToday } from '@farm/business-logic';

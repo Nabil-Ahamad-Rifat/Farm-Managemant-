@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import { TrendingUp, TrendingDown, Wallet, Scale, ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { barHeightPx, farmMonth, shiftMonth, type FinanceSummary } from '@farm/business-logic';
+import { farmMonth, shiftMonth, type FinanceSummary } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { fmtDate, monthLabel, tk } from '@/src/lib/format';
 import { ChipGroup } from '@/src/components/ui';
 import { MoneyRow, signed, minus, moneyError } from '@/src/components/money/MoneyRow';
+import { IncomeCostChart } from '@/src/components/money/IncomeCostChart';
 
 /** GET /api/revenue (range=… or month=…) */
 interface RevenueReport {
@@ -24,42 +26,6 @@ const PRESETS = [
   { value: 'lastmonth', label: 'Last month' },
   { value: 'pick', label: 'Pick a month' },
 ];
-
-function IncomeCostChart({ chart }: { chart: RevenueReport['chart'] }) {
-  if (!chart.length) return null;
-  const maxVal = Math.max(...chart.map((d) => Math.max(d.income, d.costs)), 1);
-  const perMonth = chart[0].key.length === 7;
-  // Label every bar on short ranges, otherwise about six labels.
-  const every = Math.max(1, Math.ceil(chart.length / 6));
-
-  return (
-    <View className="rounded-2xl border border-slate-200 bg-white p-5">
-      <Text className="text-sm font-bold text-slate-900">Income and costs</Text>
-      <Text className="text-[11px] text-slate-500">{perMonth ? 'Per month' : 'Per day'}, on the profit basis</Text>
-      <View className="mt-3 flex-row items-end gap-0.5" style={{ height: 90 }}>
-        {chart.map((d, i) => (
-          <View key={d.key} className="flex-1 items-center gap-0.5">
-            <View className="w-full flex-row items-end justify-center gap-px" style={{ height: 72 }}>
-              <View className="flex-1 rounded-t bg-emerald-500" style={{ height: barHeightPx(d.income, maxVal, 72) }} />
-              <View className="flex-1 rounded-t bg-red-300" style={{ height: barHeightPx(d.costs, maxVal, 72) }} />
-            </View>
-            <Text className="text-[8px] text-slate-400">{i % every === 0 ? (perMonth ? d.key.slice(5) : d.key.slice(8)) : ' '}</Text>
-          </View>
-        ))}
-      </View>
-      <View className="mt-3 flex-row items-center gap-4">
-        <View className="flex-row items-center gap-1">
-          <View className="h-2 w-3 rounded bg-emerald-500" />
-          <Text className="text-[11px] text-slate-500">Income</Text>
-        </View>
-        <View className="flex-row items-center gap-1">
-          <View className="h-2 w-3 rounded bg-red-300" />
-          <Text className="text-[11px] text-slate-500">Costs</Text>
-        </View>
-      </View>
-    </View>
-  );
-}
 
 function Due({ label, value }: { label: string; value: number }) {
   return (

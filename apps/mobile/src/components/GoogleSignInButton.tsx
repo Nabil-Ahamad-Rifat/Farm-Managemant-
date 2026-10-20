@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Pressable, Text, ActivityIndicator } from 'react-native';
+import { Pressable, ActivityIndicator } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import { isGoogleSignInConfigured, useGoogleAuthRequest } from '@/src/lib/googleAuth';
 import { useSession } from '@/src/context/AuthContext';
 

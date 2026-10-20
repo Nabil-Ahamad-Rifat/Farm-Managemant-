@@ -1,5 +1,6 @@
-import { Pressable, Text, ActivityIndicator } from 'react-native';
+import { Button } from './Button';
 
+/** Full-width form submit button (older screens); same look as the web's primary button. */
 export function PrimaryButton({
   label,
   loading,
@@ -9,17 +10,7 @@ export function PrimaryButton({
   label: string;
   loading?: boolean;
   onPress: () => void;
-  variant?: 'primary' | 'danger';
+  variant?: 'primary' | 'danger' | 'brand';
 }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={loading}
-      className={`items-center rounded-xl px-4 py-3 disabled:opacity-50 ${
-        variant === 'danger' ? 'bg-red-600' : 'bg-slate-900'
-      }`}
-    >
-      {loading ? <ActivityIndicator color="white" /> : <Text className="font-semibold text-white">{label}</Text>}
-    </Pressable>
-  );
+  return <Button label={label} loading={loading} onPress={onPress} variant={variant} size="lg" />;
 }

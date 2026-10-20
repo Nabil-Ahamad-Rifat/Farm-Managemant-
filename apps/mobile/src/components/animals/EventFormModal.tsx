@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, Switch } from 'react-native';
+import { View, Pressable, Switch } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import type { AnimalEvent } from '@farm/shared-types';
 import { addDaysIso, expectedCalving } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';

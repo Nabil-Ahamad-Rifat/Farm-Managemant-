@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { View, Text, ScrollView, Pressable, RefreshControl, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Edit3, Trash2, Plus, Star, ImagePlus, Camera, HeartPulse, Baby, Syringe, Wallet, CalendarClock, StickyNote, type LucideIcon } from 'lucide-react-native';
 import type { AnimalDetail, AnimalEvent, CowListItem } from '@farm/shared-types';

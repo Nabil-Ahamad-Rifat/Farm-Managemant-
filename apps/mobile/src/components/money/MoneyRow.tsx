@@ -1,4 +1,5 @@
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import { ApiError } from '@farm/api-client';
 import { tk } from '@/src/lib/format';
 

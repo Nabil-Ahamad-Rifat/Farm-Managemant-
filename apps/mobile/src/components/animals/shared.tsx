@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Image, Pressable, Platform, ActivityIndicator, type ImageStyle, type StyleProp } from 'react-native';
+import { View, Image, Pressable, Platform, ActivityIndicator, type ImageStyle, type StyleProp } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import * as ImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import {

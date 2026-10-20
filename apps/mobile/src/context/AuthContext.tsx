@@ -1,4 +1,4 @@
-import { use, createContext, useEffect, useMemo, type PropsWithChildren } from 'react';
+import { use, createContext, useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import type { AuthUser } from '@farm/shared-types';
 import { mobileApiClient, setSessionListener } from '@/src/lib/apiClient';
 import { useStorageState } from '@/src/lib/useStorageState';
@@ -13,6 +13,9 @@ interface AuthContextValue {
   user: AuthUser | null;
   /** Managers do the daily work but can't see money reports (same rule as web's isOwner). */
   isOwner: boolean;
+  /** The farm (tenant) name for the header; "Farm Manager" until loaded. */
+  farmName: string;
+  refreshFarm: () => Promise<void>;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string, tenantName?: string) => Promise<void>;
@@ -59,6 +62,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setUserJson(null);
   }
 
+  const [farmName, setFarmName] = useState('Farm Manager');
+  const refreshFarm = useCallback(async () => {
+    try {
+      const s = await mobileApiClient.get<{ tenantName?: string }>('/api/settings');
+      if (s.tenantName) setFarmName(s.tenantName);
+    } catch {
+      // Header falls back to "Farm Manager"; nothing else depends on it.
+    }
+  }, []);
+
+  // Load the farm name for each signed-in user (and after switching ranch).
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    // The name is only set once the request settles.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refreshFarm();
+  }, [userId, refreshFarm]);
+
   // apiClient refreshes the access token itself (outside of any handler
   // here) when a request 401s — this is how that lands back in React state:
   // a successful refresh updates just the tokens, a failed one (refresh
@@ -80,6 +102,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const value: AuthContextValue = {
     user,
     isOwner: user?.role !== 'manager',
+    farmName,
+    refreshFarm,
     isLoading,
 
     async signIn(email, password) {
@@ -120,6 +144,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
         'Unable to create ranch'
       );
       persistSession(session);
+      // Same user id, so the effect above won't reload the name.
+      setFarmName(ranchName.trim() || 'Farm Manager');
     },
 
     async deleteAccount(password) {

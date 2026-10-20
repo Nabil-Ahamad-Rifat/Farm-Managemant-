@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, Modal, FlatList } from 'react-native';
+import { View, Pressable, Modal, FlatList } from 'react-native';
+import { Text, TextInput } from '@/src/components/ui/Text';
 import { ChevronDown, Search, UserPlus, X } from 'lucide-react-native';
 import { tk } from '@/src/lib/format';
 

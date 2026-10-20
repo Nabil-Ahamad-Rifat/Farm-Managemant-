@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
-import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { Text, TextInput } from '@/src/components/ui/Text';
 import { router, useFocusEffect } from 'expo-router';
 import { Plus, Search, Syringe, Baby } from 'lucide-react-native';
 import type { CowListItem } from '@farm/shared-types';

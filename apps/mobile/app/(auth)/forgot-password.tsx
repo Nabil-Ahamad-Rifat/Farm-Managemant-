@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { View, Pressable, ActivityIndicator } from 'react-native';
+import { Text, TextInput } from '@/src/components/ui/Text';
 import { Link, router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { forgotPasswordSchema } from '@farm/shared-validation';

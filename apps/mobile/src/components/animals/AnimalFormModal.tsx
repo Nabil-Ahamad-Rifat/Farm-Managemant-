@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import type { AnimalDetail, Cow } from '@farm/shared-types';
 import { ageLabel } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';

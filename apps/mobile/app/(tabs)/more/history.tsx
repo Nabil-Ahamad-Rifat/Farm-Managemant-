@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { Text, TextInput } from '@/src/components/ui/Text';
 import { router, type Href } from 'expo-router';
 import { ArrowDownLeft, ArrowUpRight, ShoppingBag, PackagePlus, Ban, Search, ChevronLeft, ChevronRight, type LucideIcon } from 'lucide-react-native';
 import { farmMonth, shiftMonth } from '@farm/business-logic';
@@ -61,14 +62,14 @@ function mobileHref(href: string): Href | null {
   const m = href.match(/^\/dashboard\/(customers|suppliers|employees|cows)\/([^/?]+)$/);
   if (m) {
     const [, kind, id] = m;
-    if (kind === 'customers') return `/more/customer/${id}`;
-    if (kind === 'suppliers') return `/more/supplier/${id}`;
+    if (kind === 'customers') return `/customer/${id}`;
+    if (kind === 'suppliers') return `/supplier/${id}`;
     if (kind === 'employees') return `/worker/${id}`;
     return `/animal/${id}`;
   }
   const pages: Record<string, Href> = {
     '/dashboard/sales': '/sales',
-    '/dashboard/feed': '/feed',
+    '/dashboard/feed': '/more/feed',
     '/dashboard/income': '/more/income',
     '/dashboard/expenses': '/more/expenses',
   };

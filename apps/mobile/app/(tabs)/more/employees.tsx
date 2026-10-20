@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { Text, TextInput } from '@/src/components/ui/Text';
 import { router, useFocusEffect } from 'expo-router';
 import { Plus, Search, HandCoins, Wallet, ChevronRight } from 'lucide-react-native';
 import type { WorkerListItem } from '@farm/shared-types';

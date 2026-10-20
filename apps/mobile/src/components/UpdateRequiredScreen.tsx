@@ -1,4 +1,5 @@
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import { AlertTriangle } from 'lucide-react-native';
 
 // Shown when /api/meta/version reports this build is below forceUpdateBelow

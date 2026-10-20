@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import { router } from 'expo-router';
 import { AlertTriangle, Sprout } from 'lucide-react-native';
 import { useSession } from '@/src/context/AuthContext';

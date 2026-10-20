@@ -1,7 +1,11 @@
 import { useState } from 'react';
-import { View, Text, Pressable, Platform } from 'react-native';
+import { View, Pressable, Platform } from 'react-native';
+import { Text } from './Text';
+import { FieldLabel } from './TextField';
+import { colors } from '@/src/theme';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Calendar } from 'lucide-react-native';
+import { fmtDate } from '@/src/lib/format';
 
 // value/onChange use 'YYYY-MM-DD' strings, matching web's <input type="date">
 // value format, so the same string goes straight into an API request body.
@@ -33,13 +37,13 @@ export function DateField({
 
   return (
     <View>
-      <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-600">{label}</Text>
+      <FieldLabel label={label} />
       <Pressable
         onPress={() => setShow(true)}
-        className="flex-row items-center gap-2 rounded-xl border border-slate-200 px-3.5 py-2.5"
+        className="h-11 flex-row items-center gap-2 rounded-control border border-line bg-white px-3.5"
       >
-        <Calendar size={14} color="#94a3b8" />
-        <Text className="text-sm text-slate-900">{value || 'Select date'}</Text>
+        <Calendar size={16} color={colors.slate400} />
+        <Text className={`text-base ${value ? 'text-ink' : 'text-slate-400'}`}>{value ? fmtDate(value) : 'Select date'}</Text>
       </Pressable>
       {show ? (
         <DateTimePicker

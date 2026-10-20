@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { Text, TextInput } from '@/src/components/ui/Text';
 import { router } from 'expo-router';
 import { Search, AlertCircle, Store, Wallet, ChevronRight } from 'lucide-react-native';
 import type { SupplierSummary } from '@farm/shared-types';
@@ -58,7 +59,7 @@ export default function SuppliersScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
         ListEmptyComponent={<EmptyState message={suppliers.length ? 'No suppliers match.' : 'No suppliers yet. Buy feed on credit and the supplier is added for you.'} />}
         renderItem={({ item }) => (
-          <Pressable onPress={() => router.push(`/(tabs)/more/supplier/${item.id}`)} className="rounded-2xl border border-slate-200 bg-white p-4">
+          <Pressable onPress={() => router.push(`/supplier/${item.id}`)} className="rounded-2xl border border-slate-200 bg-white p-4">
             <View className="flex-row items-center justify-between gap-3">
               <View className="flex-1 gap-1">
                 <Text className="text-sm font-bold text-slate-900">{item.name}</Text>

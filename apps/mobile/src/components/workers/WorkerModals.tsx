@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Pressable } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import type { Employee, SalaryPayment, WorkerDetail } from '@farm/shared-types';
 import { dayRate } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';

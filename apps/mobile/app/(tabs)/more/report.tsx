@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import { router } from 'expo-router';
 import { ChevronLeft, ChevronRight, Milk, ShoppingBag, Wallet, History, AlertCircle, Wheat, TrendingUp } from 'lucide-react-native';
 import { farmMonth, shiftMonth, type FinanceSummary, type MonthLine, type MonthStatement } from '@farm/business-logic';
@@ -110,7 +111,7 @@ export default function MonthlyReportScreen() {
                 <Pressable
                   key={l.partyId ?? 'none'}
                   disabled={!l.customer}
-                  onPress={() => l.customer && router.push(`/(tabs)/more/customer/${l.customer.id}`)}
+                  onPress={() => l.customer && router.push(`/customer/${l.customer.id}`)}
                   className={`gap-1 px-4 py-3 ${i > 0 ? 'border-t border-slate-100' : ''} ${l.closing > 0 ? 'bg-red-50/40' : ''}`}
                 >
                   <View className="flex-row items-center justify-between">

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { Text, TextInput } from '@/src/components/ui/Text';
 import { Plus, Search, Edit3, Trash2, Droplets, AlertTriangle, Wheat, Store, ChevronLeft, ChevronRight, ShoppingBag, Wallet } from 'lucide-react-native';
 import type { FeedBatch, SupplierSummary } from '@farm/shared-types';
 import { feedMonthSummary, isLowStock, monthKey, shiftMonth, stockPercentage, totalStockValue } from '@farm/business-logic';

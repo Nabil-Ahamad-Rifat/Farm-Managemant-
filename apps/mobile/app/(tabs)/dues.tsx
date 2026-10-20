@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { Text, TextInput } from '@/src/components/ui/Text';
 import { router } from 'expo-router';
 import { Search, AlertCircle, Users, HandCoins, ChevronRight } from 'lucide-react-native';
 import type { CustomerSummary } from '@farm/shared-types';
@@ -62,7 +63,7 @@ export default function CustomersScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
         ListEmptyComponent={<EmptyState message={customers.length ? 'No customers match.' : 'No customers yet. Record a sale and the customer is added for you.'} />}
         renderItem={({ item }) => (
-          <Pressable onPress={() => router.push(`/(tabs)/more/customer/${item.id}`)} className="rounded-2xl border border-slate-200 bg-white p-4">
+          <Pressable onPress={() => router.push(`/customer/${item.id}`)} className="rounded-2xl border border-slate-200 bg-white p-4">
             <View className="flex-row items-center justify-between gap-3">
               <View className="flex-1 gap-1">
                 <View className="flex-row items-center gap-2">

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { Text } from '@/src/components/ui/Text';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { HandCoins, Plus, ShoppingBag, Wallet, AlertCircle, Phone, Edit3, Trash2 } from 'lucide-react-native';
 import type { CustomerDetail, Payment, Sale } from '@farm/shared-types';
