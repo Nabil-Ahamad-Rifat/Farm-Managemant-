@@ -1,133 +1,47 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { View, Text, TextInput, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
-import { Plus, Search, Edit3, Trash2, Banknote } from 'lucide-react-native';
-import type { Employee } from '@farm/shared-types';
-import { totalActiveMonthlySalary, formatCurrency } from '@farm/business-logic';
-import { mobileApiClient } from '@/src/lib/apiClient';
-import { generateIdempotencyKey } from '@/src/lib/idempotency';
+import { router, useFocusEffect } from 'expo-router';
+import { Plus, Search, HandCoins, Wallet, ChevronRight } from 'lucide-react-native';
+import type { WorkerListItem } from '@farm/shared-types';
 import { useCrudList } from '@/src/hooks/useCrudList';
-import { FormModal, TextField, ChipGroup, DateField, PrimaryButton, IconButton, EmptyState, StatCard, useConfirm } from '@/src/components/ui';
+import { tk } from '@/src/lib/format';
+import { ChipGroup, EmptyState, StatCard } from '@/src/components/ui';
+import { WorkerFormModal, WorkerPaymentModal } from '@/src/components/workers/WorkerModals';
+import { balanceInfo, payLabel } from '@/src/components/workers/shared';
 
-const STATUS_FILTERS = [
+const FILTERS = [
+  { value: 'active', label: 'Working' },
+  { value: 'left', label: 'Left' },
   { value: 'all', label: 'All' },
-  { value: 'active', label: 'Active' },
-  { value: 'on_leave', label: 'On Leave' },
-  { value: 'terminated', label: 'Terminated' },
 ];
 
-const now = new Date();
-const emptyForm = { name: '', role: '', email: '', phone: '', salary: '', joinDate: '', status: 'active' };
-const emptySalaryForm = { amount: '', periodMonth: String(now.getMonth() + 1), periodYear: String(now.getFullYear()), note: '' };
-
 export default function EmployeesScreen() {
-  const { items: employees, loading, refreshing, refresh, reload } = useCrudList<Employee>('/api/employees');
-  const confirm = useConfirm();
-
+  const { items: workers, loading, refreshing, error, refresh, reload } = useCrudList<WorkerListItem>('/api/employees');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<Employee | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [filter, setFilter] = useState('active');
+  const [adding, setAdding] = useState(false);
+  const [paying, setPaying] = useState<WorkerListItem | null>(null);
 
-  const [salaryOpen, setSalaryOpen] = useState(false);
-  const [salaryEmployee, setSalaryEmployee] = useState<Employee | null>(null);
-  const [salaryForm, setSalaryForm] = useState(emptySalaryForm);
-  const [salaryError, setSalaryError] = useState('');
+  // Coming back from a worker's page: pick up pay or absences added there.
+  useFocusEffect(useCallback(() => { reload(); }, [reload]));
 
-  const [createKey, setCreateKey] = useState(generateIdempotencyKey);
-  const [salaryKey, setSalaryKey] = useState(generateIdempotencyKey);
+  // Farm-wide totals: never affected by the search box or filter.
+  const owed = workers.reduce((s, w) => s + Math.max(0, w.account.balance), 0);
+  const advances = workers.reduce((s, w) => s + Math.max(0, -w.account.balance), 0);
+  const monthEarned = workers.reduce((s, w) => s + w.thisMonth.earned, 0);
+  const monthPaid = workers.reduce((s, w) => s + w.thisMonth.paid, 0);
 
-  function openCreate() {
-    setEditing(null);
-    setForm(emptyForm);
-    setError('');
-    setCreateKey(generateIdempotencyKey());
-    setModalOpen(true);
-  }
-
-  function openEdit(emp: Employee) {
-    setEditing(emp);
-    setForm({
-      name: emp.name,
-      role: emp.role,
-      email: emp.email || '',
-      phone: emp.phone || '',
-      salary: String(emp.salary ?? 0),
-      joinDate: emp.joinDate ? new Date(emp.joinDate).toISOString().slice(0, 10) : '',
-      status: emp.status || 'active',
-    });
-    setError('');
-    setModalOpen(true);
-  }
-
-  function openSalary(emp: Employee) {
-    setSalaryEmployee(emp);
-    setSalaryForm({ ...emptySalaryForm, amount: String(emp.salary ?? 0) });
-    setSalaryError('');
-    setSalaryKey(generateIdempotencyKey());
-    setSalaryOpen(true);
-  }
-
-  async function handleSubmit() {
-    if (!form.name.trim() || !form.role.trim()) {
-      setError('Full name and role are required.');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      if (editing) {
-        await mobileApiClient.put(`/api/employees/${editing.id}`, form, 'Failed to save employee');
-      } else {
-        await mobileApiClient.post('/api/employees', form, 'Failed to save employee', { idempotencyKey: createKey });
-      }
-      setModalOpen(false);
-      await reload();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleSalarySubmit() {
-    if (!salaryEmployee) return;
-    setSaving(true);
-    setSalaryError('');
-    try {
-      await mobileApiClient.post(`/api/employees/${salaryEmployee.id}/salary`, salaryForm, 'Failed to record salary payment', {
-        idempotencyKey: salaryKey,
-      });
-      setSalaryOpen(false);
-      await reload();
-    } catch (err) {
-      setSalaryError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDelete(emp: Employee) {
-    if (!(await confirm(`Delete employee ${emp.name}?`))) return;
-    try {
-      await mobileApiClient.delete(`/api/employees/${emp.id}`);
-      await reload();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
-  const filtered = employees.filter((emp) => {
-    const q = search.toLowerCase();
-    const matchesSearch = emp.name.toLowerCase().includes(q) || emp.role.toLowerCase().includes(q) || (emp.email?.toLowerCase().includes(q) ?? false);
-    const empStatus = emp.status || 'active';
-    const matchesStatus = statusFilter === 'all' || empStatus === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const totalMonthlySalary = totalActiveMonthlySalary(filtered);
+  const q = search.trim().toLowerCase();
+  const shown = workers.filter(
+    (w) =>
+      (filter === 'all' || (filter === 'left') === (w.status === 'left')) &&
+      (!q || w.name.toLowerCase().includes(q) || w.role.toLowerCase().includes(q) || (w.phone ?? '').includes(q)),
+  );
+  const counts: Record<string, number> = {
+    active: workers.filter((w) => w.status !== 'left').length,
+    left: workers.filter((w) => w.status === 'left').length,
+    all: workers.length,
+  };
 
   if (loading) {
     return (
@@ -139,115 +53,111 @@ export default function EmployeesScreen() {
 
   return (
     <View className="flex-1 bg-slate-50">
-      <View className="gap-3 border-b border-slate-100 bg-white p-4">
-        <StatCard label="Monthly Labour Cost" value={formatCurrency(totalMonthlySalary)} icon={Banknote} color="#4338ca" />
-        <View className="flex-row items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-          <Search size={16} color="#94a3b8" />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search employees by name or role..."
-            placeholderTextColor="#94a3b8"
-            className="flex-1 text-sm text-slate-900"
-          />
-        </View>
-        <ChipGroup options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} />
-      </View>
-
-      {error ? (
-        <View className="mx-4 mt-3 rounded-xl border border-red-100 bg-red-50 p-3">
-          <Text className="text-xs font-medium text-red-700">{error}</Text>
-        </View>
-      ) : null}
-
       <FlatList
-        data={filtered}
+        data={shown}
         keyExtractor={(item) => item.id}
-        contentContainerClassName="gap-3 p-4"
+        contentContainerClassName="gap-3 p-4 pb-24"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-        ListEmptyComponent={<EmptyState message="No employees found." />}
-        renderItem={({ item }) => (
-          <View className="rounded-2xl border border-slate-200 bg-white p-4">
-            <View className="flex-row items-start justify-between">
-              <View className="flex-1">
-                <Text className="text-sm font-bold text-slate-900">{item.name}</Text>
-                <Text className="text-xs text-slate-500">{item.role}</Text>
-                <Text className="mt-1 text-sm font-bold text-slate-900">{formatCurrency(item.salary ?? 0)}</Text>
-                <Text className="mt-1 text-[11px] uppercase tracking-wider text-slate-400">{(item.status || 'active').replace('_', ' ')}</Text>
-              </View>
-              <View className="flex-row gap-2">
-                <IconButton icon={Banknote} onPress={() => openSalary(item)} />
-                <IconButton icon={Edit3} onPress={() => openEdit(item)} />
-                <IconButton icon={Trash2} variant="danger" onPress={() => handleDelete(item)} />
-              </View>
+        ListHeaderComponent={
+          <View className="gap-3">
+            <View className="flex-row gap-3">
+              <StatCard
+                label="You owe workers"
+                value={tk(owed)}
+                subtext={advances > 0 ? `Advances given ${tk(advances)}` : 'Earned but not paid yet'}
+                icon={HandCoins}
+                color={owed > 0 ? '#dc2626' : '#475569'}
+              />
+              <StatCard label="Labour this month" value={tk(monthEarned)} subtext={`Paid ${tk(monthPaid)} this month`} icon={Wallet} color="#047857" />
             </View>
+            <Text className="text-xs text-slate-500">Monthly pay is salary ÷ 30 per day. Tap a worker for their pay account.</Text>
+            <View className="flex-row items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <Search size={16} color="#94a3b8" />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search by name, work or phone..."
+                placeholderTextColor="#94a3b8"
+                className="flex-1 text-sm text-slate-900"
+              />
+            </View>
+            <ChipGroup options={FILTERS.map((f) => ({ ...f, label: `${f.label} ${counts[f.value]}` }))} value={filter} onChange={setFilter} />
+            {error ? (
+              <View className="rounded-xl border border-red-100 bg-red-50 p-3">
+                <Text className="text-xs font-medium text-red-700">{error}</Text>
+              </View>
+            ) : null}
           </View>
-        )}
+        }
+        ListEmptyComponent={<EmptyState message={workers.length === 0 ? 'No workers yet. Add your first worker.' : 'No workers match this search or filter.'} />}
+        renderItem={({ item }) => {
+          const bal = balanceInfo(item.account.balance);
+          return (
+            <Pressable onPress={() => router.push(`/worker/${item.id}`)} className="rounded-2xl border border-slate-200 bg-white p-4">
+              <View className="flex-row items-center gap-3">
+                <View className="h-10 w-10 items-center justify-center rounded-xl bg-slate-900">
+                  <Text className="text-base font-bold text-white">{item.name.charAt(0).toUpperCase()}</Text>
+                </View>
+                <View className="flex-1">
+                  <View className="flex-row flex-wrap items-center gap-2">
+                    <Text className="text-sm font-bold text-slate-900">{item.name}</Text>
+                    {item.status === 'left' ? (
+                      <Text className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Left</Text>
+                    ) : null}
+                  </View>
+                  <Text className="text-xs text-slate-500">
+                    {item.role ? `${item.role} · ` : ''}
+                    {payLabel(item)}
+                  </Text>
+                  <Text className="text-xs text-slate-500">
+                    This month {tk(item.thisMonth.earned)}
+                    {item.thisMonth.daysAbsent > 0 ? ` · ${item.thisMonth.daysAbsent} absent` : ''}
+                  </Text>
+                </View>
+                <ChevronRight size={16} color="#cbd5e1" />
+              </View>
+              <View className="mt-3 flex-row items-center justify-between border-t border-slate-100 pt-3">
+                <View className={`rounded-full border px-2.5 py-1 ${bal.pill}`}>
+                  <Text className={`text-xs font-bold ${bal.pillText}`}>{bal.label}</Text>
+                </View>
+                <Pressable onPress={() => setPaying(item)} className="flex-row items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                  <Wallet size={14} color="#047857" />
+                  <Text className="text-xs font-semibold text-emerald-700">Pay</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          );
+        }}
       />
 
       <Pressable
-        onPress={openCreate}
+        onPress={() => setAdding(true)}
         className="absolute bottom-6 right-6 flex-row items-center gap-2 rounded-full bg-slate-900 px-5 py-3.5 shadow-lg"
       >
         <Plus size={18} color="white" />
-        <Text className="font-semibold text-white">Add Employee</Text>
+        <Text className="font-semibold text-white">Add worker</Text>
       </Pressable>
 
-      <FormModal visible={modalOpen} title={editing ? 'Edit Employee' : 'Add New Employee'} onClose={() => setModalOpen(false)}>
-        {error ? (
-          <View className="rounded-xl border border-red-100 bg-red-50 p-3">
-            <Text className="text-xs font-medium text-red-700">{error}</Text>
-          </View>
-        ) : null}
-        <TextField label="Full Name" placeholder="e.g. Karim Hossain" value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} />
-        <TextField label="Role / Job Title" placeholder="e.g. Farm Supervisor" value={form.role} onChangeText={(v) => setForm({ ...form, role: v })} />
-        <TextField label="Monthly Salary (৳)" placeholder="e.g. 12000" keyboardType="decimal-pad" value={form.salary} onChangeText={(v) => setForm({ ...form, salary: v })} />
-        <DateField label="Join Date" value={form.joinDate} onChange={(v) => setForm({ ...form, joinDate: v })} maxDate={new Date()} />
-        <ChipGroup
-          label="Status"
-          options={[
-            { value: 'active', label: 'Active' },
-            { value: 'on_leave', label: 'On Leave' },
-            { value: 'terminated', label: 'Terminated' },
-          ]}
-          value={form.status}
-          onChange={(v) => setForm({ ...form, status: v })}
+      {adding ? (
+        <WorkerFormModal
+          onClose={() => setAdding(false)}
+          onSaved={(saved) => {
+            setAdding(false);
+            reload();
+            router.push(`/worker/${saved.id}`);
+          }}
         />
-        <TextField label="Phone Number" placeholder="e.g. 01711-123456" value={form.phone} onChangeText={(v) => setForm({ ...form, phone: v })} />
-        <TextField label="Email Address (Optional)" placeholder="e.g. karim@farm.com" keyboardType="email-address" autoCapitalize="none" value={form.email} onChangeText={(v) => setForm({ ...form, email: v })} />
-        <PrimaryButton label="Save Employee" loading={saving} onPress={handleSubmit} />
-      </FormModal>
-
-      <FormModal
-        visible={salaryOpen}
-        title="Record Salary Payment"
-        subtitle={salaryEmployee ? `${salaryEmployee.name} — ${salaryEmployee.role}` : undefined}
-        onClose={() => setSalaryOpen(false)}
-      >
-        {salaryEmployee ? (
-          <View className="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
-            <Text className="text-xs text-indigo-700">
-              Contracted monthly salary: <Text className="font-bold">{formatCurrency(salaryEmployee.salary ?? 0)}</Text>
-            </Text>
-          </View>
-        ) : null}
-        {salaryError ? (
-          <View className="rounded-xl border border-red-100 bg-red-50 p-3">
-            <Text className="text-xs font-medium text-red-700">{salaryError}</Text>
-          </View>
-        ) : null}
-        <TextField label="Amount Paid (৳)" keyboardType="decimal-pad" value={salaryForm.amount} onChangeText={(v) => setSalaryForm({ ...salaryForm, amount: v })} />
-        <View className="flex-row gap-3">
-          <View className="flex-1">
-            <TextField label="Month (1-12)" keyboardType="number-pad" value={salaryForm.periodMonth} onChangeText={(v) => setSalaryForm({ ...salaryForm, periodMonth: v })} />
-          </View>
-          <View className="flex-1">
-            <TextField label="Year" keyboardType="number-pad" value={salaryForm.periodYear} onChangeText={(v) => setSalaryForm({ ...salaryForm, periodYear: v })} />
-          </View>
-        </View>
-        <TextField label="Note (Optional)" placeholder="e.g. July 2026 salary" value={salaryForm.note} onChangeText={(v) => setSalaryForm({ ...salaryForm, note: v })} />
-        <PrimaryButton label="Record Payment" loading={saving} onPress={handleSalarySubmit} />
-      </FormModal>
+      ) : null}
+      {paying ? (
+        <WorkerPaymentModal
+          worker={paying}
+          onClose={() => setPaying(null)}
+          onSaved={() => {
+            setPaying(null);
+            reload();
+          }}
+        />
+      ) : null}
     </View>
   );
 }

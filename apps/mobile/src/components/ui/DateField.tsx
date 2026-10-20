@@ -24,7 +24,10 @@ export function DateField({
     // iOS's inline picker stays open until the user taps elsewhere.
     setShow(Platform.OS === 'ios');
     if (selectedDate) {
-      onChange(selectedDate.toISOString().slice(0, 10));
+      // The picker works in local time (value is local midnight), so read the
+      // local calendar day — toISOString() would give the previous day east of UTC.
+      const pad = (n: number) => String(n).padStart(2, '0');
+      onChange(`${selectedDate.getFullYear()}-${pad(selectedDate.getMonth() + 1)}-${pad(selectedDate.getDate())}`);
     }
   }
 

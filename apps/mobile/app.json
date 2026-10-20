@@ -37,7 +37,14 @@
         }
       ],
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Farm Manager uses your photos so you can add pictures of your animals.",
+          "cameraPermission": "Farm Manager uses the camera so you can take pictures of your animals."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false

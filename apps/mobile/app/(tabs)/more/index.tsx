@@ -4,24 +4,28 @@ import {
   Users, Coins, PackageOpen, TrendingUp, Sprout, FileText, Trash2, ChevronRight, HandCoins, Store, CalendarRange, Milk,
 } from 'lucide-react-native';
 import { API_URL } from '@/src/lib/apiClient';
+import { useSession } from '@/src/context/AuthContext';
 
 const ITEMS = [
   { href: '/(tabs)/more/customers', label: 'Customers & Dues', icon: HandCoins },
   { href: '/(tabs)/more/suppliers', label: 'Suppliers & Payables', icon: Store },
-  { href: '/(tabs)/more/report', label: 'Monthly Report', icon: CalendarRange },
-  { href: '/(tabs)/more/milk-price', label: 'Default Milk Price', icon: Milk },
+  { href: '/(tabs)/more/report', label: 'Monthly Report', icon: CalendarRange, ownerOnly: true },
+  { href: '/(tabs)/more/milk-price', label: 'Default Milk Price', icon: Milk, ownerOnly: true },
   { href: '/(tabs)/more/employees', label: 'Employees', icon: Users },
   { href: '/(tabs)/more/income', label: 'Other Income', icon: Coins },
   { href: '/(tabs)/more/expenses', label: 'Other Expenses', icon: PackageOpen },
-  { href: '/(tabs)/more/revenue', label: 'Revenue Portal', icon: TrendingUp },
-  { href: '/(tabs)/more/ranch', label: 'Create New Ranch', icon: Sprout },
+  { href: '/(tabs)/more/revenue', label: 'Revenue Portal', icon: TrendingUp, ownerOnly: true },
+  { href: '/(tabs)/more/ranch', label: 'Create New Ranch', icon: Sprout, ownerOnly: true },
 ] as const;
 
 export default function MoreScreen() {
+  const { isOwner } = useSession();
+  // Managers get a 403 on money reports and settings, so don't offer them.
+  const items = ITEMS.filter((item) => isOwner || !('ownerOnly' in item));
   return (
     <View className="flex-1 bg-slate-50 p-5 gap-5">
       <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        {ITEMS.map(({ href, label, icon: Icon }, i) => (
+        {items.map(({ href, label, icon: Icon }, i) => (
           <Pressable
             key={href}
             onPress={() => router.push(href)}

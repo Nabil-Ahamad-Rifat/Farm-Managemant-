@@ -11,6 +11,8 @@ interface AuthSession {
 
 interface AuthContextValue {
   user: AuthUser | null;
+  /** Managers do the daily work but can't see money reports (same rule as web's isOwner). */
+  isOwner: boolean;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string, tenantName?: string) => Promise<void>;
@@ -77,6 +79,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const value: AuthContextValue = {
     user,
+    isOwner: user?.role !== 'manager',
     isLoading,
 
     async signIn(email, password) {

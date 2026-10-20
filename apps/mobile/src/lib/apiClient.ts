@@ -16,6 +16,9 @@ async function getStoredItem(key: string): Promise<string | null> {
   return SecureStore.getItemAsync(key);
 }
 
+/** The stored Bearer token, for requests apiClient can't make itself (e.g. <Image> photo loads). */
+export const getAccessToken = () => getStoredItem('accessToken');
+
 interface RefreshedTokens {
   accessToken: string;
   refreshToken: string;

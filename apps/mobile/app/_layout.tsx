@@ -47,6 +47,8 @@ function RootNavigator() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={!!user}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="animal/[id]" options={{ headerShown: true, title: 'Animal', headerTitleStyle: { fontWeight: '700' } }} />
+        <Stack.Screen name="worker/[id]" options={{ headerShown: true, title: 'Worker', headerTitleStyle: { fontWeight: '700' } }} />
       </Stack.Protected>
 
       <Stack.Protected guard={!user}>
