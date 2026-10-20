@@ -5,7 +5,8 @@ import type { FeedBatch } from '@farm/shared-types';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { PAYMENT_METHODS, fmtDate, tk, todayStr, toDay } from '@/src/lib/format';
-import { FormModal, TextField, ChipGroup, DateField, PrimaryButton } from '@/src/components/ui';
+import { FormModal, FormFooter, FormError, FieldLabel, TextField, ChipGroup, DateField } from '@/src/components/ui';
+import { colors } from '@/src/theme';
 import { PartyPickerField, type PartyChoice, type PickerParty } from '@/src/components/PartyPickerField';
 
 export const PRESET_FEED_NAMES = ['Bushi', 'Butta', 'Gom', 'Chaw', 'Khud', 'Soyabin', 'Khoil', 'Dhan', 'Kaher', 'Atta'];
@@ -118,30 +119,32 @@ export function FeedPurchaseModal({
   }
 
   return (
-    <FormModal visible={open} title={editing ? 'Edit feed purchase' : 'Buy feed'} onClose={onClose}>
-      {error ? (
-        <View className="rounded-xl border border-red-100 bg-red-50 p-3">
-          <Text className="text-xs font-medium text-red-700">{error}</Text>
-        </View>
-      ) : null}
+    <FormModal
+      visible={open}
+      title={editing ? 'Edit feed purchase' : 'Buy feed'}
+      subtitle="Paid in cash, partly, or on credit (baki) — and how long it will last."
+      onClose={onClose}
+      footer={<FormFooter onCancel={onClose} onSubmit={save} loading={saving} label={editing ? 'Save changes' : 'Save purchase'} />}
+    >
+      <FormError message={error} />
       <View>
         <TextField label="Feed / grain" placeholder="e.g. Bushi, Butta, Gom..." value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} />
-        <View className="mt-2 flex-row flex-wrap gap-1.5">
+        <View className="mt-2 flex-row flex-wrap gap-2">
           {PRESET_FEED_NAMES.map((n) => (
             <Pressable
               key={n}
               onPress={() => setForm({ ...form, name: n })}
-              className={`rounded-full border px-2.5 py-1 ${form.name === n ? 'border-amber-600 bg-amber-600' : 'border-amber-200 bg-amber-50'}`}
+              className={`rounded-full border px-3 py-1.5 ${form.name === n ? 'border-amber-600 bg-amber-600' : 'border-amber-200 bg-amber-50'}`}
             >
-              <Text className={`text-[11px] font-semibold ${form.name === n ? 'text-white' : 'text-amber-800'}`}>{n}</Text>
+              <Text className={`text-xs font-semibold ${form.name === n ? 'text-white' : 'text-amber-800'}`}>{n}</Text>
             </Pressable>
           ))}
         </View>
       </View>
       {presetSupplier ? (
         <View>
-          <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-600">Bought from</Text>
-          <Text className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-900">{presetSupplier.name}</Text>
+          <FieldLabel label="Bought from" />
+          <Text className="rounded-control border border-line bg-slate-50 px-3.5 py-3 text-base font-semibold text-ink">{presetSupplier.name}</Text>
         </View>
       ) : (
         <PartyPickerField label="Bought from" noun="supplier" parties={suppliers} value={supplier} onChange={setSupplier} />
@@ -154,19 +157,19 @@ export function FeedPurchaseModal({
           <TextField label="Price per kg (৳)" keyboardType="decimal-pad" placeholder="e.g. 35" value={form.unitPrice} onChangeText={(v) => setForm({ ...form, unitPrice: v })} />
         </View>
       </View>
-      {total > 0 ? <Text className="text-sm text-slate-600">Total: <Text className="font-bold text-slate-900">{tk(total)}</Text></Text> : null}
+      {total > 0 ? <Text className="text-sm text-slate-600">Total: <Text className="font-bold text-ink">{tk(total)}</Text></Text> : null}
 
       <View>
-        <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-600">How many days will it last?</Text>
+        <FieldLabel label="How many days will it last?" />
         <View className="flex-row flex-wrap gap-2">
-          <Pressable onPress={() => setForm({ ...form, coverDays: '' })} className={`rounded-xl px-3.5 py-2 ${form.coverDays === '' ? 'bg-slate-900' : 'border border-slate-200 bg-white'}`}>
-            <Text className={`text-xs font-semibold ${form.coverDays === '' ? 'text-white' : 'text-slate-600'}`}>Don&apos;t know</Text>
+          <Pressable onPress={() => setForm({ ...form, coverDays: '' })} className={`rounded-control px-3.5 py-2.5 ${form.coverDays === '' ? 'bg-ink' : 'border border-line bg-white'}`}>
+            <Text className={`text-sm font-semibold ${form.coverDays === '' ? 'text-white' : 'text-slate-600'}`}>Don&apos;t know</Text>
           </Pressable>
           {DAY_CHIPS.map((d) => {
             const active = days === d && !customDays;
             return (
-              <Pressable key={d} onPress={() => setForm({ ...form, coverDays: String(d) })} className={`rounded-xl px-3.5 py-2 ${active ? 'bg-slate-900' : 'border border-slate-200 bg-white'}`}>
-                <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-slate-600'}`}>
+              <Pressable key={d} onPress={() => setForm({ ...form, coverDays: String(d) })} className={`rounded-control px-3.5 py-2.5 ${active ? 'bg-ink' : 'border border-line bg-white'}`}>
+                <Text className={`text-sm font-semibold ${active ? 'text-white' : 'text-slate-600'}`}>
                   {d} day{d === 1 ? '' : 's'}
                 </Text>
               </Pressable>
@@ -175,20 +178,20 @@ export function FeedPurchaseModal({
           <TextInput
             keyboardType="number-pad"
             placeholder="Other"
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor={colors.slate400}
             value={customDays ? form.coverDays : ''}
             onChangeText={(v) => setForm({ ...form, coverDays: v.replace(/[^0-9]/g, '') })}
-            className={`w-20 rounded-xl border px-3 py-2 text-xs ${customDays ? 'border-slate-900 font-semibold' : 'border-slate-200'}`}
+            className={`w-20 rounded-control border bg-white px-3 py-2 text-sm text-ink ${customDays ? 'border-ink' : 'border-line'}`}
             accessibilityLabel="Other number of days"
           />
         </View>
         {form.coverDays === '' && total > 0 ? (
-          <Text className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
+          <Text className="mt-2 rounded-control bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
             The full {tk(total)} counts as feed cost on the day you bought it.
           </Text>
         ) : null}
         {days >= 1 && qty > 0 ? (
-          <Text className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+          <Text className="mt-2 rounded-control bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
             ≈ {round2(qty / days)} kg/day · {tk(round2(total / days))}/day · lasts until {fmtDate(lastDay)}
           </Text>
         ) : null}
@@ -198,7 +201,7 @@ export function FeedPurchaseModal({
       {editing ? (
         <TextField label="Stock left now (kg)" keyboardType="decimal-pad" value={form.remainingQuantity} onChangeText={(v) => setForm({ ...form, remainingQuantity: v })} />
       ) : (
-        <View className="gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+        <View className="gap-3 rounded-card border border-line bg-slate-50 p-3">
           <ChipGroup label="Payment" options={PAY_MODES} value={form.payMode} onChange={(v) => setForm({ ...form, payMode: v })} />
           {form.payMode === 'partial' ? (
             <TextField label="Paid now (৳)" keyboardType="decimal-pad" value={form.paidNow} onChangeText={(v) => setForm({ ...form, paidNow: v })} />
@@ -206,12 +209,11 @@ export function FeedPurchaseModal({
           {form.payMode !== 'credit' ? (
             <ChipGroup label="Paid by" options={PAYMENT_METHODS} value={form.paymentMethod} onChange={(v) => setForm({ ...form, paymentMethod: v })} />
           ) : null}
-          <Text className={`text-sm font-semibold ${owed > 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+          <Text className={`text-sm font-semibold ${owed > 0 ? 'text-red-600' : 'text-brand-700'}`}>
             {owed > 0 ? `${tk(owed)} will be added to what you owe${supplier ? ` ${supplier.name}` : ''}` : 'Fully paid — nothing owed'}
           </Text>
         </View>
       )}
-      <PrimaryButton label={editing ? 'Save changes' : 'Save purchase'} loading={saving} onPress={save} />
     </FormModal>
   );
 }

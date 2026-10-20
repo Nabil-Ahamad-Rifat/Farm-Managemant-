@@ -6,21 +6,14 @@ import { dayRate } from '@farm/business-logic';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { tk, toDay, todayStr } from '@/src/lib/format';
-import { FormModal, TextField, ChipGroup, DateField, PrimaryButton } from '@/src/components/ui';
+import { FormModal, FormFooter, FormError, TextField, ChipGroup, DateField } from '@/src/components/ui';
 import { balanceInfo } from './shared';
 
 // Mobile versions of the web app's components/workers/WorkerModals.tsx. Each
 // one is rendered only while open (the parent mounts it), so its form state
 // starts fresh every time and needs no reset effect.
 
-function ErrorBox({ message }: { message: string }) {
-  if (!message) return null;
-  return (
-    <View className="rounded-xl border border-red-100 bg-red-50 p-3">
-      <Text className="text-xs font-medium text-red-700">{message}</Text>
-    </View>
-  );
-}
+const ErrorBox = FormError;
 
 /** Error text, busy flag and a runner that calls onSaved with the result after success. */
 function useSubmit<T = unknown>(onSaved: (result: T) => void) {
@@ -48,9 +41,9 @@ function QuickChips({ chips, value, onPick }: { chips: { value: number; label: s
         <Pressable
           key={i}
           onPress={() => onPick(c.value)}
-          className={`rounded-lg px-3 py-1.5 ${value === c.value ? 'bg-slate-900' : 'border border-slate-200 bg-white'}`}
+          className={`rounded-control px-3.5 py-2.5 ${value === c.value ? 'bg-ink' : 'border border-line bg-white'}`}
         >
-          <Text className={`text-xs font-semibold ${value === c.value ? 'text-white' : 'text-slate-600'}`}>{c.label}</Text>
+          <Text className={`text-sm font-semibold ${value === c.value ? 'text-white' : 'text-slate-600'}`}>{c.label}</Text>
         </Pressable>
       ))}
     </View>
@@ -99,9 +92,14 @@ export function WorkerFormModal({ worker, onClose, onSaved }: { worker?: Employe
   }
 
   return (
-    <FormModal visible title={editing ? `Edit ${worker!.name}` : 'Add worker'} onClose={onClose}>
+    <FormModal
+      visible
+      title={editing ? `Edit ${worker!.name}` : 'Add worker'}
+      onClose={onClose}
+      footer={<FormFooter onCancel={onClose} onSubmit={save} loading={saving} label={editing ? 'Save changes' : 'Add worker'} />}
+    >
       <ErrorBox message={error} />
-      <TextField label="Name" placeholder="e.g. Karim" value={form.name} onChangeText={(v) => set({ name: v })} />
+      <TextField label="Name *" placeholder="e.g. Karim" value={form.name} onChangeText={(v) => set({ name: v })} />
       <TextField label="Work" placeholder="e.g. Milker, Cleaner" value={form.role} onChangeText={(v) => set({ role: v })} />
       <ChipGroup label="How is this worker paid?" options={PAY_TYPES} value={form.payType} onChange={(v) => set({ payType: v as 'monthly' | 'daily' })} />
       {form.payType === 'monthly' ? (
@@ -120,14 +118,13 @@ export function WorkerFormModal({ worker, onClose, onSaved }: { worker?: Employe
         </View>
       )}
       {rateChanged ? (
-        <View className="gap-1 rounded-xl border border-amber-200 bg-amber-50 p-3">
+        <View className="gap-1 rounded-control border border-amber-200 bg-amber-50 p-3">
           <DateField label="New pay applies from" value={form.rateFrom} onChange={(v) => set({ rateFrom: v })} maxDate={new Date()} />
           <Text className="text-xs text-amber-800">Days before this keep the old pay.</Text>
         </View>
       ) : null}
       <DateField label="Started on" value={form.joinDate} onChange={(v) => set({ joinDate: v })} maxDate={new Date()} />
       <TextField label="Phone" placeholder="01XXXXXXXXX" keyboardType="phone-pad" value={form.phone} onChangeText={(v) => set({ phone: v })} />
-      <PrimaryButton label={editing ? 'Save changes' : 'Add worker'} loading={saving} onPress={save} />
     </FormModal>
   );
 }
@@ -168,16 +165,25 @@ export function WorkerPaymentModal({
   }
 
   return (
-    <FormModal visible title={editing ? 'Edit payment' : `Pay ${worker.name}`} subtitle={editing ? undefined : balanceInfo(worker.account.balance).label} onClose={onClose}>
+    <FormModal
+      visible
+      title={editing ? 'Edit payment' : `Pay ${worker.name}`}
+      subtitle={editing ? undefined : balanceInfo(worker.account.balance).label}
+      onClose={onClose}
+      footer={<FormFooter onCancel={onClose} onSubmit={save} loading={saving} label={editing ? 'Save changes' : 'Save payment'} />}
+    >
       <ErrorBox message={error} />
       <View>
         <TextField label="Amount (৳)" keyboardType="decimal-pad" value={form.amount} onChangeText={(v) => setForm({ ...form, amount: v })} />
         {!editing ? <QuickChips chips={chips} value={amount} onPick={(v) => setForm({ ...form, amount: String(v) })} /> : null}
-        {amount > 0 ? <Text className="mt-2 text-xs font-semibold text-slate-600">After this: {balanceInfo(after).label}</Text> : null}
+        {amount > 0 ? (
+          <Text className="mt-2 text-sm text-slate-600">
+            After this: <Text className={`font-semibold ${balanceInfo(after).text}`}>{balanceInfo(after).label}</Text>
+          </Text>
+        ) : null}
       </View>
       <DateField label="Date" value={form.paidAt} onChange={(v) => setForm({ ...form, paidAt: v })} maxDate={new Date()} />
       <TextField label="Note (optional)" placeholder="e.g. Advance" value={form.note} onChangeText={(v) => setForm({ ...form, note: v })} />
-      <PrimaryButton label={editing ? 'Save changes' : 'Save payment'} loading={saving} onPress={save} />
     </FormModal>
   );
 }
@@ -188,7 +194,13 @@ export function AbsenceModal({ worker, onClose, onSaved }: { worker: Pick<Employ
   const { error, saving, run } = useSubmit(onSaved);
   const days = form.to && form.to >= form.from ? Math.round((Date.parse(form.to) - Date.parse(form.from)) / 86_400_000) + 1 : 1;
   return (
-    <FormModal visible title={`${worker.name} was absent`} subtitle="Absent days are not paid" onClose={onClose}>
+    <FormModal
+      visible
+      title={`${worker.name} was absent`}
+      subtitle="Absent days are not paid"
+      onClose={onClose}
+      footer={<FormFooter onCancel={onClose} onSubmit={() => run(() => mobileApiClient.post(`/api/employees/${worker.id}/absences`, form, 'Failed to save'))} loading={saving} label="Mark absent" />}
+    >
       <ErrorBox message={error} />
       <DateField label="Day" value={form.from} onChange={(v) => setForm({ ...form, from: v })} />
       <View>
@@ -203,7 +215,6 @@ export function AbsenceModal({ worker, onClose, onSaved }: { worker: Pick<Employ
       <Text className="text-sm text-slate-600">
         {days} day{days === 1 ? '' : 's'} · {tk(dayRate(worker.salary) * days)} less pay
       </Text>
-      <PrimaryButton label="Mark absent" loading={saving} onPress={() => run(() => mobileApiClient.post(`/api/employees/${worker.id}/absences`, form, 'Failed to save'))} />
     </FormModal>
   );
 }
@@ -232,8 +243,19 @@ export function WorkModal({
   const [key] = useState(generateIdempotencyKey);
   const { error, saving, run } = useSubmit(onSaved);
   const total = (parseFloat(form.days) || 0) * (parseFloat(form.rate) || 0);
+  const save = () =>
+    run(() =>
+      editing
+        ? mobileApiClient.put(`/api/work-entries/${entry!.id}`, form, 'Failed to save work')
+        : mobileApiClient.post(`/api/employees/${worker.id}/work`, form, 'Failed to save work', { idempotencyKey: key }),
+    );
   return (
-    <FormModal visible title={editing ? 'Edit work' : `Add work for ${worker.name}`} onClose={onClose}>
+    <FormModal
+      visible
+      title={editing ? 'Edit work' : `Add work for ${worker.name}`}
+      onClose={onClose}
+      footer={<FormFooter onCancel={onClose} onSubmit={save} loading={saving} label={editing ? 'Save changes' : 'Add work'} />}
+    >
       <ErrorBox message={error} />
       <View>
         <TextField label="Days worked" keyboardType="decimal-pad" value={form.days} onChangeText={(v) => setForm({ ...form, days: v })} />
@@ -243,17 +265,6 @@ export function WorkModal({
       <TextField label="Rate per day (৳)" keyboardType="decimal-pad" value={form.rate} onChangeText={(v) => setForm({ ...form, rate: v })} />
       <TextField label="Work done (optional)" placeholder="e.g. Grass cutting" value={form.note} onChangeText={(v) => setForm({ ...form, note: v })} />
       <Text className="text-sm font-semibold text-slate-700">Earned: {tk(total)}</Text>
-      <PrimaryButton
-        label={editing ? 'Save changes' : 'Add work'}
-        loading={saving}
-        onPress={() =>
-          run(() =>
-            editing
-              ? mobileApiClient.put(`/api/work-entries/${entry!.id}`, form, 'Failed to save work')
-              : mobileApiClient.post(`/api/employees/${worker.id}/work`, form, 'Failed to save work', { idempotencyKey: key }),
-          )
-        }
-      />
     </FormModal>
   );
 }
@@ -263,10 +274,15 @@ export function LeaveModal({ worker, onClose, onSaved }: { worker: Pick<Employee
   const [leftDate, setLeftDate] = useState(todayStr());
   const { error, saving, run } = useSubmit(onSaved);
   return (
-    <FormModal visible title={`${worker.name} left`} subtitle="Pay stops after the last day. You will see the final settlement." onClose={onClose}>
+    <FormModal
+      visible
+      title={`${worker.name} left`}
+      subtitle="Pay stops after the last day. You will see the final settlement."
+      onClose={onClose}
+      footer={<FormFooter onCancel={onClose} onSubmit={() => run(() => mobileApiClient.post(`/api/employees/${worker.id}/leave`, { leftDate }, 'Failed to save'))} loading={saving} label="Mark as left" />}
+    >
       <ErrorBox message={error} />
       <DateField label="Last working day" value={leftDate} onChange={setLeftDate} maxDate={new Date()} />
-      <PrimaryButton label="Mark as left" loading={saving} onPress={() => run(() => mobileApiClient.post(`/api/employees/${worker.id}/leave`, { leftDate }, 'Failed to save'))} />
     </FormModal>
   );
 }

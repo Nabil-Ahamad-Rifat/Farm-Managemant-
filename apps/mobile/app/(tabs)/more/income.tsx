@@ -1,181 +1,209 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
-import { Text, TextInput } from '@/src/components/ui/Text';
-import { Plus, Search, Edit3, Trash2, Coins } from 'lucide-react-native';
+import { Plus, Edit3, Coins, Hash } from 'lucide-react-native';
 import type { OtherIncome } from '@farm/shared-types';
-import { daysAgo, sumAmounts, formatCurrency, farmToday } from '@farm/business-logic';
+import { LIST_PERIODS, inListPeriod, farmToday, sumAmounts, type ListPeriod } from '@farm/business-logic';
+import { Text } from '@/src/components/ui/Text';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { useCrudList } from '@/src/hooks/useCrudList';
-import { FormModal, TextField, ChipGroup, DateField, PrimaryButton, IconButton, EmptyState, StatCard, useConfirm } from '@/src/components/ui';
+import { fmtDate, tk, toDay } from '@/src/lib/format';
+import {
+  Button, Chips, DateField, EmptyState, FormError, FormFooter, FormModal, PageHeader, SearchInput, SelectField, StatCard, StatGrid, TextField,
+  useConfirm, useToast,
+} from '@/src/components/ui';
+import { colors } from '@/src/theme';
 
 const CATEGORIES = [
-  { value: 'subsidy', label: 'Subsidy' },
-  { value: 'grant', label: 'Grant/Aid' },
-  { value: 'insurance', label: 'Insurance' },
+  { value: 'subsidy', label: 'Government subsidy' },
+  { value: 'grant', label: 'Grant / aid' },
+  { value: 'insurance', label: 'Insurance payout' },
   { value: 'donation', label: 'Donation' },
-  { value: 'rental', label: 'Rental' },
+  { value: 'rental', label: 'Land / equipment rental' },
   { value: 'refund', label: 'Refund' },
   { value: 'other', label: 'Other' },
 ];
 
-const PERIOD_FILTERS = [
-  { value: '1', label: 'Today' },
-  { value: '3', label: '3 Days' },
-  { value: '5', label: '5 Days' },
-  { value: '7', label: '7 Days' },
-  { value: '15', label: '15 Days' },
-  { value: '30', label: '30 Days' },
-  { value: '0', label: 'All' },
-];
+const categoryLabel = (val: string) => CATEGORIES.find((c) => c.value === val)?.label ?? val;
+const PERIODS = LIST_PERIODS.map((p) => ({ value: p.value, label: p.label }));
 
-const today = () => farmToday();
-// A function, so the default date is today when the form opens, not when the app started.
-const emptyForm = () => ({ description: '', amount: '', category: 'other', incomeDate: today() });
-
+/** Other income, like the web's OtherIncomeManager on a phone. */
 export default function IncomeScreen() {
-  const { items: incomes, loading, refreshing, refresh, reload } = useCrudList<OtherIncome>('/api/income');
-  const confirm = useConfirm();
-
+  const { items: incomes, loading, refreshing, refresh, reload, error } = useCrudList<OtherIncome>('/api/income');
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [periodDays, setPeriodDays] = useState('1');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<OtherIncome | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [createKey, setCreateKey] = useState(generateIdempotencyKey);
+  const [period, setPeriod] = useState<ListPeriod>('month');
+  // undefined = closed, null = adding, a record = editing.
+  const [editing, setEditing] = useState<OtherIncome | null | undefined>(undefined);
 
-  function openCreate() {
-    setEditing(null);
-    setForm(emptyForm());
-    setError('');
-    setCreateKey(generateIdempotencyKey());
-    setModalOpen(true);
-  }
-
-  function openEdit(income: OtherIncome) {
-    setEditing(income);
-    setForm({
-      description: income.description,
-      amount: String(income.amount),
-      category: income.category,
-      incomeDate: new Date(income.incomeDate).toISOString().slice(0, 10),
-    });
-    setError('');
-    setModalOpen(true);
-  }
-
-  async function handleSubmit() {
-    if (!form.description.trim() || !form.amount || parseFloat(form.amount) <= 0) {
-      setError('A description and a valid amount are required.');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      if (editing) {
-        await mobileApiClient.put(`/api/income/${editing.id}`, form, 'Failed to save income record');
-      } else {
-        await mobileApiClient.post('/api/income', form, 'Failed to save income record', { idempotencyKey: createKey });
-      }
-      setModalOpen(false);
-      await reload();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDelete(income: OtherIncome) {
-    if (!(await confirm(`Delete this income record: ${income.description}?`))) return;
-    try {
-      await mobileApiClient.delete(`/api/income/${income.id}`);
-      await reload();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
-  const periodDaysNum = Number(periodDays);
-  const filtered = incomes.filter((inc) => {
-    const matchesSearch = inc.description.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = categoryFilter === 'all' || inc.category === categoryFilter;
-    const matchesPeriod = periodDaysNum === 0 || new Date(inc.incomeDate) >= daysAgo(periodDaysNum);
-    return matchesSearch && matchesCategory && matchesPeriod;
-  });
-  const totalAmount = sumAmounts(filtered);
-  const categoryLabel = (val: string) => CATEGORIES.find((c) => c.value === val)?.label || val;
+  const q = search.trim().toLowerCase();
+  const filtered = incomes.filter(
+    (inc) =>
+      (!q || inc.description.toLowerCase().includes(q)) &&
+      (categoryFilter === 'all' || inc.category === categoryFilter) &&
+      // Days counted on the farm's clock (Bangladesh), same as the web.
+      inListPeriod(inc.incomeDate, period),
+  );
+  const total = sumAmounts(filtered);
+  const periodLabel = LIST_PERIODS.find((p) => p.value === period)?.label ?? '';
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-slate-50">
+      <View className="flex-1 items-center justify-center bg-surface">
         <ActivityIndicator />
       </View>
     );
   }
 
-  return (
-    <View className="flex-1 bg-slate-50">
-      <View className="gap-3 border-b border-slate-100 bg-white p-4">
-        <StatCard label="Total Other Income" value={formatCurrency(totalAmount)} subtext={`${filtered.length} records`} icon={Coins} color="#0f766e" />
-        <ChipGroup options={PERIOD_FILTERS} value={periodDays} onChange={setPeriodDays} />
-        <View className="flex-row items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-          <Search size={16} color="#94a3b8" />
-          <TextInput value={search} onChangeText={setSearch} placeholder="Search income records..." placeholderTextColor="#94a3b8" className="flex-1 text-sm text-slate-900" />
-        </View>
-        <ChipGroup options={[{ value: 'all', label: 'All' }, ...CATEGORIES]} value={categoryFilter} onChange={setCategoryFilter} />
+  const header = (
+    <View className="gap-4 pb-4">
+      <PageHeader
+        title="Other income"
+        subtitle="Subsidies, grants, insurance payouts, rent and any money that is not from sales."
+        actions={<Button label="Add income" icon={Plus} variant="brand" onPress={() => setEditing(null)} />}
+      />
+      <FormError message={error} />
+      <StatGrid>
+        <StatCard label="Other income" value={tk(total)} icon={Coins} tone="brand" hint={periodLabel} />
+        <StatCard label="Records" value={String(filtered.length)} icon={Hash} hint={categoryFilter === 'all' ? 'All categories' : categoryLabel(categoryFilter)} />
+      </StatGrid>
+      <SearchInput value={search} onChangeText={setSearch} placeholder="Search income..." />
+      <View className="gap-2">
+        <Chips options={PERIODS} value={period} onChange={setPeriod} />
+        <Chips options={[{ value: 'all', label: 'All categories' }, ...CATEGORIES]} value={categoryFilter} onChange={setCategoryFilter} />
       </View>
+    </View>
+  );
 
-      {error ? (
-        <View className="mx-4 mt-3 rounded-xl border border-red-100 bg-red-50 p-3">
-          <Text className="text-xs font-medium text-red-700">{error}</Text>
-        </View>
-      ) : null}
-
+  return (
+    <View className="flex-1 bg-surface">
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        contentContainerClassName="gap-3 p-4"
+        contentContainerClassName="p-4 pb-10"
+        ListHeaderComponent={header}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-        ListEmptyComponent={<EmptyState message="No income records found." />}
-        renderItem={({ item }) => (
-          <View className="rounded-2xl border border-slate-200 bg-white p-4">
-            <View className="flex-row items-start justify-between">
-              <View className="flex-1">
-                <Text className="text-sm font-semibold text-slate-900">{item.description}</Text>
-                <Text className="mt-1 text-[11px] uppercase tracking-wider text-slate-400">{categoryLabel(item.category)}</Text>
-                <Text className="mt-1 text-xs text-slate-500">{new Date(item.incomeDate).toLocaleDateString()}</Text>
-                <Text className="mt-1 text-sm font-bold text-teal-700">{formatCurrency(item.amount)}</Text>
-              </View>
-              <View className="flex-row gap-2">
-                <IconButton icon={Edit3} onPress={() => openEdit(item)} />
-                <IconButton icon={Trash2} variant="danger" onPress={() => handleDelete(item)} />
-              </View>
-            </View>
+        ListEmptyComponent={
+          <View className="rounded-card border border-line bg-white">
+            <EmptyState icon={Coins} title="No income in this view" message="Change the period or category, or add an income record." />
           </View>
-        )}
+        }
+        renderItem={({ item: income, index }) => {
+          const first = index === 0;
+          const last = index === filtered.length - 1;
+          return (
+            <View
+              className={`flex-row items-center gap-3 border-x border-line bg-white px-4 py-3 ${first ? 'rounded-t-card border-t' : 'border-t border-t-slate-100'} ${last ? 'rounded-b-card border-b' : ''}`}
+            >
+              <View className="min-w-0 flex-1">
+                <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
+                  {income.description}
+                </Text>
+                <Text className="text-xs text-slate-500" numberOfLines={1}>
+                  {categoryLabel(income.category)} · {fmtDate(income.incomeDate)}
+                </Text>
+              </View>
+              <Text className="text-sm font-semibold text-brand-700">{tk(income.amount)}</Text>
+              <Pressable onPress={() => setEditing(income)} className="rounded-lg p-2" accessibilityLabel={`Edit ${income.description}`}>
+                <Edit3 size={16} color={colors.slate400} />
+              </Pressable>
+            </View>
+          );
+        }}
       />
 
-      <Pressable onPress={openCreate} className="absolute bottom-6 right-6 flex-row items-center gap-2 rounded-full bg-teal-700 px-5 py-3.5 shadow-lg">
-        <Plus size={18} color="white" />
-        <Text className="font-semibold text-white">Add Income</Text>
-      </Pressable>
-
-      <FormModal visible={modalOpen} title={editing ? 'Edit Income Record' : 'Add Other Income'} onClose={() => setModalOpen(false)}>
-        {error ? (
-          <View className="rounded-xl border border-red-100 bg-red-50 p-3">
-            <Text className="text-xs font-medium text-red-700">{error}</Text>
-          </View>
-        ) : null}
-        <TextField label="Description" placeholder="e.g. Government livestock subsidy" value={form.description} onChangeText={(v) => setForm({ ...form, description: v })} />
-        <TextField label="Amount (৳)" placeholder="e.g. 5000.00" keyboardType="decimal-pad" value={form.amount} onChangeText={(v) => setForm({ ...form, amount: v })} />
-        <DateField label="Income Date" value={form.incomeDate} onChange={(v) => setForm({ ...form, incomeDate: v })} maxDate={new Date()} />
-        <ChipGroup label="Category" options={CATEGORIES} value={form.category} onChange={(v) => setForm({ ...form, category: v })} />
-        <PrimaryButton label="Save Income" loading={saving} onPress={handleSubmit} />
-      </FormModal>
+      <IncomeFormModal
+        visible={editing !== undefined}
+        income={editing ?? null}
+        onClose={() => setEditing(undefined)}
+        onSaved={(message) => {
+          setEditing(undefined);
+          toast(message);
+          reload();
+        }}
+      />
     </View>
+  );
+}
+
+const fromIncome = (income: OtherIncome | null) => ({
+  description: income?.description ?? '',
+  amount: income ? String(income.amount) : '',
+  category: income?.category ?? 'other',
+  incomeDate: income ? toDay(income.incomeDate) : farmToday(),
+});
+
+function IncomeFormModal({
+  visible,
+  income,
+  onClose,
+  onSaved,
+}: {
+  visible: boolean;
+  income: OtherIncome | null;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const confirm = useConfirm();
+  const [form, setForm] = useState(() => fromIncome(income));
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [key, setKey] = useState(generateIdempotencyKey);
+
+  useEffect(() => {
+    if (!visible) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm(fromIncome(income));
+    setError('');
+    setKey(generateIdempotencyKey());
+  }, [visible, income]);
+
+  async function submit() {
+    setError('');
+    if (!form.description.trim()) return setError('Please enter a description.');
+    if (!(parseFloat(form.amount) > 0)) return setError('Enter an amount more than 0.');
+    setLoading(true);
+    try {
+      if (income) await mobileApiClient.put(`/api/income/${income.id}`, form, 'Failed to save income');
+      else await mobileApiClient.post('/api/income', form, 'Failed to save income', { idempotencyKey: key });
+      onSaved(income ? 'Income updated' : 'Income added');
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function remove() {
+    if (!income) return;
+    const ok = await confirm({ title: 'Delete this income?', message: `${income.description} · ${tk(income.amount)} on ${fmtDate(income.incomeDate)}`, confirmLabel: 'Delete', tone: 'danger' });
+    if (!ok) return;
+    try {
+      await mobileApiClient.delete(`/api/income/${income.id}`, 'Failed to delete income');
+      onSaved('Income deleted');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  return (
+    <FormModal
+      visible={visible}
+      title={income ? 'Edit income' : 'Add other income'}
+      onClose={onClose}
+      footer={<FormFooter onCancel={onClose} onSubmit={submit} loading={loading} label={income ? 'Save changes' : 'Add income'} />}
+    >
+      <FormError message={error} />
+      <TextField label="Description" maxLength={200} placeholder="e.g. Government livestock subsidy" value={form.description} onChangeText={(v) => setForm({ ...form, description: v })} />
+      <TextField label="Amount (৳)" keyboardType="decimal-pad" placeholder="e.g. 5000" value={form.amount} onChangeText={(v) => setForm({ ...form, amount: v })} />
+      <DateField label="Date" value={form.incomeDate} onChange={(v) => setForm({ ...form, incomeDate: v })} maxDate={new Date()} />
+      <SelectField label="Category" placeholder="Choose a category" value={form.category} options={CATEGORIES} onChange={(v) => setForm({ ...form, category: v })} />
+      {income ? (
+        <Pressable onPress={remove} className="self-start py-1" accessibilityRole="button">
+          <Text className="text-sm font-semibold text-red-600">Delete this income</Text>
+        </Pressable>
+      ) : null}
+    </FormModal>
   );
 }

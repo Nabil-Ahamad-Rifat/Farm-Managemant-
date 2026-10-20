@@ -1,165 +1,221 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
-import { Text, TextInput } from '@/src/components/ui/Text';
-import { Plus, Search, Edit3, Trash2, Wallet, AlertCircle, Tag, FileText, Milk } from 'lucide-react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Plus, Users, Edit3, Trash2, Wallet, Milk, HandCoins, AlertCircle, ShoppingCart } from 'lucide-react-native';
 import type { Sale } from '@farm/shared-types';
 import { LIST_PERIODS, inListPeriod, type ListPeriod } from '@farm/business-logic';
+import { Text } from '@/src/components/ui/Text';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { useCrudList } from '@/src/hooks/useCrudList';
 import { useSaleOptions } from '@/src/hooks/useSaleOptions';
 import { tk, fmtDate } from '@/src/lib/format';
-import { ChipGroup, IconButton, EmptyState, StatCard, useConfirm } from '@/src/components/ui';
+import { Button, Chips, EmptyState, FormError, PageHeader, SearchInput, StatCard, StatGrid, useConfirm, useToast } from '@/src/components/ui';
 import { StatusPill } from '@/src/components/StatusPill';
 import { SaleFormModal } from '@/src/components/SaleFormModal';
+import { colors } from '@/src/theme';
 
-const PRODUCT_LABELS: Record<string, string> = { milk: 'Milk', cow_sale: 'Cow', other: 'Other', general: 'General', products: 'Products' };
+const PRODUCTS: Record<string, { label: string; unit: string }> = {
+  milk: { label: 'Milk', unit: 'L' },
+  cow_sale: { label: 'Cow', unit: 'head' },
+  other: { label: 'Other', unit: '' },
+  general: { label: 'General', unit: '' },
+  products: { label: 'Products', unit: '' },
+};
 
-const PERIOD_FILTERS = LIST_PERIODS.map((p) => ({ value: p.value, label: p.label }));
-
-/** "1,250.5 L" */
-const litres = (n: number) => `${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })} L`;
+const PERIODS = LIST_PERIODS.map((p) => ({ value: p.value, label: p.label }));
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: 'paid', label: 'Paid' },
+  { value: 'partial', label: 'Partial' },
+  { value: 'pending', label: 'Due' },
+];
+const TYPE_FILTERS = [
+  { value: 'all', label: 'All customers' },
+  { value: 'regular', label: 'Regular' },
+  { value: 'new', label: 'New' },
+];
 
 /** Paid amount for any sale: derived for customer sales, hand-set status for older ones. */
 const salePaid = (s: Sale) => (s.customerId ? s.paidAmount ?? 0 : s.status === 'paid' ? s.amount : 0);
 const saleStatus = (s: Sale) => (s.customerId ? s.status : s.status === 'paid' ? 'paid' : 'pending');
 
+/** "1,250.5 L" */
+const litres = (n: number) => `${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })} L`;
+
+/** Sales, like the web's SalesManager on a phone. */
 export default function SalesScreen() {
-  const { items: sales, loading, refreshing, refresh, reload } = useCrudList<Sale>('/api/sales');
+  const { items: sales, loading, refreshing, refresh, reload, error: loadError } = useCrudList<Sale>('/api/sales');
   const options = useSaleOptions();
   const confirm = useConfirm();
+  const toast = useToast();
+  const params = useLocalSearchParams<{ new?: string }>();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [period, setPeriod] = useState<ListPeriod>('month');
   const [modal, setModal] = useState<{ sale: Sale | null } | null>(null);
-  const [error, setError] = useState('');
 
-  async function afterChange() {
-    await Promise.all([reload(), options.reload()]);
-  }
+  // "Record sale" on Home opens this screen with ?new=1.
+  useEffect(() => {
+    if (params.new !== '1') return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setModal({ sale: null });
+    router.setParams({ new: undefined });
+  }, [params.new]);
+
+  // A sale or payment made elsewhere (Home, a customer's page) shows when coming back.
+  const { reload: reloadOptions } = options;
+  const refreshAll = useCallback(async () => {
+    await Promise.all([reload(), reloadOptions()]);
+  }, [reload, reloadOptions]);
+  useFocusEffect(
+    useCallback(() => {
+      refreshAll();
+    }, [refreshAll])
+  );
 
   async function handleDelete(sale: Sale) {
-    if (!(await confirm(`Delete the ${tk(sale.amount)} sale to ${sale.customerName}?`))) return;
+    const paid = salePaid(sale);
+    const msg =
+      paid > 0 && sale.customerId
+        ? `Delete this sale of ${tk(sale.amount)}? The ${tk(paid)} paid on it stays with ${sale.customerName} and will cover their other dues (or become advance).`
+        : `Delete this sale of ${tk(sale.amount)}?`;
+    if (!(await confirm({ title: msg, confirmLabel: 'Delete', tone: 'danger' }))) return;
     try {
-      await mobileApiClient.delete(`/api/sales/${sale.id}`);
-      await afterChange();
+      await mobileApiClient.delete(`/api/sales/${sale.id}`, 'Failed to delete sale.');
+      toast('Sale deleted');
+      await refreshAll();
     } catch (err) {
-      setError((err as Error).message);
+      toast((err as Error).message, 'error');
     }
   }
 
-  const q = search.toLowerCase();
-  const filtered = sales.filter(
-    (s) =>
-      (s.customerName.toLowerCase().includes(q) || (s.cow ? `${s.cow.name} ${s.cow.tagNumber}`.toLowerCase().includes(q) : false)) &&
-      (statusFilter === 'all' || saleStatus(s) === statusFilter) &&
-      // Days counted on the farm's clock (Bangladesh), same as the web Sales page.
-      inListPeriod(s.createdAt, period),
-  );
-  const received = filtered.reduce((sum, s) => sum + salePaid(s), 0);
-  const due = filtered.reduce((sum, s) => sum + Math.max(0, s.amount - salePaid(s)), 0);
+  const q = search.trim().toLowerCase();
+  const filtered = sales.filter((sale) => {
+    const matchesSearch =
+      !q ||
+      sale.customerName.toLowerCase().includes(q) ||
+      (!!sale.cow && (sale.cow.name.toLowerCase().includes(q) || sale.cow.tagNumber.toLowerCase().includes(q)));
+    const matchesStatus = statusFilter === 'all' || saleStatus(sale) === statusFilter;
+    const matchesType = typeFilter === 'all' || sale.customer?.type === typeFilter;
+    // Days counted on the farm's clock (Bangladesh), same as the web Sales page.
+    return matchesSearch && matchesStatus && matchesType && inListPeriod(sale.createdAt, period);
+  });
+
+  const sold = filtered.reduce((s, x) => s + x.amount, 0);
+  const paid = filtered.reduce((s, x) => s + salePaid(x), 0);
   // Milk litres and taka in the same filtered sales (the rule milkLitres uses in business-logic).
-  const milk = filtered.filter((s) => s.saleType === 'milk');
-  const milkLitres = milk.reduce((sum, s) => sum + (s.quantity ?? 0), 0);
-  const milkAmount = milk.reduce((sum, s) => sum + s.amount, 0);
+  const milk = filtered.filter((x) => x.saleType === 'milk');
+  const milkLitres = milk.reduce((s, x) => s + (x.quantity ?? 0), 0);
+  const milkAmount = milk.reduce((s, x) => s + x.amount, 0);
+  const totalDue = options.customers.reduce((s, c) => s + Math.max(0, c.totalDue), 0);
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-slate-50">
+      <View className="flex-1 items-center justify-center bg-surface">
         <ActivityIndicator />
       </View>
     );
   }
 
-  return (
-    <View className="flex-1 bg-slate-50">
-      <View className="gap-3 border-b border-slate-100 bg-white p-4">
-        <View className="flex-row gap-3">
-          <StatCard label="Received" value={tk(received)} icon={Wallet} color="#059669" />
-          <StatCard label="Unpaid" value={tk(due)} icon={AlertCircle} color="#dc2626" />
-        </View>
+  const header = (
+    <View className="gap-4 pb-4">
+      <PageHeader
+        title="Sales"
+        subtitle="Every sale with who bought, what, how much, and what is still due."
+        actions={
+          <>
+            <Button label="Customers & dues" icon={Users} variant="secondary" onPress={() => router.navigate('/dues')} />
+            <Button label="Record sale" icon={Plus} onPress={() => setModal({ sale: null })} />
+          </>
+        }
+      />
+      <FormError message={loadError} />
+      <StatGrid>
+        <StatCard label="Sold (filtered)" value={tk(sold)} icon={Wallet} hint={`${filtered.length} sale${filtered.length === 1 ? '' : 's'}`} />
         <StatCard
           label="Milk sold"
           value={litres(milkLitres)}
-          subtext={milkLitres > 0 ? `${tk(milkAmount)} · avg ${tk(Math.round((milkAmount / milkLitres) * 100) / 100)}/L` : 'No milk sales in this view'}
           icon={Milk}
-          color="#0369a1"
+          hint={milkLitres > 0 ? `${tk(milkAmount)} · avg ${tk(Math.round((milkAmount / milkLitres) * 100) / 100)}/L` : 'No milk sales in this view'}
         />
-        <ChipGroup options={PERIOD_FILTERS} value={period} onChange={(v) => setPeriod(v as ListPeriod)} />
-        <View className="flex-row items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-          <Search size={16} color="#94a3b8" />
-          <TextInput value={search} onChangeText={setSearch} placeholder="Search by customer or cow tag..." placeholderTextColor="#94a3b8" className="flex-1 text-sm text-slate-900" />
-        </View>
-        <ChipGroup
-          options={[
-            { value: 'all', label: 'All' },
-            { value: 'paid', label: 'Paid' },
-            { value: 'partial', label: 'Partial' },
-            { value: 'pending', label: 'Due' },
-          ]}
-          value={statusFilter}
-          onChange={setStatusFilter}
-        />
+        <StatCard label="Received on these sales" value={tk(paid)} icon={HandCoins} tone="brand" />
+        <StatCard label="Total due — all customers" value={tk(totalDue)} icon={AlertCircle} tone="danger" hint="View who owes →" href="/dues" />
+      </StatGrid>
+      <View className="gap-2">
+        <Chips options={PERIODS} value={period} onChange={setPeriod} />
+        <Chips options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} />
+        <Chips options={TYPE_FILTERS} value={typeFilter} onChange={setTypeFilter} />
       </View>
+      <SearchInput value={search} onChangeText={setSearch} placeholder="Search by customer name or cow tag..." />
+    </View>
+  );
 
-      {error ? (
-        <View className="mx-4 mt-3 rounded-xl border border-red-100 bg-red-50 p-3">
-          <Text className="text-xs font-medium text-red-700">{error}</Text>
-        </View>
-      ) : null}
-
+  return (
+    <View className="flex-1 bg-surface">
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        contentContainerClassName="gap-3 p-4 pb-24"
+        contentContainerClassName="p-4 pb-10"
+        ListHeaderComponent={header}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-        ListEmptyComponent={<EmptyState message="No sales found." />}
-        renderItem={({ item }) => {
-          const paid = salePaid(item);
-          const left = Math.max(0, item.amount - paid);
+        ListEmptyComponent={
+          <View className="rounded-card border border-line bg-white">
+            <EmptyState icon={ShoppingCart} message="No sales match these filters." />
+          </View>
+        }
+        renderItem={({ item: sale, index }) => {
+          const info = PRODUCTS[sale.saleType] ?? { label: sale.saleType, unit: '' };
+          const due = Math.max(0, sale.amount - salePaid(sale));
+          const first = index === 0;
+          const last = index === filtered.length - 1;
           return (
-            <View className="rounded-2xl border border-slate-200 bg-white p-4">
-              <View className="flex-row items-start justify-between">
-                <View className="flex-1 gap-1">
-                  <Text className="text-sm font-bold text-slate-900">{item.customerName}</Text>
-                  {item.cow ? <Text className="text-[11px] text-slate-400">{item.cow.name} ({item.cow.tagNumber})</Text> : null}
-                  <View className="flex-row items-center gap-1.5">
-                    <View className="flex-row items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
-                      <Tag size={9} color="#475569" />
-                      <Text className="text-[10px] font-semibold uppercase text-slate-600">{PRODUCT_LABELS[item.saleType] ?? item.saleType}</Text>
-                    </View>
-                    <StatusPill status={saleStatus(item)} />
-                  </View>
-                  {item.quantity != null && item.unitPrice != null ? (
-                    <Text className="text-[11px] text-slate-500">
-                      {item.quantity}
-                      {item.saleType === 'milk' ? ' L' : ''} × {tk(item.unitPrice)}
+            <View
+              className={`flex-row items-start gap-3 border-x border-line bg-white px-4 py-3.5 ${first ? 'rounded-t-card border-t' : 'border-t border-t-slate-100'} ${last ? 'rounded-b-card border-b' : ''}`}
+            >
+              <View className="min-w-0 flex-1">
+                <View className="flex-row flex-wrap items-center gap-2">
+                  {sale.customerId ? (
+                    <Pressable onPress={() => router.push(`/customer/${sale.customerId}`)} accessibilityRole="link" className="shrink">
+                      <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
+                        {sale.customerName}
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <Text className="shrink text-sm font-semibold text-ink" numberOfLines={1}>
+                      {sale.customerName}
                     </Text>
-                  ) : null}
-                  {item.notes ? (
-                    <View className="flex-row items-center gap-1">
-                      <FileText size={10} color="#94a3b8" />
-                      <Text className="text-[11px] text-slate-400">{item.notes}</Text>
-                    </View>
-                  ) : null}
-                  <Text className="text-sm font-bold text-slate-900">{tk(item.amount)}</Text>
-                  {left > 0 && paid > 0 ? <Text className="text-[11px] font-semibold text-red-600">{tk(paid)} paid · {tk(left)} due</Text> : null}
-                  <Text className="text-[11px] text-slate-400">{fmtDate(item.createdAt)}</Text>
+                  )}
+                  <StatusPill status={saleStatus(sale)} />
                 </View>
-                <View className="flex-row gap-2">
-                  <IconButton icon={Edit3} onPress={() => setModal({ sale: item })} />
-                  <IconButton icon={Trash2} variant="danger" onPress={() => handleDelete(item)} />
+                <Text className="mt-0.5 text-xs text-slate-500" numberOfLines={2}>
+                  {info.label}
+                  {sale.quantity != null && sale.unitPrice != null ? ` · ${sale.quantity}${info.unit ? ` ${info.unit}` : ''} × ${tk(sale.unitPrice)}` : ''} · {fmtDate(sale.createdAt)}
+                  {sale.cow ? ` · ${sale.cow.name} (${sale.cow.tagNumber})` : ''}
+                </Text>
+                {sale.notes ? (
+                  <Text className="mt-0.5 text-xs text-slate-400" numberOfLines={1}>
+                    {sale.notes}
+                  </Text>
+                ) : null}
+              </View>
+              <View className="items-end">
+                <Text className="text-sm font-bold text-ink">{tk(sale.amount)}</Text>
+                {due > 0 ? <Text className="text-xs font-semibold text-red-600">Due {tk(due)}</Text> : null}
+                <View className="mt-1 flex-row gap-1">
+                  <Pressable onPress={() => setModal({ sale })} className="rounded-lg p-2" accessibilityLabel={`Edit sale to ${sale.customerName}`}>
+                    <Edit3 size={16} color={colors.slate400} />
+                  </Pressable>
+                  <Pressable onPress={() => handleDelete(sale)} className="rounded-lg p-2" accessibilityLabel={`Delete sale to ${sale.customerName}`}>
+                    <Trash2 size={16} color={colors.slate400} />
+                  </Pressable>
                 </View>
               </View>
             </View>
           );
         }}
       />
-
-      <Pressable onPress={() => setModal({ sale: null })} className="absolute bottom-6 right-6 flex-row items-center gap-2 rounded-full bg-slate-900 px-5 py-3.5 shadow-lg">
-        <Plus size={18} color="white" />
-        <Text className="font-semibold text-white">Record Sale</Text>
-      </Pressable>
 
       <SaleFormModal
         open={!!modal}
@@ -170,7 +226,7 @@ export default function SalesScreen() {
         onClose={() => setModal(null)}
         onSaved={async () => {
           setModal(null);
-          await afterChange();
+          await refreshAll();
         }}
       />
     </View>

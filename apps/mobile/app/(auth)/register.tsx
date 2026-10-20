@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { View, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { Text, TextInput } from '@/src/components/ui/Text';
+import { View, Pressable } from 'react-native';
 import { Link, router } from 'expo-router';
-import { Sprout } from 'lucide-react-native';
 import { registerSchema } from '@farm/shared-validation';
+import { Text } from '@/src/components/ui/Text';
 import { useSession } from '@/src/context/AuthContext';
 import { GoogleSignInButton } from '@/src/components/GoogleSignInButton';
+import { isGoogleSignInConfigured } from '@/src/lib/googleAuth';
+import { Button, FormError, TextField } from '@/src/components/ui';
+import { AuthShell } from './_layout';
 
 export default function RegisterScreen() {
   const { signUp } = useSession();
@@ -37,94 +39,59 @@ export default function RegisterScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 bg-slate-950">
-      <ScrollView contentContainerClassName="flex-1 justify-center px-6 py-10">
-        <View className="rounded-3xl border border-white/10 bg-slate-900 p-8">
-          <View className="flex-row items-center gap-3">
-            <View className="h-10 w-10 items-center justify-center rounded-xl bg-emerald-600">
-              <Sprout size={20} color="white" />
-            </View>
-            <Text className="text-xl font-extrabold text-white">Farm Manager</Text>
-          </View>
+    <AuthShell>
+      <Text className="mt-6 text-2xl font-bold tracking-tight text-ink">Create your account</Text>
+      <Text className="mt-1 text-sm text-slate-500">Set up your farm in a minute. You can add workers, animals and customers after.</Text>
 
-          <Text className="mt-6 text-2xl font-bold text-white">Create your farm account</Text>
-          <Text className="mt-1 text-sm text-slate-400">Start managing your farm&apos;s operations today.</Text>
+      {error ? (
+        <View className="mt-4">
+          <FormError message={error} />
+        </View>
+      ) : null}
 
-          {error ? (
-            <View className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
-              <Text className="text-xs font-medium text-red-400">{error}</Text>
-            </View>
-          ) : null}
-
-          <View className="mt-6 gap-4">
-            <View>
-              <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Full Name</Text>
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                placeholder="e.g. Karim Hossain"
-                placeholderTextColor="#64748b"
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
-              />
-            </View>
-            <View>
-              <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Email Address</Text>
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="owner@farm.com"
-                placeholderTextColor="#64748b"
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
-              />
-            </View>
-            <View>
-              <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Password</Text>
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                placeholder="At least 8 characters"
-                placeholderTextColor="#64748b"
-                secureTextEntry
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
-              />
-            </View>
-            <View>
-              <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Farm Name (Optional)</Text>
-              <TextInput
-                value={tenantName}
-                onChangeText={setTenantName}
-                placeholder="e.g. Karim's Farm"
-                placeholderTextColor="#64748b"
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
-              />
-            </View>
-
-            <Pressable
-              onPress={handleSubmit}
-              disabled={loading}
-              className="mt-2 items-center rounded-xl bg-emerald-600 px-4 py-3 disabled:opacity-50"
-            >
-              {loading ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text className="font-semibold text-white">Create Account</Text>
-              )}
-            </Pressable>
-
-            <GoogleSignInButton onError={setError} />
-          </View>
-
-          <View className="mt-6 flex-row justify-center gap-1">
-            <Text className="text-xs text-slate-400">Already have an account?</Text>
-            <Link href="/(auth)/login" className="text-xs font-semibold text-emerald-400">
-              Sign in
-            </Link>
+      {isGoogleSignInConfigured ? (
+        <View className="mt-6 gap-5">
+          <GoogleSignInButton onError={setError} />
+          <View className="flex-row items-center">
+            <View className="flex-1 border-t border-line" />
+            <Text className="mx-3 text-xs font-medium text-slate-500">or sign up with email</Text>
+            <View className="flex-1 border-t border-line" />
           </View>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      ) : null}
+
+      <View className="mt-6 gap-4">
+        <TextField label="Full Name" value={name} onChangeText={setName} placeholder="e.g. Mohammad Karim" autoCapitalize="words" autoComplete="name" />
+        <TextField
+          label="Email Address"
+          value={email}
+          onChangeText={setEmail}
+          placeholder="you@example.com"
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="email"
+          keyboardType="email-address"
+        />
+        <TextField label="Password" value={password} onChangeText={setPassword} placeholder="At least 8 characters" secureTextEntry autoComplete="new-password" />
+        <TextField label="Farm name" value={tenantName} onChangeText={setTenantName} placeholder="e.g. Amdad Dairy Farm" autoCapitalize="words" />
+
+        <Button
+          label={loading ? 'Creating Account...' : 'Get Started'}
+          size="lg"
+          loading={loading}
+          onPress={handleSubmit}
+          className="mt-2"
+        />
+      </View>
+
+      <View className="mt-6 flex-row justify-center gap-1">
+        <Text className="text-sm text-slate-500">Already have an account?</Text>
+        <Link href="/(auth)/login" asChild>
+          <Pressable accessibilityRole="link">
+            <Text className="text-sm font-semibold text-brand-700">Sign in</Text>
+          </Pressable>
+        </Link>
+      </View>
+    </AuthShell>
   );
 }

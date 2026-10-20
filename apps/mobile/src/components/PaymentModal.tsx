@@ -4,14 +4,16 @@ import { Text } from '@/src/components/ui/Text';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { PAYMENT_METHODS, tk, todayStr, toDay } from '@/src/lib/format';
-import { FormModal, TextField, ChipGroup, DateField, PrimaryButton } from '@/src/components/ui';
+import { FormModal, FormFooter, FormError, TextField, ChipGroup, DateField, useToast } from '@/src/components/ui';
 
-/** Wording and endpoints for money in from a customer vs out to a supplier. */
+/** Wording and endpoints for money in from a customer vs out to a supplier (same as the web's PaymentFormModal). */
 const MODES = {
   collect: {
     title: 'Collect payment',
-    owes: 'owes',
+    owes: 'currently owes',
     amountLabel: 'Amount received (৳)',
+    notePlaceholder: 'e.g. September milk bill',
+    saved: 'Payment saved',
     create: (id: string) => `/api/customers/${id}/payments`,
     update: (id: string) => `/api/payments/${id}`,
   },
@@ -19,6 +21,8 @@ const MODES = {
     title: 'Pay supplier',
     owes: 'you owe',
     amountLabel: 'Amount paid (৳)',
+    notePlaceholder: 'e.g. Bushi bill, week 2',
+    saved: 'Payment saved',
     create: (id: string) => `/api/suppliers/${id}/payments`,
     update: (id: string) => `/api/supplier-payments/${id}`,
   },
@@ -49,6 +53,7 @@ export function PaymentModal({
   onSaved: () => void;
 }) {
   const copy = MODES[mode];
+  const toast = useToast();
   const editing = !!payment;
   const [form, setForm] = useState({ amount: '', method: 'cash', paidAt: todayStr(), note: '' });
   const [error, setError] = useState('');
@@ -81,6 +86,7 @@ export function PaymentModal({
     try {
       if (editing) await mobileApiClient.put(copy.update(payment!.id), form, 'Failed to save payment');
       else await mobileApiClient.post(copy.create(party!.id), form, 'Failed to save payment', { idempotencyKey: key });
+      toast(editing ? 'Payment updated' : copy.saved);
       onSaved();
     } catch (err) {
       setError((err as Error).message);
@@ -90,27 +96,32 @@ export function PaymentModal({
   }
 
   return (
-    <FormModal visible title={editing ? 'Edit payment' : copy.title} subtitle={`${party.name} · ${copy.owes} ${tk(party.totalDue)}`} onClose={onClose}>
-      {error ? (
-        <View className="rounded-xl border border-red-100 bg-red-50 p-3">
-          <Text className="text-xs font-medium text-red-700">{error}</Text>
-        </View>
-      ) : null}
+    <FormModal
+      visible
+      title={editing ? 'Edit payment' : copy.title}
+      subtitle={`${party.name} · ${copy.owes} ${tk(party.totalDue)}`}
+      onClose={onClose}
+      footer={<FormFooter onCancel={onClose} onSubmit={save} loading={saving} label={editing ? 'Save changes' : 'Save payment'} />}
+    >
+      <FormError message={error} />
       <View>
         <TextField label={copy.amountLabel} keyboardType="decimal-pad" value={form.amount} onChangeText={(v) => setForm({ ...form, amount: v })} />
         {!editing && dueBefore > 0 ? (
-          <Pressable onPress={() => setForm({ ...form, amount: String(dueBefore) })} className="mt-2 self-start rounded-lg border border-slate-200 px-3 py-1.5">
+          <Pressable
+            onPress={() => setForm({ ...form, amount: String(dueBefore) })}
+            className="mt-2 self-start rounded-control border border-line bg-white px-3 py-2"
+            accessibilityRole="button"
+          >
             <Text className="text-xs font-semibold text-slate-600">Full due {tk(dueBefore)}</Text>
           </Pressable>
         ) : null}
-        <Text className={`mt-2 text-sm font-semibold ${after > 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+        <Text className={`mt-2 text-sm font-semibold ${after > 0 ? 'text-red-600' : 'text-brand-700'}`}>
           {after > 0 ? `Still due after this: ${tk(after)}` : after < 0 ? `Fully cleared, ${tk(-after)} kept as advance` : 'Fully cleared'}
         </Text>
       </View>
       <ChipGroup label="Paid by" options={PAYMENT_METHODS} value={form.method} onChange={(v) => setForm({ ...form, method: v })} />
       <DateField label="Date" value={form.paidAt} onChange={(v) => setForm({ ...form, paidAt: v })} maxDate={new Date()} />
-      <TextField label="Note (optional)" value={form.note} onChangeText={(v) => setForm({ ...form, note: v })} />
-      <PrimaryButton label={editing ? 'Save changes' : 'Save payment'} loading={saving} onPress={save} />
+      <TextField label="Note" placeholder={copy.notePlaceholder} value={form.note} onChangeText={(v) => setForm({ ...form, note: v })} />
     </FormModal>
   );
 }

@@ -19,13 +19,13 @@ export function groupByMonth<T extends { date: Date | string }>(history: T[]) {
 export function MonthHeading({ month, summary }: { month: string; summary?: Pick<MonthSummary, 'milkLitres' | 'sold' | 'paid' | 'closing'> }) {
   return (
     <View className="gap-1 border-y border-slate-100 bg-slate-50 px-4 py-2.5">
-      <Text className="text-sm font-bold text-slate-900">{monthLabel(month)}</Text>
+      <Text className="text-sm font-bold text-ink">{monthLabel(month)}</Text>
       {summary ? (
         <View className="flex-row flex-wrap gap-x-3">
           {summary.milkLitres > 0 ? <Text className="text-[11px] text-slate-600">{summary.milkLitres} L milk</Text> : null}
           <Text className="text-[11px] text-slate-600">Sold {tk(summary.sold)}</Text>
-          <Text className="text-[11px] text-emerald-700">Paid {tk(summary.paid)}</Text>
-          <Text className={`text-[11px] font-semibold ${summary.closing > 0 ? 'text-red-600' : summary.closing < 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
+          <Text className="text-[11px] text-brand-700">Paid {tk(summary.paid)}</Text>
+          <Text className={`text-[11px] font-semibold ${summary.closing > 0 ? 'text-red-600' : summary.closing < 0 ? 'text-brand-700' : 'text-slate-400'}`}>
             {summary.closing > 0 ? `Due at month end ${tk(summary.closing)}` : summary.closing < 0 ? `Advance ${tk(-summary.closing)}` : 'Clear at month end'}
           </Text>
         </View>

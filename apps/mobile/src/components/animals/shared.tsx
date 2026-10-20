@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Image, Pressable, Platform, ActivityIndicator, type ImageStyle, type StyleProp } from 'react-native';
 import { Text } from '@/src/components/ui/Text';
+import { Badge, type Tone } from '@/src/components/ui';
 import * as ImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import {
@@ -38,20 +39,12 @@ export const STATUSES = [
   { value: 'dead', label: 'Dead' },
 ];
 
-const STATUS_TONE: Record<string, string> = {
-  active: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  sold: 'border-slate-200 bg-slate-100 text-slate-700',
-  dead: 'border-red-200 bg-red-50 text-red-700',
-};
+const STATUS_TONE: Record<string, Tone> = { active: 'brand', sold: 'neutral', dead: 'danger' };
 
 /** Older records may still say "sick"; show them as they are. */
 export function StatusBadge({ status }: { status: string }) {
   const label = STATUSES.find((s) => s.value === status)?.label ?? status;
-  return (
-    <Text className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_TONE[status] ?? 'border-amber-200 bg-amber-50 text-amber-700'}`}>
-      {label}
-    </Text>
-  );
+  return <Badge label={label} tone={STATUS_TONE[status] ?? 'warning'} />;
 }
 
 export const CATEGORIES = [
@@ -63,16 +56,16 @@ export const CATEGORIES = [
 
 export const categoryLabel = (c?: string | null) => CATEGORIES.find((x) => x.value === c)?.label ?? null;
 
-const PREGNANCY: Record<string, { label: string; tone: string }> = {
-  pregnant: { label: 'Pregnant', tone: 'border-pink-200 bg-pink-50 text-pink-700' },
-  inseminated: { label: 'AI done', tone: 'border-violet-200 bg-violet-50 text-violet-700' },
-  open: { label: 'Not pregnant', tone: 'border-slate-200 bg-slate-50 text-slate-600' },
+const PREGNANCY: Record<string, { label: string; tone: Tone }> = {
+  pregnant: { label: 'Pregnant', tone: 'pink' },
+  inseminated: { label: 'AI done', tone: 'violet' },
+  open: { label: 'Not pregnant', tone: 'neutral' },
 };
 
 export function PregnancyBadge({ status }: { status: string }) {
   const p = PREGNANCY[status];
   if (!p) return null;
-  return <Text className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${p.tone}`}>{p.label}</Text>;
+  return <Badge label={p.label} tone={p.tone} />;
 }
 
 /** "Overdue 3 d", "Today", "In 5 d". */
@@ -83,8 +76,12 @@ export function dueText(daysLeft: number) {
   return `In ${daysLeft} d`;
 }
 
-export const dueTone = (daysLeft: number) =>
-  daysLeft < 0 ? 'border-red-200 bg-red-50 text-red-700' : daysLeft <= 3 ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-50 text-slate-600';
+export const dueTone = (daysLeft: number): Tone => (daysLeft < 0 ? 'danger' : daysLeft <= 3 ? 'warning' : 'neutral');
+
+/** A reminder pill: "FMD: In 3 d" with a bell, coloured by how soon it is. */
+export function DuePill({ label, daysLeft }: { label: string; daysLeft: number }) {
+  return <Badge label={label} tone={dueTone(daysLeft)} />;
+}
 
 /** Days from today on the farm's clock to a "YYYY-MM-DD" day. */
 export function daysUntil(day: string) {

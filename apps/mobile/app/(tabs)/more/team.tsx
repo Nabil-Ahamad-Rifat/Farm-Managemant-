@@ -4,6 +4,7 @@ import { UserPlus, Users } from 'lucide-react-native';
 import { Text } from '@/src/components/ui/Text';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { useSession } from '@/src/context/AuthContext';
+import { useOwnerOnly } from '@/src/hooks/useOwnerOnly';
 import {
   Badge, Button, Card, CardHeader, EmptyState, FormError, FormFooter, FormModal, PageHeader, TextField, useConfirm, useToast,
 } from '@/src/components/ui';
@@ -19,6 +20,11 @@ type ModalState = { mode: 'add' } | { mode: 'rename' | 'password'; member: Membe
 
 /** Owner's Team screen, like the web's /dashboard/settings/team. */
 export default function TeamScreen() {
+  const allowed = useOwnerOnly();
+  return allowed ? <TeamScreenContent /> : null;
+}
+
+function TeamScreenContent() {
   const { user } = useSession();
   const confirm = useConfirm();
   const toast = useToast();

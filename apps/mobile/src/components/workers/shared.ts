@@ -11,9 +11,9 @@ export function payLabel(w: Pick<Employee, 'payType' | 'salary' | 'dailyRate'>) 
     : `Monthly ${tk(w.salary)} · ${tk(dayRate(w.salary))}/day`;
 }
 
-/** Who owes whom, in words, with the text and pill colours to show it in. */
+/** Who owes whom, in words, with the text colour and badge tone to show it in. */
 export function balanceInfo(balance: number) {
-  if (balance > 0.004) return { label: `You owe ${tk(balance)}`, text: 'text-red-600', pill: 'border-red-200 bg-red-50', pillText: 'text-red-700' };
-  if (balance < -0.004) return { label: `Advance ${tk(-balance)}`, text: 'text-amber-700', pill: 'border-amber-200 bg-amber-50', pillText: 'text-amber-800' };
-  return { label: 'Settled', text: 'text-emerald-700', pill: 'border-emerald-200 bg-emerald-50', pillText: 'text-emerald-700' };
+  if (balance > 0.004) return { label: `You owe ${tk(balance)}`, text: 'text-red-600', tone: 'danger' as const };
+  if (balance < -0.004) return { label: `Advance ${tk(-balance)}`, text: 'text-amber-700', tone: 'warning' as const };
+  return { label: 'Settled', text: 'text-brand-700', tone: 'brand' as const };
 }

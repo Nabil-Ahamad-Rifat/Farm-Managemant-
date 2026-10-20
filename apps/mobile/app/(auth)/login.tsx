@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { View, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { Text, TextInput } from '@/src/components/ui/Text';
+import { View, Pressable } from 'react-native';
 import { Link, router } from 'expo-router';
-import { Sprout } from 'lucide-react-native';
 import { loginSchema } from '@farm/shared-validation';
+import { Text } from '@/src/components/ui/Text';
 import { useSession } from '@/src/context/AuthContext';
 import { GoogleSignInButton } from '@/src/components/GoogleSignInButton';
+import { isGoogleSignInConfigured } from '@/src/lib/googleAuth';
+import { Button, FormError, TextField } from '@/src/components/ui';
+import { AuthShell } from './_layout';
 
 export default function LoginScreen() {
   const { signIn } = useSession();
@@ -34,79 +36,60 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 bg-slate-950">
-      <View className="flex-1 justify-center px-6">
-        <View className="rounded-3xl border border-white/10 bg-slate-900 p-8">
-          <View className="flex-row items-center gap-3">
-            <View className="h-10 w-10 items-center justify-center rounded-xl bg-emerald-600">
-              <Sprout size={20} color="white" />
-            </View>
-            <Text className="text-xl font-extrabold text-white">Farm Manager</Text>
-          </View>
+    <AuthShell>
+      <Text className="mt-6 text-2xl font-bold tracking-tight text-ink">Welcome back</Text>
+      <Text className="mt-1 text-sm text-slate-500">Sign in to your farm management account.</Text>
 
-          <Text className="mt-6 text-2xl font-bold text-white">Welcome back</Text>
-          <Text className="mt-1 text-sm text-slate-400">Sign in to your farm management account.</Text>
+      {error ? (
+        <View className="mt-4">
+          <FormError message={error} />
+        </View>
+      ) : null}
 
-          {error ? (
-            <View className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
-              <Text className="text-xs font-medium text-red-400">{error}</Text>
-            </View>
-          ) : null}
-
-          <View className="mt-6 gap-4">
-            <View>
-              <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Email Address</Text>
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="owner@farm.com"
-                placeholderTextColor="#64748b"
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
-              />
-            </View>
-            <View>
-              <View className="mb-1 flex-row items-center justify-between">
-                <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">Password</Text>
-                <Link href="/(auth)/forgot-password" className="text-[11px] font-semibold text-emerald-400">
-                  Forgot password?
-                </Link>
-              </View>
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                placeholder="••••••••"
-                placeholderTextColor="#64748b"
-                secureTextEntry
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
-              />
-            </View>
-
-            <Pressable
-              onPress={handleSubmit}
-              disabled={loading}
-              className="mt-2 items-center rounded-xl bg-emerald-600 px-4 py-3 disabled:opacity-50"
-            >
-              {loading ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text className="font-semibold text-white">Continue to Dashboard</Text>
-              )}
-            </Pressable>
-
-            <GoogleSignInButton onError={setError} />
-          </View>
-
-          <View className="mt-6 flex-row justify-center gap-1">
-            <Text className="text-xs text-slate-400">Don&apos;t have an account?</Text>
-            <Link href="/(auth)/register" className="text-xs font-semibold text-emerald-400">
-              Create farm account
-            </Link>
+      {isGoogleSignInConfigured ? (
+        <View className="mt-6 gap-5">
+          <GoogleSignInButton onError={setError} />
+          <View className="flex-row items-center">
+            <View className="flex-1 border-t border-line" />
+            <Text className="mx-3 text-xs font-medium text-slate-500">or sign in with email</Text>
+            <View className="flex-1 border-t border-line" />
           </View>
         </View>
+      ) : null}
+
+      <View className="mt-6 gap-4">
+        <TextField
+          label="Email Address"
+          value={email}
+          onChangeText={setEmail}
+          placeholder="owner@farm.com"
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="email"
+          keyboardType="email-address"
+        />
+        <View>
+          <View className="absolute right-0 top-0 z-10">
+            <Link href="/(auth)/forgot-password" asChild>
+              <Pressable accessibilityRole="link">
+                <Text className="text-[11px] font-semibold text-brand-700">Forgot password?</Text>
+              </Pressable>
+            </Link>
+          </View>
+          <TextField label="Password" value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry autoComplete="password" onSubmitEditing={handleSubmit} />
+        </View>
+
+        <Button label={loading ? 'Signing in...' : 'Continue to Dashboard'} size="lg" loading={loading} onPress={handleSubmit} className="mt-2" />
       </View>
-    </KeyboardAvoidingView>
+
+      <View className="mt-6 flex-row justify-center gap-1">
+        <Text className="text-sm text-slate-500">Don&apos;t have an account?</Text>
+        <Link href="/(auth)/register" asChild>
+          <Pressable accessibilityRole="link">
+            <Text className="text-sm font-semibold text-brand-700">Create farm account</Text>
+          </Pressable>
+        </Link>
+      </View>
+    </AuthShell>
   );
 }

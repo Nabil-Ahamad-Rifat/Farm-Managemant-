@@ -3,6 +3,8 @@ import { View, Pressable, Modal, FlatList } from 'react-native';
 import { Text, TextInput } from '@/src/components/ui/Text';
 import { ChevronDown, Search, UserPlus, X } from 'lucide-react-native';
 import { tk } from '@/src/lib/format';
+import { FieldLabel } from '@/src/components/ui';
+import { colors } from '@/src/theme';
 
 export interface PickerParty {
   id: string;
@@ -48,44 +50,44 @@ export function PartyPickerField({
 
   return (
     <View>
-      <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-600">{label}</Text>
+      <FieldLabel label={label} />
       <Pressable
         onPress={() => setOpen(true)}
-        className="flex-row items-center justify-between rounded-xl border border-slate-200 px-3.5 py-2.5"
+        className="h-11 flex-row items-center justify-between rounded-control border border-line bg-white px-3.5"
         accessibilityLabel={`Choose ${noun}`}
       >
         <View className="flex-1 flex-row items-center gap-2">
-          <Text className={`text-sm ${value ? 'font-semibold text-slate-900' : 'text-slate-400'}`}>{value?.name ?? `Choose ${noun}`}</Text>
-          {value?.kind === 'new' ? <Text className="text-[11px] font-semibold text-slate-500">will be added</Text> : null}
+          <Text className={`shrink text-base ${value ? 'font-semibold text-ink' : 'text-slate-400'}`} numberOfLines={1}>{value?.name ?? `Choose ${noun}`}</Text>
+          {value?.kind === 'new' ? <Text className="text-xs font-semibold text-brand-700">will be added</Text> : null}
         </View>
         {value ? (
           <Pressable onPress={() => onChange(null)} hitSlop={8} accessibilityLabel={`Clear ${noun}`}>
-            <X size={16} color="#94a3b8" />
+            <X size={16} color={colors.slate400} />
           </Pressable>
         ) : (
-          <ChevronDown size={16} color="#94a3b8" />
+          <ChevronDown size={16} color={colors.slate400} />
         )}
       </Pressable>
 
       <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-        <Pressable className="flex-1 justify-end bg-slate-900/40" onPress={() => setOpen(false)}>
-          <Pressable className="max-h-[80%] rounded-t-3xl bg-white p-4" onPress={(e) => e.stopPropagation()}>
-            <View className="mb-3 flex-row items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-              <Search size={16} color="#94a3b8" />
+        <Pressable className="flex-1 justify-end bg-navy-950/50" onPress={() => setOpen(false)}>
+          <Pressable className="max-h-[80%] rounded-t-2xl bg-white p-4" onPress={(e) => e.stopPropagation()}>
+            <View className="mb-3 h-11 flex-row items-center gap-2 rounded-control border border-line px-3">
+              <Search size={16} color={colors.slate400} />
               <TextInput
                 autoFocus
                 value={query}
                 onChangeText={setQuery}
                 placeholder={`Search ${noun} by name or phone...`}
-                placeholderTextColor="#94a3b8"
-                className="flex-1 text-sm text-slate-900"
+                placeholderTextColor={colors.slate400}
+                className="flex-1 text-base text-ink"
                 accessibilityLabel={`Search ${noun}`}
               />
             </View>
             {q && !exact ? (
-              <Pressable onPress={() => choose({ kind: 'new', name: query.trim() })} className="mb-1 flex-row items-center gap-2 rounded-xl bg-emerald-50 px-3 py-3">
-                <UserPlus size={16} color="#047857" />
-                <Text className="text-sm font-semibold text-emerald-700">Add “{query.trim()}” as a new {noun}</Text>
+              <Pressable onPress={() => choose({ kind: 'new', name: query.trim() })} className="mb-1 flex-row items-center gap-2 rounded-control bg-brand-50 px-3 py-3">
+                <UserPlus size={16} color={colors.brand600} />
+                <Text className="text-sm font-semibold text-brand-700">Add “{query.trim()}” as a new {noun}</Text>
               </Pressable>
             ) : null}
             <FlatList
@@ -93,8 +95,8 @@ export function PartyPickerField({
               keyExtractor={(p) => p.id}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
-                <Pressable onPress={() => choose({ kind: 'existing', id: item.id, name: item.name })} className="flex-row items-center justify-between rounded-xl px-3 py-3">
-                  <Text className="text-sm font-medium text-slate-900">{item.name}</Text>
+                <Pressable onPress={() => choose({ kind: 'existing', id: item.id, name: item.name })} className="flex-row items-center justify-between rounded-control border-b border-slate-100 px-3 py-3">
+                  <Text className="text-base font-medium text-ink">{item.name}</Text>
                   {item.totalDue ? (
                     <Text className="text-xs font-semibold text-red-600">Due {tk(item.totalDue)}</Text>
                   ) : item.phone ? (

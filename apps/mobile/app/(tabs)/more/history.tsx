@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
-import { Text, TextInput } from '@/src/components/ui/Text';
-import { router, type Href } from 'expo-router';
-import { ArrowDownLeft, ArrowUpRight, ShoppingBag, PackagePlus, Ban, Search, ChevronLeft, ChevronRight, type LucideIcon } from 'lucide-react-native';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
+import { ArrowDownLeft, ArrowUpRight, ShoppingBag, PackagePlus, Ban, ChevronLeft, ChevronRight, type LucideIcon } from 'lucide-react-native';
 import { farmMonth, shiftMonth } from '@farm/business-logic';
+import { Text } from '@/src/components/ui/Text';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { fmtDate, monthLabel, tk } from '@/src/lib/format';
+import { Card, Chips, EmptyState, FormError, PageHeader, SearchInput, StatCard, StatGrid } from '@/src/components/ui';
+import { moneyError } from '@/src/components/money/MoneyRow';
+import { colors } from '@/src/theme';
+import { useOwnerOnly } from '@/src/hooks/useOwnerOnly';
 
 // Mobile version of the web History page (GET /api/ledger): every sale,
-// payment, purchase and expense in a month, with who added it. Owner only.
+// payment, purchase and expense in a month (or a from–to range opened from
+// the Revenue Portal), with who added it. Owner only.
 
 type Flow = 'in' | 'out' | 'sale' | 'purchase' | 'loss';
 
@@ -36,8 +41,8 @@ interface TeamMember {
   role: string;
 }
 
-const TYPES: { value: string | null; label: string }[] = [
-  { value: null, label: 'All' },
+const TYPES = [
+  { value: 'all', label: 'All' },
   { value: 'sale', label: 'Sales' },
   { value: 'payment', label: 'Received' },
   { value: 'income', label: 'Other income' },
@@ -49,12 +54,12 @@ const TYPES: { value: string | null; label: string }[] = [
   { value: 'writeoff', label: 'Written off' },
 ];
 
-const FLOW: Record<Flow, { Icon: LucideIcon; color: string; bg: string; sign: string; amount: string }> = {
-  in: { Icon: ArrowDownLeft, color: '#047857', bg: 'bg-emerald-50', sign: '+ ', amount: 'text-emerald-700' },
-  out: { Icon: ArrowUpRight, color: '#dc2626', bg: 'bg-red-50', sign: '− ', amount: 'text-red-600' },
-  sale: { Icon: ShoppingBag, color: '#0369a1', bg: 'bg-sky-50', sign: '', amount: 'text-slate-900' },
-  purchase: { Icon: PackagePlus, color: '#b45309', bg: 'bg-amber-50', sign: '', amount: 'text-slate-900' },
-  loss: { Icon: Ban, color: '#475569', bg: 'bg-slate-100', sign: '', amount: 'text-slate-600' },
+const FLOW: Record<Flow, { Icon: LucideIcon; color: string; box: string; sign: string; amount: string }> = {
+  in: { Icon: ArrowDownLeft, color: colors.brand600, box: 'border-brand-200 bg-brand-50', sign: '+ ', amount: 'text-brand-700' },
+  out: { Icon: ArrowUpRight, color: colors.red600, box: 'border-red-200 bg-red-50', sign: '− ', amount: 'text-red-600' },
+  sale: { Icon: ShoppingBag, color: colors.sky700, box: 'border-sky-200 bg-sky-50', sign: '', amount: 'text-ink' },
+  purchase: { Icon: PackagePlus, color: '#92400e', box: 'border-amber-200 bg-amber-50', sign: '', amount: 'text-ink' },
+  loss: { Icon: Ban, color: colors.slate600, box: 'border-line bg-slate-100', sign: '', amount: 'text-slate-600' },
 };
 
 /** The web link of an entry, as a mobile screen (null when mobile has no page for it). */
@@ -77,12 +82,24 @@ function mobileHref(href: string): Href | null {
 }
 
 const PAGE = 100;
+const isDay = (v?: string) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+const isType = (v?: string) => !!v && TYPES.some((t) => t.value === v);
 
 export default function HistoryScreen() {
+  const allowed = useOwnerOnly();
+  return allowed ? <HistoryScreenContent /> : null;
+}
+
+function HistoryScreenContent() {
+  // type, month or from/to come from the Revenue Portal's rows.
+  const params = useLocalSearchParams<{ type?: string; month?: string; from?: string; to?: string }>();
   const thisMonth = farmMonth();
-  const [month, setMonth] = useState(thisMonth);
-  const [type, setType] = useState<string | null>(null);
-  const [by, setBy] = useState<string | null>(null);
+  const [month, setMonth] = useState(params.month && /^\d{4}-\d{2}$/.test(params.month) ? params.month : thisMonth);
+  const [range, setRange] = useState<{ from: string; to: string } | null>(
+    isDay(params.from) && isDay(params.to) ? { from: params.from!, to: params.to! } : null
+  );
+  const [type, setType] = useState(isType(params.type) ? params.type! : 'all');
+  const [by, setBy] = useState('all');
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const [limit, setLimit] = useState(PAGE);
@@ -93,17 +110,18 @@ export default function HistoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const params = new URLSearchParams({ month, limit: String(limit) });
-    if (type) params.set('type', type);
-    if (by) params.set('by', by);
-    if (q) params.set('q', q);
+    const query = new URLSearchParams(range ? { from: range.from, to: range.to } : { month });
+    query.set('limit', String(limit));
+    if (type !== 'all') query.set('type', type);
+    if (by !== 'all') query.set('by', by);
+    if (q) query.set('q', q);
     try {
-      setLedger(await mobileApiClient.get<Ledger>(`/api/ledger?${params}`, 'Failed to load history'));
+      setLedger(await mobileApiClient.get<Ledger>(`/api/ledger?${query}`, 'Failed to load history'));
       setError('');
     } catch (err) {
-      setError((err as Error).message);
+      setError(moneyError(err));
     }
-  }, [month, type, by, q, limit]);
+  }, [month, range, type, by, q, limit]);
 
   useEffect(() => {
     // State is only set once the request settles.
@@ -127,6 +145,17 @@ export default function HistoryScreen() {
     setLimit(PAGE);
   }
 
+  // The arrows step whole months; a from–to range turns back into its month.
+  function stepMonth(delta: number) {
+    const base = range ? range.from.slice(0, 7) : month;
+    const next = shiftMonth(base, delta);
+    if (next > thisMonth) return;
+    change(() => {
+      setRange(null);
+      setMonth(next);
+    });
+  }
+
   const nameOf = new Map(team.map((u) => [u.id, u.name]));
   const days = new Map<string, LedgerEntry[]>();
   for (const e of ledger?.entries ?? []) {
@@ -134,66 +163,59 @@ export default function HistoryScreen() {
     days.set(key, [...(days.get(key) ?? []), e]);
   }
   const t = ledger?.totals;
+  const periodLabel = range ? (range.from === range.to ? fmtDate(range.from) : `${fmtDate(range.from)} – ${fmtDate(range.to)}`) : monthLabel(month);
+  const canNext = (range ? range.from.slice(0, 7) : month) < thisMonth;
 
   return (
     <ScrollView
-      className="flex-1 bg-slate-50"
-      contentContainerClassName="gap-4 p-4 pb-10"
+      className="flex-1 bg-surface"
+      contentContainerClassName="gap-5 p-4 pb-10"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       keyboardShouldPersistTaps="handled"
     >
-      <View className="gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-        <View className="flex-row items-center justify-between">
-          <Pressable onPress={() => change(() => setMonth(shiftMonth(month, -1)))} className="rounded-lg p-2" accessibilityLabel="Previous month">
-            <ChevronLeft size={18} color="#334155" />
+      <PageHeader title="History" subtitle="Every sale, payment, purchase and expense in one list." />
+
+      <Card className="gap-3">
+        <View className="flex-row items-center justify-between rounded-control border border-line p-1">
+          <Pressable onPress={() => stepMonth(-1)} className="rounded-lg p-2" accessibilityLabel="Previous month">
+            <ChevronLeft size={18} color={colors.slate600} />
           </Pressable>
-          <Text className="text-sm font-bold text-slate-900">{monthLabel(month)}</Text>
-          <Pressable
-            onPress={() => month < thisMonth && change(() => setMonth(shiftMonth(month, 1)))}
-            className={`rounded-lg p-2 ${month < thisMonth ? '' : 'opacity-30'}`}
-            accessibilityLabel="Next month"
-          >
-            <ChevronRight size={18} color="#334155" />
+          <Text className="text-sm font-bold text-ink">{periodLabel}</Text>
+          <Pressable onPress={() => stepMonth(1)} disabled={!canNext} className={`rounded-lg p-2 ${canNext ? '' : 'opacity-30'}`} accessibilityLabel="Next month">
+            <ChevronRight size={18} color={colors.slate600} />
           </Pressable>
         </View>
-        <View className="flex-row items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-          <Search size={16} color="#94a3b8" />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            onSubmitEditing={() => change(() => setQ(search.trim()))}
-            onBlur={() => search.trim() !== q && change(() => setQ(search.trim()))}
-            returnKeyType="search"
-            placeholder="Name, feed, note..."
-            placeholderTextColor="#94a3b8"
-            className="flex-1 text-sm text-slate-900"
-          />
-        </View>
-        <Chips options={TYPES.map((ty) => ({ id: ty.value, label: ty.label }))} value={type} onChange={(v) => change(() => setType(v))} />
+        <SearchInput
+          value={search}
+          onChangeText={(v) => {
+            setSearch(v);
+            // Clearing the box shows everything again straight away.
+            if (!v && q) change(() => setQ(''));
+          }}
+          onSubmit={() => change(() => setQ(search.trim()))}
+          placeholder="Name, feed, note..."
+        />
+        <Chips options={TYPES} value={type} onChange={(v) => change(() => setType(v))} />
         {team.length > 1 ? (
           <View className="gap-2 border-t border-slate-100 pt-3">
             <Text className="text-xs font-semibold text-slate-500">Added by</Text>
-            <Chips options={[{ id: null, label: 'Everyone' }, ...team.map((u) => ({ id: u.id, label: u.name }))]} value={by} onChange={(v) => change(() => setBy(v))} />
+            <Chips options={[{ value: 'all', label: 'Everyone' }, ...team.map((u) => ({ value: u.id, label: u.name }))]} value={by} onChange={(v) => change(() => setBy(v))} />
           </View>
         ) : null}
-      </View>
+      </Card>
 
-      {error ? (
-        <View className="rounded-xl border border-red-100 bg-red-50 p-3">
-          <Text className="text-xs font-medium text-red-700">{error}</Text>
-        </View>
-      ) : null}
+      <FormError message={error} />
 
       {t ? (
-        <View className="flex-row flex-wrap gap-3">
-          <Total label="Money in" value={tk(t.moneyIn)} cls="text-emerald-700" />
-          <Total label="Money out" value={tk(t.moneyOut)} cls="text-red-600" />
-          <Total label="Sales made" value={tk(t.salesMade)} cls="text-slate-900" />
-          <Total label="Bought on credit" value={tk(t.boughtOnCredit)} cls="text-slate-900" />
-        </View>
+        <StatGrid>
+          <StatCard label="Money in" value={tk(t.moneyIn)} tone="brand" />
+          <StatCard label="Money out" value={tk(t.moneyOut)} tone="danger" />
+          <StatCard label="Sales made" value={tk(t.salesMade)} />
+          <StatCard label="Bought on credit" value={tk(t.boughtOnCredit)} />
+        </StatGrid>
       ) : null}
 
-      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <Card padded={false}>
         {loading && !ledger ? (
           <View className="py-12">
             <ActivityIndicator />
@@ -201,10 +223,10 @@ export default function HistoryScreen() {
         ) : !ledger ? null : (
           <>
             <Text className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">
-              {ledger.total} entr{ledger.total === 1 ? 'y' : 'ies'}
+              {periodLabel} · {ledger.total} entr{ledger.total === 1 ? 'y' : 'ies'}
               {ledger.totals.writtenOff > 0 ? ` · ${tk(ledger.totals.writtenOff)} written off` : ''}
             </Text>
-            {ledger.total === 0 ? <Text className="px-4 py-12 text-center text-sm text-slate-500">Nothing in this period.</Text> : null}
+            {ledger.total === 0 ? <EmptyState message="Nothing in this period." /> : null}
             {[...days.entries()].map(([day, rows]) => (
               <View key={day}>
                 <Text className="bg-slate-50 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">{fmtDate(day)}</Text>
@@ -219,11 +241,11 @@ export default function HistoryScreen() {
                       onPress={() => target && router.push(target)}
                       className={`flex-row items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-slate-100' : ''}`}
                     >
-                      <View className={`h-9 w-9 items-center justify-center rounded-xl ${f.bg}`}>
+                      <View className={`h-9 w-9 items-center justify-center rounded-control border ${f.box}`}>
                         <f.Icon size={16} color={f.color} />
                       </View>
                       <View className="flex-1">
-                        <Text className="text-sm font-semibold text-slate-900" numberOfLines={1}>
+                        <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
                           {e.title}
                         </Text>
                         <Text className="text-xs text-slate-500" numberOfLines={2}>
@@ -241,37 +263,13 @@ export default function HistoryScreen() {
               </View>
             ))}
             {ledger.total > ledger.entries.length ? (
-              <Pressable onPress={() => setLimit(limit + PAGE)} className="items-center border-t border-slate-100 p-4">
+              <Pressable onPress={() => setLimit(limit + PAGE)} className="items-center border-t border-slate-100 p-4" accessibilityRole="button">
                 <Text className="text-sm font-semibold text-slate-700">Show more ({ledger.total - ledger.entries.length} left)</Text>
               </Pressable>
             ) : null}
           </>
         )}
-      </View>
+      </Card>
     </ScrollView>
-  );
-}
-
-function Chips({ options, value, onChange }: { options: { id: string | null; label: string }[]; value: string | null; onChange: (v: string | null) => void }) {
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
-      {options.map((o) => {
-        const active = o.id === value;
-        return (
-          <Pressable key={o.id ?? 'all'} onPress={() => onChange(o.id)} className={`rounded-full px-3.5 py-2 ${active ? 'bg-slate-900' : 'border border-slate-200 bg-white'}`}>
-            <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-slate-600'}`}>{o.label}</Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
-  );
-}
-
-function Total({ label, value, cls }: { label: string; value: string; cls: string }) {
-  return (
-    <View className="min-w-[45%] flex-1 rounded-2xl border border-slate-200 bg-white p-4">
-      <Text className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</Text>
-      <Text className={`mt-1 text-lg font-extrabold ${cls}`}>{value}</Text>
-    </View>
   );
 }

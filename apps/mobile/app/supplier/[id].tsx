@@ -1,24 +1,30 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
-import { Text } from '@/src/components/ui/Text';
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { Wallet, Plus, ShoppingBag, AlertCircle, Phone, MapPin, Edit3, Trash2 } from 'lucide-react-native';
+import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator, Linking } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Wallet, Plus, ShoppingBag, AlertCircle, Phone, MapPin, StickyNote, Edit3, Trash2, Wheat, PiggyBank, CheckCircle, ChevronLeft } from 'lucide-react-native';
 import type { FeedBatch, SupplierDetail, SupplierPayment } from '@farm/shared-types';
+import { Text } from '@/src/components/ui/Text';
 import { mobileApiClient } from '@/src/lib/apiClient';
-import { tk, fmtDate, paymentMethodLabel } from '@/src/lib/format';
-import { IconButton, StatCard, useConfirm } from '@/src/components/ui';
+import { tk, fmtDate, monthLabel, paymentMethodLabel } from '@/src/lib/format';
+import { Button, Card, FormError, IconButton, StatCard, StatGrid, useConfirm, useToast } from '@/src/components/ui';
 import { StatusPill } from '@/src/components/StatusPill';
 import { PaymentModal } from '@/src/components/PaymentModal';
 import { FeedPurchaseModal } from '@/src/components/FeedPurchaseModal';
+import { SupplierFormModal } from '@/src/components/SupplierFormModal';
+import { groupByMonth } from '@/src/components/MonthSection';
+import { colors } from '@/src/theme';
 
+type ModalState = { kind: 'purchase'; batch: FeedBatch | null } | { kind: 'payment'; payment: SupplierPayment | null } | { kind: 'supplier' } | null;
+
+/** One supplier, like the web's SupplierDetailView (history grouped by month on the phone). */
 export default function SupplierDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [supplier, setSupplier] = useState<SupplierDetail | null>(null);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [paymentModal, setPaymentModal] = useState<{ payment: SupplierPayment | null } | null>(null);
-  const [purchaseModal, setPurchaseModal] = useState<{ batch: FeedBatch | null } | null>(null);
-  const confirm = useConfirm();
+  const [modal, setModal] = useState<ModalState>(null);
 
   const load = useCallback(async () => {
     try {
@@ -35,29 +41,46 @@ export default function SupplierDetailScreen() {
     load();
   }, [load]);
 
-  async function remove(path: string, label: string) {
-    if (!(await confirm(`Delete ${label}?`))) return;
+  async function remove(path: string, title: string, done: string) {
+    if (!(await confirm({ title, tone: 'danger', confirmLabel: 'Delete' }))) return;
     try {
-      await mobileApiClient.delete(path);
+      await mobileApiClient.delete(path, 'Failed to delete');
+      toast(done);
       await load();
     } catch (err) {
-      setError((err as Error).message);
+      toast((err as Error).message, 'error');
+    }
+  }
+
+  async function deleteSupplier() {
+    if (!supplier) return;
+    if (!(await confirm({ title: `Delete ${supplier.name}? This cannot be undone.`, tone: 'danger', confirmLabel: 'Delete' }))) return;
+    try {
+      await mobileApiClient.delete(`/api/suppliers/${supplier.id}`, 'Failed to delete supplier');
+      toast(`${supplier.name} deleted`);
+      router.back();
+    } catch (err) {
+      toast((err as Error).message, 'error');
     }
   }
 
   if (!supplier) {
     return (
-      <View className="flex-1 items-center justify-center bg-slate-50 p-6">
-        {error ? <Text className="text-sm text-red-700">{error}</Text> : <ActivityIndicator />}
+      <View className="flex-1 items-center justify-center bg-surface p-6">
+        {error ? <FormError message={error} /> : <ActivityIndicator />}
       </View>
     );
   }
 
+  const done = async () => {
+    setModal(null);
+    await load();
+  };
+
   return (
-    <View className="flex-1 bg-slate-50">
-      <Stack.Screen options={{ title: supplier.name }} />
+    <View className="flex-1 bg-surface">
       <ScrollView
-        contentContainerClassName="gap-4 p-4 pb-10"
+        contentContainerClassName="gap-5 p-4 pb-10"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -69,110 +92,190 @@ export default function SupplierDetailScreen() {
           />
         }
       >
-        <View className="gap-2 rounded-2xl border border-slate-200 bg-white p-4">
-          <Text className="text-lg font-bold text-slate-900">{supplier.name}</Text>
-          {supplier.phone ? (
-            <View className="flex-row items-center gap-1">
-              <Phone size={12} color="#64748b" />
-              <Text className="text-xs text-slate-600">{supplier.phone}</Text>
+        <Pressable onPress={() => router.back()} className="flex-row items-center gap-1 self-start" accessibilityRole="link">
+          <ChevronLeft size={16} color={colors.slate500} />
+          <Text className="text-sm font-medium text-slate-500">All suppliers</Text>
+        </Pressable>
+        <Card className="gap-3">
+          <View className="flex-row items-center gap-3">
+            <View className="h-12 w-12 items-center justify-center rounded-card bg-amber-600">
+              <Text className="text-lg font-bold text-white">{supplier.name.charAt(0).toUpperCase()}</Text>
             </View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-xl font-bold text-ink">{supplier.name}</Text>
+              <Text className="text-sm text-slate-500">
+                Supplier since {fmtDate(supplier.createdAt)} · {supplier.purchasesCount} purchase{supplier.purchasesCount === 1 ? '' : 's'}
+              </Text>
+            </View>
+          </View>
+          {supplier.phone ? (
+            <Pressable onPress={() => Linking.openURL(`tel:${supplier.phone}`)} className="flex-row items-center gap-1.5" accessibilityRole="link">
+              <Phone size={14} color={colors.slate500} />
+              <Text className="text-sm text-slate-600">{supplier.phone}</Text>
+            </Pressable>
           ) : null}
           {supplier.address ? (
-            <View className="flex-row items-center gap-1">
-              <MapPin size={12} color="#64748b" />
-              <Text className="text-xs text-slate-600">{supplier.address}</Text>
+            <View className="flex-row items-center gap-1.5">
+              <MapPin size={14} color={colors.slate500} />
+              <Text className="text-sm text-slate-600">{supplier.address}</Text>
             </View>
           ) : null}
-          <View className="mt-1 flex-row gap-2">
-            <Pressable onPress={() => setPaymentModal({ payment: null })} className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-amber-600 py-2.5">
-              <Wallet size={16} color="white" />
-              <Text className="text-sm font-semibold text-white">Pay supplier</Text>
-            </Pressable>
-            <Pressable onPress={() => setPurchaseModal({ batch: null })} className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-slate-900 py-2.5">
-              <Plus size={16} color="white" />
-              <Text className="text-sm font-semibold text-white">New purchase</Text>
-            </Pressable>
+          {supplier.notes ? (
+            <View className="flex-row items-center gap-1.5">
+              <StickyNote size={14} color={colors.slate500} />
+              <Text className="text-sm text-slate-600">{supplier.notes}</Text>
+            </View>
+          ) : null}
+          <View className="flex-row flex-wrap gap-2">
+            <Button label="Pay supplier" icon={Wallet} variant="amber" onPress={() => setModal({ kind: 'payment', payment: null })} />
+            <Button label="New purchase" icon={Plus} onPress={() => setModal({ kind: 'purchase', batch: null })} />
+            <Button label="Edit" icon={Edit3} variant="secondary" onPress={() => setModal({ kind: 'supplier' })} />
           </View>
-        </View>
+        </Card>
 
-        <View className="flex-row gap-3">
-          <StatCard label="Bought" value={tk(supplier.totalBought)} icon={ShoppingBag} color="#475569" />
-          <StatCard label="Paid" value={tk(supplier.totalPaid)} icon={Wallet} color="#059669" />
-        </View>
-        <StatCard
-          label={supplier.advance > 0 ? 'Advance paid' : 'You still owe'}
-          value={tk(supplier.advance > 0 ? supplier.advance : supplier.totalDue)}
-          icon={AlertCircle}
-          color={supplier.totalDue > 0 ? '#dc2626' : '#059669'}
-        />
+        <StatGrid>
+          <StatCard label="Total bought" value={tk(supplier.totalBought)} icon={ShoppingBag} />
+          <StatCard label="Total paid" value={tk(supplier.totalPaid)} icon={Wallet} tone="brand" />
+          {supplier.advance > 0 ? (
+            <StatCard label="Advance paid" value={tk(supplier.advance)} icon={PiggyBank} tone="brand" />
+          ) : supplier.totalDue > 0 ? (
+            <StatCard label="You still owe" value={tk(supplier.totalDue)} icon={AlertCircle} tone="danger" />
+          ) : (
+            <StatCard label="You still owe" value={tk(0)} icon={CheckCircle} tone="brand" hint="All settled" />
+          )}
+        </StatGrid>
 
-        {error ? <Text className="text-xs text-red-700">{error}</Text> : null}
-
-        <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-          <View className="flex-row items-center justify-between px-4 py-3">
-            <Text className="text-base font-bold text-slate-900">History</Text>
-            <Text className="text-[11px] text-slate-500">Payments clear oldest purchases first</Text>
+        <Card padded={false}>
+          <View className="gap-0.5 border-b border-slate-100 px-4 py-3.5">
+            <Text className="text-lg font-bold text-ink">History</Text>
+            <Text className="text-xs text-slate-500">Payments clear the oldest purchases first.</Text>
           </View>
           {supplier.history.length === 0 ? (
-            <Text className="px-4 py-8 text-center text-sm text-slate-500">No purchases or payments yet.</Text>
+            <Text className="px-4 py-10 text-center text-sm text-slate-500">No purchases or payments yet.</Text>
           ) : (
-            supplier.history.map((e) =>
-              e.kind === 'purchase' ? (
-                <View key={`b-${e.purchase.id}`} className="flex-row items-start gap-3 border-t border-slate-100 px-4 py-3">
-                  <View className="flex-1 gap-1">
-                    <View className="flex-row items-center gap-2">
-                      <Text className="text-sm font-semibold text-slate-900">Bought {e.purchase.name}</Text>
-                      <StatusPill status={e.purchase.payStatus ?? 'pending'} />
+            groupByMonth(supplier.history).map((g) => (
+              <View key={g.month}>
+                <Text className="border-b border-slate-100 bg-slate-50 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">{monthLabel(g.month)}</Text>
+                {g.entries.map((e) =>
+                  e.kind === 'purchase' ? (
+                    <PurchaseRow
+                      key={`b-${e.purchase.id}`}
+                      batch={e.purchase}
+                      onEdit={() => setModal({ kind: 'purchase', batch: e.purchase })}
+                      onDelete={() =>
+                        remove(
+                          `/api/feed/${e.purchase.id}`,
+                          `Delete the ${e.purchase.name} purchase (${tk(e.purchase.quantity * e.purchase.unitPrice)}) from ${fmtDate(e.purchase.purchasedAt ?? e.purchase.createdAt)}?`,
+                          'Purchase deleted',
+                        )
+                      }
+                    />
+                  ) : (
+                    <View key={`p-${e.payment.id}`} className="flex-row items-start gap-3 border-b border-slate-100 bg-amber-50/40 px-4 py-3">
+                      <View className="h-9 w-9 items-center justify-center rounded-control bg-amber-100">
+                        <Wallet size={16} color={colors.amber700} />
+                      </View>
+                      <View className="min-w-0 flex-1">
+                        <Text className="text-sm font-semibold text-ink">
+                          Paid supplier <Text className="font-normal text-slate-500">· {paymentMethodLabel(e.payment.method)}</Text>
+                        </Text>
+                        <Text className="text-xs text-slate-500">
+                          {fmtDate(e.payment.paidAt)}
+                          {e.payment.note ? ` · ${e.payment.note}` : ''}
+                        </Text>
+                        <Text className="mt-0.5 text-sm font-bold text-amber-800">−{tk(e.payment.amount)}</Text>
+                      </View>
+                      <IconButton icon={Edit3} label="Edit payment" onPress={() => setModal({ kind: 'payment', payment: e.payment })} />
+                      <IconButton
+                        icon={Trash2}
+                        variant="danger"
+                        label="Delete payment"
+                        onPress={() =>
+                          remove(
+                            `/api/supplier-payments/${e.payment.id}`,
+                            `Delete the ${tk(e.payment.amount)} payment from ${fmtDate(e.payment.paidAt)}? What you owe will go up by this amount.`,
+                            'Payment deleted',
+                          )
+                        }
+                      />
                     </View>
-                    <Text className="text-[11px] text-slate-500">
-                      {fmtDate(e.purchase.purchasedAt ?? e.purchase.createdAt)} · {e.purchase.quantity} kg × {tk(e.purchase.unitPrice)}
-                      {e.purchase.schedule ? ` · ${e.purchase.schedule.coverDays} days · ${tk(e.purchase.schedule.perDayCost)}/day` : ''}
-                    </Text>
-                  </View>
-                  <Text className="text-sm font-bold text-slate-900">{tk(e.purchase.quantity * e.purchase.unitPrice)}</Text>
-                  <IconButton icon={Edit3} onPress={() => setPurchaseModal({ batch: e.purchase })} />
-                  <IconButton icon={Trash2} variant="danger" onPress={() => remove(`/api/feed/${e.purchase.id}`, `the ${e.purchase.name} purchase`)} />
-                </View>
-              ) : (
-                <View key={`p-${e.payment.id}`} className="flex-row items-start gap-3 border-t border-slate-100 bg-amber-50/40 px-4 py-3">
-                  <View className="flex-1 gap-1">
-                    <Text className="text-sm font-semibold text-slate-900">Paid · {paymentMethodLabel(e.payment.method)}</Text>
-                    <Text className="text-[11px] text-slate-500">
-                      {fmtDate(e.payment.paidAt)}
-                      {e.payment.note ? ` · ${e.payment.note}` : ''}
-                    </Text>
-                  </View>
-                  <Text className="text-sm font-bold text-amber-800">−{tk(e.payment.amount)}</Text>
-                  <IconButton icon={Edit3} onPress={() => setPaymentModal({ payment: e.payment })} />
-                  <IconButton icon={Trash2} variant="danger" onPress={() => remove(`/api/supplier-payments/${e.payment.id}`, `the ${tk(e.payment.amount)} payment`)} />
-                </View>
-              ),
-            )
+                  ),
+                )}
+              </View>
+            ))
           )}
-        </View>
+        </Card>
+
+        {supplier.purchasesCount === 0 ? (
+          <Pressable onPress={deleteSupplier} className="flex-row items-center justify-center gap-1.5 py-2" accessibilityRole="button">
+            <Trash2 size={14} color={colors.red600} />
+            <Text className="text-sm font-semibold text-red-600">Delete supplier</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
 
       <PaymentModal
-        party={paymentModal ? supplier : null}
+        party={modal?.kind === 'payment' ? supplier : null}
         mode="pay"
-        payment={paymentModal?.payment}
-        onClose={() => setPaymentModal(null)}
+        payment={modal?.kind === 'payment' ? modal.payment : null}
+        onClose={() => setModal(null)}
         onSaved={async () => {
-          setPaymentModal(null);
-          await load();
+          toast('Payment saved');
+          await done();
         }}
       />
       <FeedPurchaseModal
-        open={!!purchaseModal}
-        batch={purchaseModal?.batch}
+        open={modal?.kind === 'purchase'}
+        batch={modal?.kind === 'purchase' ? modal.batch : null}
         suppliers={[]}
         presetSupplier={{ id: supplier.id, name: supplier.name }}
-        onClose={() => setPurchaseModal(null)}
+        onClose={() => setModal(null)}
         onSaved={async () => {
-          setPurchaseModal(null);
-          await load();
+          toast('Purchase saved');
+          await done();
         }}
       />
+      <SupplierFormModal
+        visible={modal?.kind === 'supplier'}
+        supplier={supplier}
+        onClose={() => setModal(null)}
+        onSaved={async () => {
+          toast('Supplier saved');
+          await done();
+        }}
+      />
+    </View>
+  );
+}
+
+function PurchaseRow({ batch, onEdit, onDelete }: { batch: FeedBatch; onEdit: () => void; onDelete: () => void }) {
+  const total = batch.quantity * batch.unitPrice;
+  const paid = batch.paidAmount ?? 0;
+  const due = Math.max(0, total - paid);
+  const s = batch.schedule;
+  return (
+    <View className="flex-row items-start gap-3 border-b border-slate-100 px-4 py-3">
+      <View className="h-9 w-9 items-center justify-center rounded-control bg-amber-100">
+        <Wheat size={16} color={colors.amber700} />
+      </View>
+      <View className="min-w-0 flex-1 gap-0.5">
+        <Text className="text-sm font-semibold text-ink">
+          Bought {batch.name}
+          <Text className="font-normal text-slate-500">
+            {' '}
+            · {batch.quantity.toLocaleString()} kg × {tk(batch.unitPrice)}
+          </Text>
+        </Text>
+        <StatusPill status={batch.payStatus ?? 'pending'} />
+        <Text className="text-xs text-slate-500">
+          {fmtDate(batch.purchasedAt ?? batch.createdAt)}
+          {s ? ` · ${s.coverDays} day${s.coverDays === 1 ? '' : 's'} · ${s.perDayQty.toLocaleString()} kg/day · ${tk(s.perDayCost)}/day` : ''}
+          {due > 0 && paid > 0 ? ` · ${tk(paid)} paid, ${tk(due)} due` : ''}
+        </Text>
+        <Text className="text-sm font-bold text-ink">{tk(total)}</Text>
+      </View>
+      <IconButton icon={Edit3} label="Edit purchase" onPress={onEdit} />
+      <IconButton icon={Trash2} variant="danger" label="Delete purchase" onPress={onDelete} />
     </View>
   );
 }

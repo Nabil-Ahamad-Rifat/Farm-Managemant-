@@ -7,9 +7,15 @@ import { API_URL, mobileApiClient } from '@/src/lib/apiClient';
 import { Button, Card, FormError, PageHeader, TextField, useToast } from '@/src/components/ui';
 import { DeleteAccountCard } from '@/src/components/DeleteAccountCard';
 import { cardShadow, colors } from '@/src/theme';
+import { useOwnerOnly } from '@/src/hooks/useOwnerOnly';
 
 /** Owner settings, like the web's /dashboard/settings: sales defaults, team link, delete account. */
 export default function SettingsScreen() {
+  const allowed = useOwnerOnly();
+  return allowed ? <SettingsScreenContent /> : null;
+}
+
+function SettingsScreenContent() {
   const toast = useToast();
   const [saved, setSaved] = useState<string | null>(null);
   const [price, setPrice] = useState('');

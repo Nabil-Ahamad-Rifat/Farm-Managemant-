@@ -1,15 +1,17 @@
 import { useState } from 'react';
-import { View, Pressable, ActivityIndicator } from 'react-native';
-import { Text, TextInput } from '@/src/components/ui/Text';
-import { Link, router } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
+import { View, Pressable } from 'react-native';
+import { router } from 'expo-router';
+import { ArrowLeft, CheckCircle2 } from 'lucide-react-native';
 import { forgotPasswordSchema } from '@farm/shared-validation';
+import { Text } from '@/src/components/ui/Text';
 import { mobileApiClient } from '@/src/lib/apiClient';
+import { Button, FormError, TextField } from '@/src/components/ui';
+import { colors } from '@/src/theme';
+import { AuthShell } from './_layout';
 
 // The reset link itself is emailed as a web URL (NEXT_PUBLIC_APP_URL/reset-password?token=...)
-// and completed on the web — this screen only requests that link. A native
-// deep-link flow (universal/app links) is future work, not needed for the
-// Phase 4 skeleton.
+// and completed on the web — this screen only requests that link, like the
+// web's Forgot password page.
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
@@ -35,64 +37,64 @@ export default function ForgotPasswordScreen() {
     }
   }
 
+  function backToSignIn() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(auth)/login');
+  }
+
+  const back = (
+    <Pressable onPress={backToSignIn} className="mt-6 flex-row items-center justify-center gap-2 self-center rounded-control border border-line bg-white px-4 py-2.5" accessibilityRole="link">
+      <ArrowLeft size={16} color={colors.ink} />
+      <Text className="text-sm font-semibold text-ink">Back to sign in</Text>
+    </Pressable>
+  );
+
   return (
-    <View className="flex-1 justify-center bg-slate-950 px-6">
-      <View className="rounded-3xl border border-white/10 bg-slate-900 p-8">
-        <Pressable onPress={() => router.back()} className="mb-4 flex-row items-center gap-2">
-          <ArrowLeft size={16} color="#94a3b8" />
-          <Text className="text-xs font-semibold text-slate-400">Back to sign in</Text>
-        </Pressable>
-
-        <Text className="text-2xl font-bold text-white">Reset your password</Text>
-        <Text className="mt-1 text-sm text-slate-400">
-          Enter your email and we&apos;ll send you a link to reset your password.
-        </Text>
-
-        {error ? (
-          <View className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
-            <Text className="text-xs font-medium text-red-400">{error}</Text>
+    <AuthShell>
+      {sent ? (
+        <View className="mt-8 items-center">
+          <View className="h-14 w-14 items-center justify-center rounded-full border border-brand-200 bg-brand-50">
+            <CheckCircle2 size={28} color={colors.brand700} />
           </View>
-        ) : null}
-
-        {sent ? (
-          <View className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
-            <Text className="text-xs font-medium text-emerald-400">
-              If that email exists, a reset link has been sent — check your inbox.
-            </Text>
-          </View>
-        ) : (
-          <View className="mt-6 gap-4">
-            <View>
-              <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Email Address</Text>
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="owner@farm.com"
-                placeholderTextColor="#64748b"
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
-              />
-            </View>
-
-            <Pressable
-              onPress={handleSubmit}
-              disabled={loading}
-              className="mt-2 items-center rounded-xl bg-emerald-600 px-4 py-3 disabled:opacity-50"
-            >
-              {loading ? <ActivityIndicator color="white" /> : <Text className="font-semibold text-white">Send Reset Link</Text>}
-            </Pressable>
-          </View>
-        )}
-
-        <View className="mt-6 flex-row justify-center gap-1">
-          <Text className="text-xs text-slate-400">Remembered your password?</Text>
-          <Link href="/(auth)/login" className="text-xs font-semibold text-emerald-400">
-            Sign in
-          </Link>
+          <Text className="mt-4 text-xl font-bold text-ink">Check your email</Text>
+          <Text className="mt-2 text-center text-sm text-slate-500">
+            If <Text className="font-medium text-ink">{email}</Text> is registered, you&apos;ll receive a password reset link within a few minutes.
+          </Text>
+          <Text className="mt-3 text-center text-xs text-slate-500">Don&apos;t see it? Check your spam folder. The link expires in 30 minutes.</Text>
+          {back}
         </View>
-      </View>
-    </View>
+      ) : (
+        <>
+          <Text className="mt-6 text-2xl font-bold tracking-tight text-ink">Forgot your password?</Text>
+          <Text className="mt-1 text-sm text-slate-500">Enter your email and we&apos;ll send you a reset link.</Text>
+
+          {error ? (
+            <View className="mt-4">
+              <FormError message={error} />
+            </View>
+          ) : null}
+
+          <View className="mt-6 gap-4">
+            <TextField
+              label="Email Address"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="owner@farm.com"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              keyboardType="email-address"
+              onSubmitEditing={handleSubmit}
+            />
+            <Button label={loading ? 'Sending...' : 'Send Reset Link'} size="lg" loading={loading} onPress={handleSubmit} className="mt-2" />
+          </View>
+
+          <Pressable onPress={backToSignIn} className="mt-6 flex-row items-center justify-center gap-1.5" accessibilityRole="link">
+            <ArrowLeft size={14} color={colors.slate500} />
+            <Text className="text-sm font-semibold text-slate-600">Back to sign in</Text>
+          </Pressable>
+        </>
+      )}
+    </AuthShell>
   );
 }
