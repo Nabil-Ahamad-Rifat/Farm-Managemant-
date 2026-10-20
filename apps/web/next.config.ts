@@ -37,7 +37,8 @@ const nextConfig: NextConfig = {
   // Dev-only: Next blocks dev assets/HMR for any origin but localhost, so
   // opening the app via the LAN address (e.g. from a phone) never hydrates.
   // Add more hosts here if the machine's LAN IP changes.
-  allowedDevOrigins: ["192.168.68.103", "192.168.68.104"],
+  // The dev machine's LAN address changes (.103, .104, .108 so far), so allow the home network.
+  allowedDevOrigins: ["192.168.68.*"],
   transpilePackages: ["@farm/shared-types", "@farm/shared-validation", "@farm/api-client", "@farm/business-logic"],
   async headers() {
     return [
