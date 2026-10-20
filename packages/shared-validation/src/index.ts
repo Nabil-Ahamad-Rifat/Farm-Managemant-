@@ -137,12 +137,12 @@ export const ANIMAL_EVENT_KINDS = [
   'other',
 ] as const;
 
-/** Base64 of a JPEG/PNG/WebP photo, already resized by the client. About 2 MB decoded at most. */
+/** Base64 of a JPEG/PNG/WebP photo, already resized by the client. 600 KB decoded at most. */
 export const animalPhotoSchema = z.object({
   data: z
     .string()
     .min(100, 'Photo is empty')
-    .max(2_800_000, 'Photo is too large; please use a smaller picture')
+    .max(820_000, 'Photo is too large; please use a smaller picture')
     .regex(/^[A-Za-z0-9+/=\s]+$/, 'Photo data is not valid'),
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']).default('image/jpeg'),
   width: z.coerce.number().int().positive().max(10000).optional(),
@@ -274,4 +274,67 @@ export const teamMemberSchema = z.object({
 export const teamMemberUpdateSchema = z.object({
   name: z.preprocess(blankToUndefined, z.string().trim().min(1).max(100).optional()),
   password: z.preprocess(blankToUndefined, z.string().min(8, 'Password must be at least 8 characters').max(200).optional()),
+});
+
+/** A MongoDB ObjectId as text (24 hex characters). */
+export const objectIdSchema = z.string().regex(/^[a-f0-9]{24}$/i, 'Not a valid id');
+
+export const resetPasswordSchema = z.object({
+  token: z.string().trim().min(1).max(200),
+  newPassword: z.string().min(8, 'Password must be at least 8 characters').max(200),
+});
+
+/** Sign out: mobile sends its refresh token so it is revoked too. */
+export const logoutSchema = z.object({
+  refreshToken: z.string().max(200).optional(),
+});
+
+/** Create a new ranch (farm) and move the signed-in owner to it. */
+export const ranchSchema = z.object({
+  ranchName: z.string().trim().min(1, 'Ranch name is required').max(100),
+});
+
+// Amount on an edit: blank or missing keeps the old one.
+const blankOrNullToUndefined = (v: unknown) => (v === null ? undefined : blankToUndefined(v));
+const positiveAmount = money.refine((n) => n > 0, 'Amount must be a positive number');
+// Dates go on to entryDay() in the API, which checks the format and the future.
+const entryDate = z.preprocess(blankOrNullToUndefined, z.string().max(40).optional());
+
+/** Other income. Same body for create and (all fields optional) edit. */
+export const incomeSchema = z.object({
+  description: z.string().trim().min(1, 'Description and amount are required').max(200),
+  amount: z.preprocess(blankOrNullToUndefined, positiveAmount),
+  category: optionalText(50),
+  incomeDate: entryDate,
+});
+export const incomeUpdateSchema = z.object({
+  description: optionalText(200),
+  amount: z.preprocess(blankOrNullToUndefined, positiveAmount.optional()),
+  category: optionalText(50),
+  incomeDate: entryDate,
+});
+
+/** Other expense. Same body for create and (all fields optional) edit. */
+export const expenseSchema = z.object({
+  description: z.string().trim().min(1, 'Description and a valid positive amount are required').max(200),
+  amount: z.preprocess(blankOrNullToUndefined, positiveAmount),
+  category: optionalText(50),
+  expenseDate: entryDate,
+});
+export const expenseUpdateSchema = z.object({
+  description: optionalText(200),
+  amount: z.preprocess(blankOrNullToUndefined, positiveAmount.optional()),
+  category: optionalText(50),
+  expenseDate: entryDate,
+});
+
+/** Feed taken out of a batch by hand. */
+export const feedUsageSchema = z.object({
+  feedBatchId: objectIdSchema,
+  quantity: z.preprocess(blankOrNullToUndefined, money.refine((n) => n > 0, 'A valid usage quantity greater than zero is required')),
+  note: optionalText(300),
+  usedAt: z.preprocess(
+    blankOrNullToUndefined,
+    z.string().max(40).refine((v) => !Number.isNaN(Date.parse(v)), 'Not a valid date').optional(),
+  ),
 });

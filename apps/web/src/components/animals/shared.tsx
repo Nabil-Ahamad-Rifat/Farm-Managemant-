@@ -101,9 +101,9 @@ export interface PickedPhoto {
   preview: string;
 }
 
-const MAX_SIDE = 1280;
+const MAX_SIDE = 800;
 
-/** Shrink a picked image to at most 1280 px on its longest side, as a JPEG (about 150-300 KB). */
+/** Shrink a picked image to at most 800 px on its longest side, as a JPEG (about 50-120 KB; the server takes up to 600 KB). */
 export async function resizePhoto(file: File): Promise<PickedPhoto> {
   if (!file.type.startsWith('image/')) throw new Error('Please choose a photo');
   const bitmap = await createImageBitmap(file).catch(() => {
@@ -119,7 +119,7 @@ export async function resizePhoto(file: File): Promise<PickedPhoto> {
   if (!ctx) throw new Error('This browser cannot prepare photos');
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
-  const preview = canvas.toDataURL('image/jpeg', 0.82);
+  const preview = canvas.toDataURL('image/jpeg', 0.75);
   return { data: preview.slice(preview.indexOf(',') + 1), mimeType: 'image/jpeg', width, height, preview };
 }
 

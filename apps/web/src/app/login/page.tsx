@@ -14,6 +14,7 @@ const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   google_server_error: 'An error occurred during Google sign-in.',
   google_invalid_state: 'Your sign-in session expired. Please try again.',
   google_rate_limited: 'Too many sign-in attempts. Please wait a moment and try again.',
+  google_password_account: 'This email already has a password — sign in with it.',
 };
 
 function GoogleIcon() {

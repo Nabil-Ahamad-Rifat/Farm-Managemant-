@@ -93,6 +93,40 @@ model PasswordResetToken {
   createdAt DateTime @default(now())
 }
 
+// Request counters for rate limiting, shared by every server instance (an
+// in-memory Map doesn't work on serverless). One row per key and window;
+// a TTL index on expiresAt (scripts/db-indexes.mjs) deletes old windows.
+model RateLimit {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  key       String   @unique
+  count     Int      @default(0)
+  expiresAt DateTime
+}
+
+// Web sessions signed out before their JWT expired (by jti). Checked on every
+// request; a TTL index on expiresAt removes rows once the JWT would have expired.
+model RevokedSession {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  jti       String   @unique
+  expiresAt DateTime
+}
+
+// Chunks of a backup being restored, uploaded part by part (Vercel caps a
+// request at 4.5 MB) and applied together on commit. TTL on expiresAt cleans
+// up imports that were never finished.
+model ImportStage {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  tenantId  String   @db.ObjectId
+  jobId     String
+  part      Int
+  data      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([jobId, part])
+  @@index([tenantId, jobId])
+}
+
 // A worker. Monthly workers earn salary/30 for every day from joinDate (their
 // start date) to leftDate or today, except days marked absent; the rate for a
 // day comes from PayRate. Daily workers earn days x rate for each WorkEntry.

@@ -1,38 +1,46 @@
+import { expenseSchema } from '@farm/shared-validation';
 import { db } from '@/lib/db';
 import { entryDay } from '@/lib/days';
 import { withAuth } from '@/lib/middleware/withAuth';
-import { parseNullableFloat } from '@/lib/parse';
 import { withIdempotency } from '@/lib/idempotency';
 
 export const GET = withAuth(async (_req, { tenantId }) => {
-  const expenses = await db.otherExpense.findMany({
-    where: { tenantId },
-    orderBy: { expenseDate: 'desc' },
-  });
-  return Response.json(expenses);
+  try {
+    const expenses = await db.otherExpense.findMany({
+      where: { tenantId },
+      orderBy: { expenseDate: 'desc' },
+    });
+    return Response.json(expenses);
+  } catch (err: unknown) {
+    console.error('Error loading expenses:', err);
+    return Response.json({ error: 'Failed to load expenses' }, { status: 500 });
+  }
 });
 
 export const POST = withAuth(async (req, { tenantId, userId }) => withIdempotency(req, tenantId, 'expenses:create', async () => {
-  const body = await req.json();
-  const { description, amount, category, expenseDate } = body;
+  try {
+    const parsed = expenseSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) {
+      return Response.json({ error: 'Description and a valid positive amount are required' }, { status: 400 });
+    }
+    const { description, amount, category, expenseDate } = parsed.data;
 
-  const parsedAmount = parseNullableFloat(amount);
-  if (!description || parsedAmount === null || parsedAmount <= 0) {
-    return Response.json({ error: 'Description and a valid positive amount are required' }, { status: 400 });
+    const day = entryDay(expenseDate);
+    if ('error' in day) return Response.json({ error: day.error }, { status: 400 });
+
+    const expense = await db.otherExpense.create({
+      data: { createdById: userId,
+        description,
+        amount,
+        category: category || 'other',
+        expenseDate: day.date,
+        tenantId,
+      },
+    });
+
+    return Response.json(expense, { status: 201 });
+  } catch (err: unknown) {
+    console.error('Error saving expense:', err);
+    return Response.json({ error: 'Failed to save expense' }, { status: 500 });
   }
-
-  const day = entryDay(expenseDate);
-  if ('error' in day) return Response.json({ error: day.error }, { status: 400 });
-
-  const expense = await db.otherExpense.create({
-    data: { createdById: userId,
-      description,
-      amount: parsedAmount,
-      category: category || 'other',
-      expenseDate: day.date,
-      tenantId,
-    },
-  });
-
-  return Response.json(expense, { status: 201 });
 }));

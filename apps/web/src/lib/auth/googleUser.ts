@@ -11,6 +11,17 @@ interface GoogleProfile {
 // and the native mobile flow (src/app/api/auth/google/mobile) — the two
 // differ only in how they obtain a verified Google profile, not in what
 // happens once they have one.
+/**
+ * Google sign-in for an email that already has a password account. Linking
+ * them automatically would let anyone who registered that email first (email
+ * isn't verified at sign-up) keep a password into the real owner's account.
+ */
+export class GooglePasswordAccountError extends Error {
+  constructor() {
+    super('This email already has a password — sign in with it.');
+  }
+}
+
 export async function findOrCreateGoogleUser(profile: GoogleProfile): Promise<User> {
   let user = await db.user.findUnique({ where: { email: profile.email } });
 
@@ -36,6 +47,7 @@ export async function findOrCreateGoogleUser(profile: GoogleProfile): Promise<Us
 
     user = newUser;
   } else if (!user.googleId) {
+    if (user.password) throw new GooglePasswordAccountError();
     user = await db.user.update({
       where: { id: user.id },
       data: { googleId: profile.sub },

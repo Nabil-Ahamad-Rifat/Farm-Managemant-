@@ -1,4 +1,5 @@
 import { teamMemberUpdateSchema } from '@farm/shared-validation';
+import { notRevoked } from '@/lib/auth/refreshToken';
 import { db } from '@/lib/db';
 import { withOwner, getIdFromParams } from '@/lib/middleware/withAuth';
 import { hashPassword } from '@/lib/auth/password';
@@ -13,7 +14,7 @@ async function findManager(tenantId: string, id: string | null) {
 /** End every session of a member: web cookies (tokenVersion) and phone refresh tokens. */
 async function signOutEverywhere(userId: string, tokenVersion: number | null) {
   await db.user.update({ where: { id: userId }, data: { tokenVersion: (tokenVersion ?? 0) + 1 } });
-  await db.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+  await db.refreshToken.updateMany({ where: { userId, ...notRevoked }, data: { revokedAt: new Date() } });
 }
 
 // Rename a manager or give them a new password (which logs them out everywhere).

@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { Plus, PackageOpen, PawPrint, Hash, Trash2 } from 'lucide-react-native';
 import type { OtherExpense } from '@farm/shared-types';
 import { LIST_PERIODS, inListPeriod, farmToday, sumAmounts, type ListPeriod } from '@farm/business-logic';
+import { PendingEntries } from '@/src/components/PendingEntries';
 import { Text } from '@/src/components/ui/Text';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { generateIdempotencyKey } from '@/src/lib/idempotency';
@@ -138,6 +139,7 @@ export default function ExpensesScreen() {
             <SearchInput value={search} onChangeText={setSearch} placeholder="Search expenses or animals..." />
             <Chips options={LIST_PERIODS.map((p) => ({ value: p.value, label: p.label }))} value={period} onChange={(v) => setPeriod(v as ListPeriod)} />
             <Chips options={[{ value: 'all', label: 'All categories' }, ...CATEGORIES, { value: 'animal', label: 'Animal care' }]} value={categoryFilter} onChange={setCategoryFilter} />
+            <PendingEntries match="/api/expenses" />
           </View>
         }
         ListEmptyComponent={<EmptyState icon={PackageOpen} title="No expenses in this view" message="Change the period or category, or add an expense." />}

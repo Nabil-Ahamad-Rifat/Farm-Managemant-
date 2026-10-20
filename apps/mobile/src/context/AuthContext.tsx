@@ -2,6 +2,8 @@ import { use, createContext, useCallback, useEffect, useMemo, useState, type Pro
 import type { AuthUser } from '@farm/shared-types';
 import { mobileApiClient, setSessionListener } from '@/src/lib/apiClient';
 import { useStorageState } from '@/src/lib/useStorageState';
+import { cacheClear } from '@/src/lib/cache';
+import { clearOutbox } from '@/src/lib/outbox';
 
 interface AuthSession {
   user: AuthUser;
@@ -153,6 +155,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       // account still exists server-side (e.g. wrong password), so silently
       // logging the user out would just hide the error.
       await mobileApiClient.post('/api/auth/account/delete', { password }, 'Unable to delete account');
+      // The account is gone: drop its saved data and anything waiting to upload.
+      if (user) await Promise.all([cacheClear(user.id), clearOutbox(user.id)]);
       clearSession();
     },
 
@@ -163,6 +167,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
         // Best-effort server-side revoke — always clear local state below
         // even if the network call fails (e.g. offline).
       }
+      // Saved offline copies are private to this user. Entries still waiting to
+      // upload are kept and go up the next time this user signs in.
+      if (user) await cacheClear(user.id);
       clearSession();
     },
   };

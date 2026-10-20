@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { signToken } from '@/lib/auth/jwt';
 import { rotateRefreshToken, MOBILE_ACCESS_TOKEN_TTL } from '@/lib/auth/refreshToken';
-import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { checkRateLimit, getClientIp, tooManyRequests } from '@/lib/rate-limit';
 
 const refreshSchema = z.object({
-  refreshToken: z.string().min(1),
+  refreshToken: z.string().min(1).max(200),
 });
 
 // Mobile-only endpoint: exchanges a refresh token for a new short-lived
@@ -14,8 +14,8 @@ const refreshSchema = z.object({
 // for the rotation/reuse-detection mechanics.
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
-  if (!checkRateLimit(`refresh:${ip}`, 30, 15 * 60 * 1000)) {
-    return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
+  if (!(await checkRateLimit(`refresh:${ip}`, 30, 15 * 60 * 1000))) {
+    return tooManyRequests();
   }
 
   const parsed = refreshSchema.safeParse(await req.json().catch(() => null));

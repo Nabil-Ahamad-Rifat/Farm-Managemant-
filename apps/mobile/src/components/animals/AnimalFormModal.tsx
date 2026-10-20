@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { Text } from '@/src/components/ui/Text';
 import type { AnimalDetail, Cow } from '@farm/shared-types';
 import { ageLabel } from '@farm/business-logic';
+import { isQueued } from '@farm/api-client';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { generateIdempotencyKey } from '@/src/lib/idempotency';
 import { toDay, todayStr } from '@/src/lib/format';
@@ -98,7 +99,9 @@ export function AnimalFormModal({
       const saved = editing
         ? await mobileApiClient.put<AnimalDetail>(`/api/cows/${animal!.id}`, body, 'Failed to save animal')
         : await mobileApiClient.post<AnimalDetail>('/api/cows', body, 'Failed to save animal', { idempotencyKey: createKey });
-      onSaved(saved);
+      // Saved offline: there is no animal page yet, so just close (it uploads later).
+      if (isQueued(saved)) onClose();
+      else onSaved(saved);
     } catch (err) {
       setError((err as Error).message);
     } finally {

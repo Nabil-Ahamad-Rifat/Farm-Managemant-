@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { OAuth2Client } from 'google-auth-library';
 import { signToken } from '@/lib/auth/jwt';
-import { findOrCreateGoogleUser } from '@/lib/auth/googleUser';
+import { findOrCreateGoogleUser, GooglePasswordAccountError } from '@/lib/auth/googleUser';
 import { issueRefreshToken, MOBILE_ACCESS_TOKEN_TTL } from '@/lib/auth/refreshToken';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 
@@ -24,7 +24,7 @@ function getAllowedAudiences(): string[] {
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
-  if (!checkRateLimit(`google-mobile:${ip}`, 20, 15 * 60 * 1000)) {
+  if (!(await checkRateLimit(`google-mobile:${ip}`, 20, 15 * 60 * 1000))) {
     return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
   }
 
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     const ticket = await googleClient.verifyIdToken({ idToken: parsed.data.idToken, audience: audiences });
     payload = ticket.getPayload();
   } catch (err) {
-    console.error('Google mobile idToken verification failed:', err);
+    console.error('Google mobile idToken verification failed:', err instanceof Error ? err.message : 'unknown error');
     return NextResponse.json({ error: 'Invalid Google credential' }, { status: 401 });
   }
 
@@ -51,7 +51,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Could not verify a Google account email' }, { status: 401 });
   }
 
-  const user = await findOrCreateGoogleUser({ sub: payload.sub, email: payload.email, name: payload.name });
+  let user;
+  try {
+    user = await findOrCreateGoogleUser({ sub: payload.sub, email: payload.email, name: payload.name });
+  } catch (err) {
+    if (err instanceof GooglePasswordAccountError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
+    throw err;
+  }
 
   const accessToken = signToken(
     {

@@ -29,6 +29,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Fails the build on critical advisories. The remaining "high" ones (2026-10)
+      # sit in build tooling only — Expo/Metro/React Native dev tools, the
+      # eslint config and the Prisma CLI — whose fixes are breaking majors;
+      # Dependabot opens PRs for those. Tighten to high once they're cleared.
+      - name: Audit dependencies
+        run: npm audit --audit-level=critical --omit=dev
+
       - name: Generate Prisma client
         run: npx prisma generate --schema apps/web/prisma/schema.prisma
 

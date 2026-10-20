@@ -3,6 +3,7 @@ import { View, FlatList, Pressable, RefreshControl, ActivityIndicator } from 're
 import { Plus, Edit3, Coins, Hash } from 'lucide-react-native';
 import type { OtherIncome } from '@farm/shared-types';
 import { LIST_PERIODS, inListPeriod, farmToday, sumAmounts, type ListPeriod } from '@farm/business-logic';
+import { PendingEntries } from '@/src/components/PendingEntries';
 import { Text } from '@/src/components/ui/Text';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { generateIdempotencyKey } from '@/src/lib/idempotency';
@@ -73,6 +74,7 @@ export default function IncomeScreen() {
         <Chips options={PERIODS} value={period} onChange={setPeriod} />
         <Chips options={[{ value: 'all', label: 'All categories' }, ...CATEGORIES]} value={categoryFilter} onChange={setCategoryFilter} />
       </View>
+      <PendingEntries match="/api/income" />
     </View>
   );
 

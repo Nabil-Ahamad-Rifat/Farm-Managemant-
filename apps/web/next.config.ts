@@ -28,12 +28,21 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  // Other sites can't keep a handle on our window or embed our files (photos
+  // included). Google sign-in is a full-page redirect, so it isn't affected.
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+  // No "preload" yet: that commits every subdomain of the domain to HTTPS for
+  // years, and the app still runs on a shared *.vercel.app address. Add it
+  // once the farm has its own domain.
   ...(isProd
-    ? [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" }]
+    ? [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" }]
     : []),
 ];
 
 const nextConfig: NextConfig = {
+  // Don't advertise the framework in an X-Powered-By header.
+  poweredByHeader: false,
   // Dev-only: Next blocks dev assets/HMR for any origin but localhost, so
   // opening the app via the LAN address (e.g. from a phone) never hydrates.
   // Add more hosts here if the machine's LAN IP changes.

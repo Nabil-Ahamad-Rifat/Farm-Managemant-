@@ -8,6 +8,7 @@ import type { AnimalDueItem, CowListItem, CustomerSummary, FeedBatch, Sale, Supp
 import type { FinanceSummary } from '@farm/business-logic';
 import { Text } from '@/src/components/ui/Text';
 import { mobileApiClient } from '@/src/lib/apiClient';
+import { useAutoRefresh } from '@/src/hooks/useAutoRefresh';
 import { useSession } from '@/src/context/AuthContext';
 import { fmtDate, tk } from '@/src/lib/format';
 import { Button, Card, CardHeader, EmptyState, FormError, PageHeader, StatCard, StatGrid } from '@/src/components/ui';
@@ -82,6 +83,8 @@ export default function HomeScreen() {
       load();
     }, [load])
   );
+  // And every 30 s / on return to the app / after offline entries upload.
+  useAutoRefresh(load, useFocusEffect);
 
   async function onRefresh() {
     setRefreshing(true);

@@ -4,6 +4,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Plus, Users, Edit3, Trash2, Wallet, Milk, HandCoins, AlertCircle, ShoppingCart } from 'lucide-react-native';
 import type { Sale } from '@farm/shared-types';
 import { LIST_PERIODS, inListPeriod, type ListPeriod } from '@farm/business-logic';
+import { PendingEntries } from '@/src/components/PendingEntries';
 import { Text } from '@/src/components/ui/Text';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { useCrudList } from '@/src/hooks/useCrudList';
@@ -149,6 +150,7 @@ export default function SalesScreen() {
         <Chips options={TYPE_FILTERS} value={typeFilter} onChange={setTypeFilter} />
       </View>
       <SearchInput value={search} onChangeText={setSearch} placeholder="Search by customer name or cow tag..." />
+      <PendingEntries match="/api/sales" />
     </View>
   );
 

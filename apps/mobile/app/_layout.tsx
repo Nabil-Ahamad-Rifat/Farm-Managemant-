@@ -1,3 +1,4 @@
+import '@/src/lib/cryptoPolyfill';
 import '../global.css';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';

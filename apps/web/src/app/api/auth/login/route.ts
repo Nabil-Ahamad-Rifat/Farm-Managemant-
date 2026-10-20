@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loginSchema } from '@farm/shared-validation';
 import { db } from '@/lib/db';
-import { verifyPassword } from '@/lib/auth/password';
+import { burnPasswordCheck, verifyPassword } from '@/lib/auth/password';
 import { signToken } from '@/lib/auth/jwt';
-import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { checkRateLimit, getClientIp, tooManyRequests } from '@/lib/rate-limit';
 import { isMobileClient } from '@/lib/auth/clientType';
 import { issueRefreshToken, MOBILE_ACCESS_TOKEN_TTL } from '@/lib/auth/refreshToken';
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
-  if (!checkRateLimit(`login:${ip}`, 20, 15 * 60 * 1000)) {
-    return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
+  if (!(await checkRateLimit(`login:${ip}`, 20, 15 * 60 * 1000))) {
+    return tooManyRequests();
   }
 
   const parsed = loginSchema.safeParse(await req.json().catch(() => null));
@@ -19,21 +19,17 @@ export async function POST(req: NextRequest) {
   }
   const { email, password } = parsed.data;
 
-  if (!checkRateLimit(`login-email:${email}`, 8, 15 * 60 * 1000)) {
-    return NextResponse.json({ error: 'Too many attempts for this account. Please try again later.' }, { status: 429 });
+  if (!(await checkRateLimit(`login-email:${email}`, 8, 15 * 60 * 1000))) {
+    return tooManyRequests('Too many attempts for this account. Please try again later.');
   }
 
+  // One answer, and the same time taken, whether the email is unknown, has no
+  // password (Google-only) or the password is wrong — so nobody can probe
+  // which emails have accounts.
   const user = await db.user.findUnique({ where: { email } });
-  if (!user) {
+  if (!user?.password) {
+    await burnPasswordCheck(password);
     return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-  }
-
-  // Google-only account — no password set
-  if (!user.password) {
-    return NextResponse.json(
-      { error: 'This account uses Google sign-in. Please click "Continue with Google".' },
-      { status: 401 }
-    );
   }
 
   const isValid = await verifyPassword(password, user.password);

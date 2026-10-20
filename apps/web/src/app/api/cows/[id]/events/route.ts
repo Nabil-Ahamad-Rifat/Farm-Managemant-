@@ -2,7 +2,8 @@ import { animalEventSchema } from '@farm/shared-validation';
 import { db } from '@/lib/db';
 import { withAuth, getIdFromParams } from '@/lib/middleware/withAuth';
 import { withIdempotency } from '@/lib/idempotency';
-import { dayOrNull, decodePhoto, eventData, savePhoto, tagTaken } from '@/lib/animals';
+import { dayOrNull, decodePhoto, eventData, photoUploadAllowed, savePhoto, tagTaken } from '@/lib/animals';
+import { tooManyRequests } from '@/lib/rate-limit';
 
 // Add a history record (vaccine, AI, pregnancy check, calving...). A calving
 // can add the calf as its own animal, linked to this one as its mother.
@@ -25,6 +26,7 @@ export const POST = withAuth(async (req, { tenantId, userId }, routeContext) => 
 
     let calfPhoto: Buffer | null = null;
     if (e.createCalf) {
+      if (!(await photoUploadAllowed(userId))) return tooManyRequests('Too many photos uploaded. Please try again later.');
       if (await tagTaken(tenantId, e.createCalf.tagNumber)) {
         return Response.json({ error: `Cow ID ${e.createCalf.tagNumber} is already used by another animal` }, { status: 409 });
       }

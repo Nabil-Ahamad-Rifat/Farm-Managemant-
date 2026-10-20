@@ -1,3 +1,4 @@
+import { incomeSchema } from '@farm/shared-validation';
 import { db } from '@/lib/db';
 import { entryDay } from '@/lib/days';
 import { withAuth } from '@/lib/middleware/withAuth';
@@ -20,17 +21,12 @@ export const GET = withAuth(async (_req, { tenantId }) => {
 // POST /api/income - create a new other income record
 export const POST = withAuth(async (req, { tenantId, userId }) => withIdempotency(req, tenantId, 'income:create', async () => {
   try {
-    const body = await req.json();
-    const { description, amount, category, incomeDate } = body;
-
-    if (!description || amount === undefined || amount === null || amount === '') {
-      return Response.json({ error: 'Description and amount are required' }, { status: 400 });
+    const parsed = incomeSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) {
+      const badAmount = parsed.error.issues.some((i) => i.path[0] === 'amount') && !parsed.error.issues.some((i) => i.path[0] === 'description');
+      return Response.json({ error: badAmount ? 'Amount must be a positive number' : 'Description and amount are required' }, { status: 400 });
     }
-
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      return Response.json({ error: 'Amount must be a positive number' }, { status: 400 });
-    }
+    const { description, amount, category, incomeDate } = parsed.data;
 
     const day = entryDay(incomeDate);
     if ('error' in day) return Response.json({ error: day.error }, { status: 400 });
@@ -38,7 +34,7 @@ export const POST = withAuth(async (req, { tenantId, userId }) => withIdempotenc
     const income = await db.otherIncome.create({
       data: { createdById: userId,
         description,
-        amount: parsedAmount,
+        amount,
         category: category || 'other',
         incomeDate: day.date,
         tenantId,

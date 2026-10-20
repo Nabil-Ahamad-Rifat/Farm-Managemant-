@@ -2,7 +2,8 @@ import { animalSchema } from '@farm/shared-validation';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/middleware/withAuth';
 import { withIdempotency } from '@/lib/idempotency';
-import { animalData, checkMother, decodePhoto, getAnimalDetail, listAnimals, savePhoto, tagTaken } from '@/lib/animals';
+import { animalData, checkMother, decodePhoto, getAnimalDetail, listAnimals, photoUploadAllowed, savePhoto, tagTaken } from '@/lib/animals';
+import { tooManyRequests } from '@/lib/rate-limit';
 
 export const GET = withAuth(async (_req, { tenantId }) => {
   try {
@@ -22,6 +23,7 @@ export const POST = withAuth(async (req, { tenantId, userId }) => withIdempotenc
     }
     const a = parsed.data;
     if (!a.photo) return Response.json({ error: 'Please add a photo of the animal' }, { status: 400 });
+    if (!(await photoUploadAllowed(userId))) return tooManyRequests('Too many photos uploaded. Please try again later.');
 
     const decoded = decodePhoto(a.photo);
     if ('error' in decoded) return Response.json({ error: decoded.error }, { status: 400 });

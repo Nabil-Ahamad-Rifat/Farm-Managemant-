@@ -1,11 +1,14 @@
 import { db } from '@/lib/db';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 
 const EXPIRY_MINUTES = 30;
 
+// Only a SHA-256 hash of the token is stored, so a database leak doesn't hand
+// out working reset links. The raw token exists only in the emailed link.
+const hashToken = (raw: string) => createHash('sha256').update(raw).digest('hex');
+
+/** A new reset token for `email` (earlier unused ones stop working). Returns the raw token for the link. */
 export async function generateResetToken(email: string): Promise<string> {
-  // Invalidate any existing tokens for this email
-  // (We mark them used since SQLite doesn't support deleteMany with filters easily)
   await db.passwordResetToken.updateMany({
     where: { email, used: false },
     data: { used: true },
@@ -15,23 +18,24 @@ export async function generateResetToken(email: string): Promise<string> {
   const expiresAt = new Date(Date.now() + EXPIRY_MINUTES * 60 * 1000);
 
   await db.passwordResetToken.create({
-    data: { token, email, expiresAt },
+    data: { token: hashToken(token), email, expiresAt },
   });
 
   return token;
 }
 
-export async function validateResetToken(token: string) {
-  const record = await db.passwordResetToken.findUnique({ where: { token } });
-  if (!record) return null;
-  if (record.used) return null;
-  if (record.expiresAt < new Date()) return null;
-  return record;
-}
-
-export async function markTokenUsed(token: string) {
-  await db.passwordResetToken.update({
-    where: { token },
+/**
+ * Uses up a reset token: returns the email it belongs to, or null when it is
+ * unknown, used or expired. Atomic, so the same link can't reset twice even
+ * when clicked twice at the same moment.
+ */
+export async function consumeResetToken(token: string): Promise<string | null> {
+  const hashed = hashToken(token);
+  const claimed = await db.passwordResetToken.updateMany({
+    where: { token: hashed, used: false, expiresAt: { gt: new Date() } },
     data: { used: true },
   });
+  if (claimed.count !== 1) return null;
+  const record = await db.passwordResetToken.findUnique({ where: { token: hashed }, select: { email: true } });
+  return record?.email ?? null;
 }

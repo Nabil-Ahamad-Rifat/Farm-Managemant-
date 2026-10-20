@@ -5,6 +5,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ShieldAlert, Trash2 } from 'lucide-react';
 import SalesDefaultsCard from '@/components/SalesDefaultsCard';
+import DataSyncCard from '@/components/settings/DataSyncCard';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -52,6 +53,8 @@ export default function SettingsPage() {
       </div>
 
       <SalesDefaultsCard />
+
+      <DataSyncCard />
 
       <div className="rounded-card border border-red-200 bg-white p-8 shadow-sm">
         <div className="flex items-center gap-3">

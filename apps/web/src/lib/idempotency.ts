@@ -19,6 +19,11 @@ export async function withIdempotency(
 ): Promise<Response> {
   const key = req.headers.get('idempotency-key');
   if (!key) return fn();
+  // Keys are UUIDs (36 chars); anything much longer is not from our apps and
+  // would only bloat the stored rows.
+  if (key.length > 100) {
+    return Response.json({ error: 'Idempotency-Key is too long' }, { status: 400 });
+  }
 
   const existing = await db.idempotencyKey.findUnique({
     where: { tenantId_route_key: { tenantId, route, key } },

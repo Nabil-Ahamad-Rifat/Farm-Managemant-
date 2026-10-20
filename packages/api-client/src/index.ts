@@ -6,15 +6,22 @@
 //
 // Encapsulates the fetch + res.ok + data.error pattern every
 // apps/web/src/components/*Manager.tsx previously repeated by hand. This is
-// also the choke point where the mobile offline outbox gets wired in later.
+// also the choke point the mobile offline outbox builds on (./offline.ts:
+// which creates may be queued, the queued result, and the replay loop).
 
-export class ApiError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.status = status;
-  }
-}
+import { ApiError } from './errors';
+
+export { ApiError };
+export {
+  isQueueablePost,
+  isNetworkError,
+  isQueued,
+  replayOutbox,
+  describeEntry,
+  type QueuedResult,
+  type OutboxEntry,
+  type ReplayOutcome,
+} from './offline';
 
 export interface ApiClientOptions {
   /** Prefixed to every path. Leave empty for same-origin (web); mobile passes an absolute URL. */

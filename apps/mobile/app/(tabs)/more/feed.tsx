@@ -4,6 +4,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Plus, Edit3, Trash2, AlertTriangle, Wheat, Store, ChevronLeft, ChevronRight, ShoppingBag, Wallet, CalendarClock, BarChart2 } from 'lucide-react-native';
 import type { FeedBatch, SupplierSummary } from '@farm/shared-types';
 import { farmMonth, feedCostBetween, feedMonthSummary, isLowStock, shiftMonth, stockPercentage, totalStockValue } from '@farm/business-logic';
+import { PendingEntries } from '@/src/components/PendingEntries';
 import { Text } from '@/src/components/ui/Text';
 import { mobileApiClient } from '@/src/lib/apiClient';
 import { generateIdempotencyKey } from '@/src/lib/idempotency';
@@ -257,6 +258,7 @@ export default function FeedScreen() {
               onChange={setView}
             />
             <SearchInput value={search} onChangeText={setSearch} placeholder="Search feed or supplier..." />
+            <PendingEntries match={/^\/api\/feed(\/usage)?$/} />
           </View>
         }
         ListEmptyComponent={

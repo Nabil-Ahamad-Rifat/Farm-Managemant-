@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { signToken } from '@/lib/auth/jwt';
-import { withAuth } from '@/lib/middleware/withAuth';
+import { ranchSchema } from '@farm/shared-validation';
+import { withOwner } from '@/lib/middleware/withAuth';
+import { rateLimitUser, tooManyRequests } from '@/lib/rate-limit';
 import { isMobileClient } from '@/lib/auth/clientType';
 import { issueRefreshToken, MOBILE_ACCESS_TOKEN_TTL } from '@/lib/auth/refreshToken';
 
-export const POST = withAuth(async (req: NextRequest, { userId }) => {
-  const body = await req.json();
-  const ranchName = typeof body?.ranchName === 'string' ? body.ranchName.trim() : '';
-
-  if (!ranchName) {
-    return Response.json({ error: 'Ranch name is required' }, { status: 400 });
+// Owner only: a manager moving themselves to a new farm would lose access to
+// their own farm and could create farms without limit. Capped per owner too.
+export const POST = withOwner(async (req: NextRequest, { userId }) => {
+  if (!(await rateLimitUser(userId, 'ranch-create', 3, 24 * 60 * 60 * 1000))) {
+    return tooManyRequests('Too many new ranches today. Please try again tomorrow.');
   }
+  const parsed = ranchSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return Response.json({ error: parsed.error.issues[0]?.message ?? 'Ranch name is required' }, { status: 400 });
+  }
+  const { ranchName } = parsed.data;
 
   const tenant = await db.tenant.create({
     data: {

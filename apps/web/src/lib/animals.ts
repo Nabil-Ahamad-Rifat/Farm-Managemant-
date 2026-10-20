@@ -4,11 +4,22 @@ import type { Cow, Prisma } from '@prisma/client';
 import { animalSummary, dueSoon, nextAnimalId } from '@farm/business-logic';
 import { db } from '@/lib/db';
 import { isObjectId } from '@/lib/receivables';
+import { rateLimitUser } from '@/lib/rate-limit';
 
 type Tx = Prisma.TransactionClient;
 
-/** Largest photo accepted after decoding; clients resize to about 150-300 KB first. */
-export const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
+/**
+ * Largest new photo accepted after decoding. Clients shrink photos to 800 px
+ * (about 50-120 KB) first; the cap keeps the free 512 MB database from filling up.
+ */
+export const MAX_PHOTO_BYTES = 600 * 1024;
+/** Most photos one animal can have. */
+export const MAX_PHOTOS_PER_ANIMAL = 8;
+
+/** Per-user cap on photo uploads (each one costs database space): 60 an hour. */
+export function photoUploadAllowed(userId: string): Promise<boolean> {
+  return rateLimitUser(userId, 'photo-upload', 60, 60 * 60 * 1000);
+}
 
 export const photoUrl = (cowId: string, photoId: string) => `/api/cows/${cowId}/photos/${photoId}`;
 
@@ -18,7 +29,7 @@ const eventSelect = { type: true, date: true, title: true, nextDueDate: true, re
 export function decodePhoto(photo: { data: string; mimeType: string }): { bytes: Buffer } | { error: string } {
   const bytes = Buffer.from(photo.data.replace(/\s/g, ''), 'base64');
   if (bytes.length < 100) return { error: 'Photo is empty or damaged' };
-  if (bytes.length > MAX_PHOTO_BYTES) return { error: 'Photo is too large (max 2 MB); please use a smaller picture' };
+  if (bytes.length > MAX_PHOTO_BYTES) return { error: 'Photo is too large (max 600 KB); please use a smaller picture' };
   const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
   const isPng = bytes.subarray(0, 4).toString('hex') === '89504e47';
   const isWebp = bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP';

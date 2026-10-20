@@ -1,6 +1,7 @@
 import { teamMemberSchema } from '@farm/shared-validation';
 import { db } from '@/lib/db';
 import { withOwner } from '@/lib/middleware/withAuth';
+import { rateLimitUser, tooManyRequests } from '@/lib/rate-limit';
 import { hashPassword } from '@/lib/auth/password';
 
 const memberSelect = { id: true, name: true, email: true, role: true, createdAt: true } as const;
@@ -17,8 +18,12 @@ export const GET = withOwner(async (_req, { tenantId }) => {
 });
 
 // Add a manager with a login the owner hands over.
-export const POST = withOwner(async (req, { tenantId }) => {
+export const POST = withOwner(async (req, { tenantId, userId }) => {
   try {
+    // Each new login is a password hash and a user row; 10 a day is plenty for a farm.
+    if (!(await rateLimitUser(userId, 'team-create', 10, 24 * 60 * 60 * 1000))) {
+      return tooManyRequests('Too many new logins today. Please try again tomorrow.');
+    }
     const parsed = teamMemberSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
       return Response.json({ error: parsed.error.issues[0]?.message ?? 'Invalid member' }, { status: 400 });

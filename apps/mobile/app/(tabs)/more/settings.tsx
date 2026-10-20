@@ -6,10 +6,11 @@ import { Text } from '@/src/components/ui/Text';
 import { API_URL, mobileApiClient } from '@/src/lib/apiClient';
 import { Button, Card, FormError, PageHeader, TextField, useToast } from '@/src/components/ui';
 import { DeleteAccountCard } from '@/src/components/DeleteAccountCard';
+import { DataSyncCard } from '@/src/components/settings/DataSyncCard';
 import { cardShadow, colors } from '@/src/theme';
 import { useOwnerOnly } from '@/src/hooks/useOwnerOnly';
 
-/** Owner settings, like the web's /dashboard/settings: sales defaults, team link, delete account. */
+/** Owner settings, like the web's /dashboard/settings: sales defaults, team link, data & sync, delete account. */
 export default function SettingsScreen() {
   const allowed = useOwnerOnly();
   return allowed ? <SettingsScreenContent /> : null;
@@ -82,6 +83,8 @@ function SettingsScreenContent() {
         </View>
         <ChevronRight size={18} color={colors.slate400} />
       </Pressable>
+
+      <DataSyncCard />
 
       <DeleteAccountCard />
 

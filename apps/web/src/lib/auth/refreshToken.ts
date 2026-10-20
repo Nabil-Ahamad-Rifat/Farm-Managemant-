@@ -1,5 +1,13 @@
 import { randomBytes, createHash } from 'crypto';
+import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
+
+// A new token has no revokedAt/replacedBy field at all, and on MongoDB
+// Prisma's `field: null` only matches a stored null, not a missing field —
+// so "not revoked" must match both. (A plain `revokedAt: null` filter matched
+// nothing, which silently disabled every revocation.)
+export const notRevoked = { OR: [{ revokedAt: null }, { revokedAt: { isSet: false } }] } satisfies Prisma.RefreshTokenWhereInput;
+const notReplaced = { OR: [{ replacedBy: null }, { replacedBy: { isSet: false } }] } satisfies Prisma.RefreshTokenWhereInput;
 
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 export const MOBILE_ACCESS_TOKEN_TTL = '15m';
@@ -23,7 +31,7 @@ export async function issueRefreshToken(userId: string, deviceInfo?: string | nu
 
 async function revokeAllForUser(userId: string): Promise<void> {
   await db.refreshToken.updateMany({
-    where: { userId, revokedAt: null },
+    where: { userId, ...notRevoked },
     data: { revokedAt: new Date() },
   });
 }
@@ -52,6 +60,11 @@ export async function rotateRefreshToken(rawToken: string): Promise<RotateResult
 
   if (record.expiresAt < new Date()) return null;
 
+  // Issue the replacement first, then claim the old token atomically
+  // (revoked + replacedBy in one update). If two requests use the same token
+  // at once, only one claim succeeds; the loser treats it as a replay and
+  // revokes every token of the user — including the winner's replacement,
+  // which already exists by then — the same as reusing an old token.
   const newRaw = randomBytes(32).toString('hex');
   const newRecord = await db.refreshToken.create({
     data: {
@@ -62,10 +75,14 @@ export async function rotateRefreshToken(rawToken: string): Promise<RotateResult
     },
   });
 
-  await db.refreshToken.update({
-    where: { id: record.id },
+  const claimed = await db.refreshToken.updateMany({
+    where: { id: record.id, AND: [notRevoked, notReplaced] },
     data: { revokedAt: new Date(), replacedBy: newRecord.id },
   });
+  if (claimed.count !== 1) {
+    await revokeAllForUser(record.userId);
+    return null;
+  }
 
   return { userId: record.userId, refreshToken: newRaw };
 }
@@ -73,7 +90,7 @@ export async function rotateRefreshToken(rawToken: string): Promise<RotateResult
 export async function revokeRefreshToken(rawToken: string): Promise<void> {
   const tokenHash = hashToken(rawToken);
   await db.refreshToken.updateMany({
-    where: { tokenHash, revokedAt: null },
+    where: { tokenHash, ...notRevoked },
     data: { revokedAt: new Date() },
   });
 }

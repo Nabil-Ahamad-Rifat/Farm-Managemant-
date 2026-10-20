@@ -1,6 +1,10 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { createApiClient } from '@farm/api-client';
+import { ApiError, createApiClient, isNetworkError, isQueueablePost, type QueuedResult } from '@farm/api-client';
+import { cacheGet, cacheSet } from './cache';
+import { configureOutbox, enqueue } from './outbox';
+import { emitQueued, getSyncState, setSyncState } from './syncStore';
+import { generateIdempotencyKey } from './idempotency';
 import { setStorageItemAsync } from '@/src/lib/useStorageState';
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
@@ -89,7 +93,7 @@ async function refreshSession(): Promise<boolean> {
 // apps/web/src/lib/auth/clientType.ts) and attaches the stored Bearer token
 // once one exists. Reads storage directly rather than through AuthContext so
 // this stays a standalone module usable from anywhere, not just components.
-export const mobileApiClient = createApiClient({
+const baseClient = createApiClient({
   baseUrl: API_URL,
   getAuthHeaders: async () => {
     const token = await getStoredItem('accessToken');
@@ -100,3 +104,108 @@ export const mobileApiClient = createApiClient({
   },
   onUnauthorized: refreshSession,
 });
+
+// The signed-in user's id (from the stored session), so cached data and
+// offline entries never mix between accounts on one phone.
+let userMemo: { raw: string; id: string | null } | null = null;
+export async function currentUserId(): Promise<string | null> {
+  const raw = (await getStoredItem('user')) ?? '';
+  if (userMemo?.raw === raw) return userMemo.id;
+  let id: string | null = null;
+  try {
+    id = raw ? ((JSON.parse(raw) as { id?: string }).id ?? null) : null;
+  } catch {
+    id = null;
+  }
+  userMemo = { raw, id };
+  return id;
+}
+
+function wentOnline() {
+  if (!getSyncState().online || getSyncState().staleSince !== null) setSyncState({ online: true, staleSince: null });
+}
+
+// Offline entries upload through the same client, with their saved key.
+configureOutbox(
+  (entry) => baseClient.post(entry.path, entry.body, 'Upload failed', { idempotencyKey: entry.idempotencyKey }),
+  currentUserId
+);
+
+const NEEDS_INTERNET = 'Needs internet — try again when online';
+
+/**
+ * The app's API client. Same calls as @farm/api-client, plus offline support:
+ * - GET: the answer is saved; with no connection the last saved copy is returned
+ *   (getSyncState().staleSince says how old).
+ * - POST to a create route (isQueueablePost): with no connection it is saved in
+ *   the outbox and resolves to a QueuedResult ({ __queued: true }); check with
+ *   isQueued() from @farm/api-client. It uploads by itself when back online.
+ * - PUT/DELETE with no connection: ApiError "Needs internet".
+ */
+export const mobileApiClient = {
+  async get<T>(path: string, fallbackErrorMessage = 'Request failed'): Promise<T> {
+    try {
+      const data = await baseClient.get<T>(path, fallbackErrorMessage);
+      wentOnline();
+      setSyncState({ lastSyncedAt: Date.now() });
+      const userId = await currentUserId();
+      if (userId) cacheSet(userId, path, data);
+      return data;
+    } catch (err) {
+      if (isNetworkError(err)) {
+        if (getSyncState().online) setSyncState({ online: false });
+        const userId = await currentUserId();
+        const cached = userId ? await cacheGet<T>(userId, path) : null;
+        if (cached) {
+          const since = getSyncState().staleSince;
+          setSyncState({ staleSince: since === null ? cached.savedAt : Math.min(since, cached.savedAt) });
+          return cached.data;
+        }
+      }
+      throw err;
+    }
+  },
+
+  async post<T>(path: string, body?: unknown, fallbackErrorMessage = 'Request failed', opts?: { idempotencyKey?: string }): Promise<T> {
+    if (!isQueueablePost(path)) {
+      try {
+        return await baseClient.post<T>(path, body, fallbackErrorMessage, opts);
+      } catch (err) {
+        if (isNetworkError(err)) throw new ApiError(NEEDS_INTERNET, 0);
+        throw err;
+      }
+    }
+    // Every create that may be replayed carries a key, so it is never saved twice.
+    const idempotencyKey = opts?.idempotencyKey ?? generateIdempotencyKey();
+    try {
+      const result = await baseClient.post<T>(path, body, fallbackErrorMessage, { idempotencyKey });
+      wentOnline();
+      return result;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+      setSyncState({ online: false });
+      const entry = await enqueue(path, body, idempotencyKey);
+      emitQueued(entry.label);
+      const queued: QueuedResult = { __queued: true, outboxId: entry.id };
+      return queued as T;
+    }
+  },
+
+  async put<T>(path: string, body?: unknown, fallbackErrorMessage = 'Request failed'): Promise<T> {
+    try {
+      return await baseClient.put<T>(path, body, fallbackErrorMessage);
+    } catch (err) {
+      if (isNetworkError(err)) throw new ApiError(NEEDS_INTERNET, 0);
+      throw err;
+    }
+  },
+
+  async delete<T>(path: string, fallbackErrorMessage = 'Request failed'): Promise<T> {
+    try {
+      return await baseClient.delete<T>(path, fallbackErrorMessage);
+    } catch (err) {
+      if (isNetworkError(err)) throw new ApiError(NEEDS_INTERNET, 0);
+      throw err;
+    }
+  },
+};

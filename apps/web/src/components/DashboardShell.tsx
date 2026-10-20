@@ -11,6 +11,7 @@ import { farmToday } from '@farm/business-logic';
 import LogoutButton from '@/components/LogoutButton';
 import { BrandMark } from '@/components/ui/Brand';
 import { FeedbackProvider } from '@/components/ui/Feedback';
+import AutoRefresh from '@/components/AutoRefresh';
 
 /** `owner`: hidden from managers (money reports, settings, team). */
 type NavLink = { href: string; label: string; icon: LucideIcon; owner?: boolean };
@@ -247,6 +248,8 @@ export default function DashboardShell({
         )}
 
         <main className="min-w-0 px-4 pb-28 pt-5 sm:px-6 lg:ml-64 lg:px-8 lg:pb-12 lg:pt-8">
+          {/* Same data as the phone app: refresh on return to the tab and every minute. */}
+          <AutoRefresh />
           <div className="mx-auto max-w-[1360px]">{children}</div>
         </main>
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { signToken } from '@/lib/auth/jwt';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
-import { findOrCreateGoogleUser } from '@/lib/auth/googleUser';
+import { findOrCreateGoogleUser, GooglePasswordAccountError } from '@/lib/auth/googleUser';
 
 interface GoogleTokenResponse {
   access_token: string;
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   const redirectUri = `${appUrl}/api/auth/google/callback`;
 
   const ip = getClientIp(req);
-  if (!checkRateLimit(`google-callback:${ip}`, 20, 15 * 60 * 1000)) {
+  if (!(await checkRateLimit(`google-callback:${ip}`, 20, 15 * 60 * 1000))) {
     return NextResponse.redirect(`${appUrl}/login?error=google_rate_limited`);
   }
 
@@ -68,7 +68,8 @@ export async function GET(req: NextRequest) {
 
     const tokens = await tokenRes.json() as GoogleTokenResponse;
     if (tokens.error || !tokens.access_token) {
-      console.error('Google token exchange failed:', tokens);
+      // Only the error code: the response can carry tokens, which must not end up in logs.
+      console.error('Google token exchange failed:', tokens.error ?? 'no access token');
       return clearStateCookie(NextResponse.redirect(`${appUrl}/login?error=google_token_failed`));
     }
 
@@ -106,6 +107,9 @@ export async function GET(req: NextRequest) {
 
     return clearStateCookie(response);
   } catch (err) {
+    if (err instanceof GooglePasswordAccountError) {
+      return clearStateCookie(NextResponse.redirect(`${appUrl}/login?error=google_password_account`));
+    }
     console.error('Google OAuth callback error:', err);
     return clearStateCookie(NextResponse.redirect(`${appUrl}/login?error=google_server_error`));
   }

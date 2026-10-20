@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
+  incomeSchema,
+  incomeUpdateSchema,
+  expenseSchema,
+  feedUsageSchema,
+  resetPasswordSchema,
+  logoutSchema,
+  ranchSchema,
+  objectIdSchema,
   loginSchema, registerSchema, forgotPasswordSchema, customerSchema, paymentSchema, saleSchema, supplierSchema, feedPurchaseSchema, farmSettingsSchema, animalSchema, animalEventSchema,
   employeeSchema, workerPaymentSchema, absenceSchema, workEntrySchema, leaveSchema, teamMemberSchema, teamMemberUpdateSchema,
 } from './index';
@@ -247,5 +255,41 @@ describe('team members', () => {
   });
   it('update accepts a blank password as "no change"', () => {
     expect(teamMemberUpdateSchema.parse({ name: 'Karim', password: '' })).toEqual({ name: 'Karim', password: undefined });
+  });
+});
+
+describe('security-hardening schemas', () => {
+  it('income needs a description and a positive amount; edit fields are optional', () => {
+    expect(incomeSchema.parse({ description: ' Subsidy ', amount: '5000', category: '', incomeDate: '2026-10-14' })).toEqual({
+      description: 'Subsidy', amount: 5000, category: undefined, incomeDate: '2026-10-14',
+    });
+    expect(incomeSchema.safeParse({ description: '', amount: 10 }).success).toBe(false);
+    expect(incomeSchema.safeParse({ description: 'x', amount: 0 }).success).toBe(false);
+    expect(incomeSchema.safeParse({ description: 'x', amount: 'abc' }).success).toBe(false);
+    expect(incomeSchema.safeParse({ description: 'x'.repeat(201), amount: 1 }).success).toBe(false);
+    expect(incomeUpdateSchema.parse({ amount: '' })).toEqual({ amount: undefined, description: undefined, category: undefined, incomeDate: undefined });
+  });
+  it('expense rejects non-text descriptions and missing amounts', () => {
+    expect(expenseSchema.safeParse({ description: { $gt: '' }, amount: 5 }).success).toBe(false);
+    expect(expenseSchema.safeParse({ description: 'Vet' }).success).toBe(false);
+    expect(expenseSchema.parse({ description: 'Vet', amount: 1200 }).amount).toBe(1200);
+  });
+  it('feed usage needs a real batch id and a quantity above 0', () => {
+    const id = 'a'.repeat(24);
+    expect(feedUsageSchema.safeParse({ feedBatchId: { not: '' }, quantity: 1 }).success).toBe(false);
+    expect(feedUsageSchema.safeParse({ feedBatchId: 'abc', quantity: 1 }).success).toBe(false);
+    expect(feedUsageSchema.safeParse({ feedBatchId: id, quantity: 0 }).success).toBe(false);
+    expect(feedUsageSchema.safeParse({ feedBatchId: id, quantity: 2, usedAt: 'nope' }).success).toBe(false);
+    expect(feedUsageSchema.parse({ feedBatchId: id, quantity: '2.5', usedAt: '' }).quantity).toBe(2.5);
+  });
+  it('reset password, logout, ranch and object ids', () => {
+    expect(resetPasswordSchema.safeParse({ token: 't', newPassword: 'short' }).success).toBe(false);
+    expect(resetPasswordSchema.safeParse({ token: 't', newPassword: 'longenough' }).success).toBe(true);
+    expect(logoutSchema.safeParse({}).success).toBe(true);
+    expect(logoutSchema.safeParse({ refreshToken: 5 }).success).toBe(false);
+    expect(ranchSchema.safeParse({ ranchName: '  ' }).success).toBe(false);
+    expect(ranchSchema.safeParse({ ranchName: 'x'.repeat(101) }).success).toBe(false);
+    expect(objectIdSchema.safeParse('6ad7420116e2c818aa039cd1').success).toBe(true);
+    expect(objectIdSchema.safeParse('6ad7420116e2c818aa039cd').success).toBe(false);
   });
 });

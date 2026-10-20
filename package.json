@@ -19,5 +19,8 @@
   "devDependencies": {
     "turbo": "^2.10.12",
     "vitest": "^5.0.2"
+  },
+  "overrides": {
+    "shell-quote": "^1.12.0"
   }
 }

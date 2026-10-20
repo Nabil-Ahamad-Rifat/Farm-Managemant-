@@ -3,14 +3,14 @@ import { registerSchema } from '@farm/shared-validation';
 import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
 import { signToken } from '@/lib/auth/jwt';
-import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { checkRateLimit, getClientIp, tooManyRequests } from '@/lib/rate-limit';
 import { isMobileClient } from '@/lib/auth/clientType';
 import { issueRefreshToken, MOBILE_ACCESS_TOKEN_TTL } from '@/lib/auth/refreshToken';
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
-  if (!checkRateLimit(`register:${ip}`, 10, 60 * 60 * 1000)) {
-    return NextResponse.json({ error: 'Too many accounts created from this network. Please try again later.' }, { status: 429 });
+  if (!(await checkRateLimit(`register:${ip}`, 10, 60 * 60 * 1000))) {
+    return tooManyRequests('Too many accounts created from this network. Please try again later.');
   }
 
   const parsed = registerSchema.safeParse(await req.json().catch(() => null));
@@ -25,7 +25,8 @@ export async function POST(req: NextRequest) {
 
   const existingUser = await db.user.findUnique({ where: { email } });
   if (existingUser) {
-    return NextResponse.json({ error: 'User already exists' }, { status: 409 });
+    // Don't say the email is taken: that would confirm who has an account.
+    return NextResponse.json({ error: 'Could not create an account with these details' }, { status: 409 });
   }
 
   const hashedPassword = await hashPassword(password);

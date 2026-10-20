@@ -1,44 +1,71 @@
 import type { NextRequest } from 'next/server';
+import { db } from '@/lib/db';
 
-interface Bucket {
-  count: number;
-  resetAt: number;
-}
+// Fixed-window rate limiter backed by MongoDB (the RateLimit collection), so
+// every server instance shares the same counts — an in-memory Map does not
+// work on serverless hosting, where each instance would count separately.
+// A TTL index on RateLimit.expiresAt (scripts/db-indexes.mjs) deletes old windows.
 
-// In-memory fixed-window limiter. Good enough for a single Next.js instance;
-// if this app is ever deployed across multiple instances/regions, swap this
-// for a shared store (e.g. Upstash/Redis) so limits are enforced globally.
-const buckets = new Map<string, Bucket>();
-
-// Periodically drop expired buckets so this map can't grow without bound.
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, bucket] of buckets) {
-    if (bucket.resetAt <= now) buckets.delete(key);
-  }
-}, 5 * 60 * 1000).unref?.();
-
-export function getClientIp(req: NextRequest): string {
-  const forwarded = req.headers.get('x-forwarded-for');
-  if (forwarded) return forwarded.split(',')[0].trim();
-  return req.headers.get('x-real-ip') || 'unknown';
+/** The row key for `key` in the window containing `now`, and when that window ends. */
+export function windowFor(key: string, windowMs: number, now = Date.now()): { rowKey: string; expiresAt: Date } {
+  const index = Math.floor(now / windowMs);
+  return { rowKey: `${key}:${index}`, expiresAt: new Date((index + 1) * windowMs) };
 }
 
 /**
- * Returns true if the request is within the rate limit, false if it should be rejected.
- * `key` should combine the route name and an identifier (IP, email, etc).
+ * The caller's IP. On Vercel the platform sets x-vercel-forwarded-for /
+ * x-real-ip (clients can't forge them there). Behind Cloudflare, Vercel only
+ * sees Cloudflare's address, so cf-connecting-ip is used — but only when
+ * TRUST_CLOUDFLARE=1, since without Cloudflare in front anyone could send it.
  */
-export function checkRateLimit(key: string, limit: number, windowMs: number): boolean {
-  const now = Date.now();
-  const bucket = buckets.get(key);
+export function getClientIp(req: NextRequest): string {
+  if (process.env.TRUST_CLOUDFLARE === '1') {
+    const cf = req.headers.get('cf-connecting-ip');
+    if (cf) return cf.trim();
+  }
+  const vercel = req.headers.get('x-vercel-forwarded-for');
+  if (vercel) return vercel.split(',')[0].trim();
+  const real = req.headers.get('x-real-ip');
+  if (real) return real.trim();
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return 'unknown';
+}
 
-  if (!bucket || bucket.resetAt <= now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
+/**
+ * Counts one request for `key` and returns true while it is within `limit`
+ * requests per `windowMs`, false once it should be rejected.
+ * `key` combines the route and an identifier (IP, email, user...).
+ */
+export async function checkRateLimit(key: string, limit: number, windowMs: number): Promise<boolean> {
+  const { rowKey, expiresAt } = windowFor(key, windowMs);
+  try {
+    let row;
+    try {
+      row = await db.rateLimit.upsert({
+        where: { key: rowKey },
+        create: { key: rowKey, count: 1, expiresAt },
+        update: { count: { increment: 1 } },
+      });
+    } catch {
+      // Two first requests raced to create the row: the other one won, so count on it.
+      row = await db.rateLimit.update({ where: { key: rowKey }, data: { count: { increment: 1 } } });
+    }
+    return row.count <= limit;
+  } catch (err) {
+    // If the counter store is down, let the request through rather than lock
+    // everyone out; the database call the route makes next will fail anyway.
+    console.error('Rate limit check failed:', err);
     return true;
   }
+}
 
-  if (bucket.count >= limit) return false;
+/** Per-user cap, e.g. for writes, uploads, backups and imports. */
+export function rateLimitUser(userId: string, bucket: string, limit: number, windowMs: number): Promise<boolean> {
+  return checkRateLimit(`user:${bucket}:${userId}`, limit, windowMs);
+}
 
-  bucket.count += 1;
-  return true;
+/** The standard 429 response. */
+export function tooManyRequests(message = 'Too many attempts. Please try again later.') {
+  return Response.json({ error: message }, { status: 429 });
 }

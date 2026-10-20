@@ -12,12 +12,28 @@ import { db } from '@/lib/db';
  */
 export async function currentUser(payload: JwtPayload | null): Promise<JwtPayload | null> {
   if (!payload) return null;
-  const user = await db.user.findUnique({
-    where: { id: payload.userId },
-    select: { tenantId: true, role: true, name: true, email: true, tokenVersion: true },
-  });
+  const [user, revoked] = await Promise.all([
+    db.user.findUnique({
+      where: { id: payload.userId },
+      select: { tenantId: true, role: true, name: true, email: true, tokenVersion: true },
+    }),
+    // A signed-out session (see /api/auth/logout) stays dead until its token expires.
+    payload.jti ? db.revokedSession.findUnique({ where: { jti: payload.jti }, select: { id: true } }) : null,
+  ]);
+  if (revoked) return null;
   if (!user || user.tenantId !== payload.tenantId || (user.tokenVersion ?? 0) !== (payload.tv ?? 0)) return null;
   return { ...payload, role: user.role, name: user.name, email: user.email };
+}
+
+/** Sign out one token (web cookie or mobile access token) until it would have expired anyway. */
+export async function revokeSession(payload: JwtPayload | null): Promise<void> {
+  if (!payload?.jti) return;
+  const expiresAt = new Date((payload.exp ?? Math.floor(Date.now() / 1000) + 7 * 24 * 3600) * 1000);
+  await db.revokedSession.upsert({
+    where: { jti: payload.jti },
+    create: { jti: payload.jti, expiresAt },
+    update: {},
+  });
 }
 
 /** Owners see everything; managers do the daily work but not the money reports or settings. */

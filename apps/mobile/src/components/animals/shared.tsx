@@ -141,11 +141,11 @@ export interface PickedPhoto {
   preview: string;
 }
 
-const MAX_SIDE = 1280;
+const MAX_SIDE = 800;
 
 /**
- * Take or choose a photo and shrink it to at most 1280 px on its longest side
- * as a JPEG (about 150-300 KB), like the web app. Null when cancelled.
+ * Take or choose a photo and shrink it to at most 800 px on its longest side
+ * as a JPEG (about 50-120 KB), like the web app. Null when cancelled.
  */
 export async function pickPhoto(from: 'camera' | 'library'): Promise<PickedPhoto | null> {
   // Web needs no permission, and awaiting one there would spend the tap the
@@ -167,7 +167,7 @@ export async function pickPhoto(from: 'camera' | 'library'): Promise<PickedPhoto
   const resize = longest > MAX_SIDE
     ? [{ resize: asset.width >= asset.height ? { width: MAX_SIDE } : { height: MAX_SIDE } }]
     : [];
-  const out = await manipulateAsync(asset.uri, resize, { compress: 0.82, format: SaveFormat.JPEG, base64: true });
+  const out = await manipulateAsync(asset.uri, resize, { compress: 0.75, format: SaveFormat.JPEG, base64: true });
   if (!out.base64) throw new Error('This photo could not be read. Please try another one.');
   const data = out.base64.replace(/^data:[^,]*,/, '');
   return { data, mimeType: 'image/jpeg', width: out.width, height: out.height, preview: out.uri };

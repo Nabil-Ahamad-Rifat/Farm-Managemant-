@@ -1,24 +1,24 @@
+import { incomeUpdateSchema } from '@farm/shared-validation';
 import { db } from '@/lib/db';
 import { entryDay } from '@/lib/days';
-import { withAuth, getIdFromParams } from '@/lib/middleware/withAuth';
+import { withAuth, getIdFromParams, isObjectId } from '@/lib/middleware/withAuth';
 
 // PUT /api/income/[id] - update an income record
 export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
   try {
     const id = await getIdFromParams(routeContext, req);
-    if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
+    if (!id || !isObjectId(id)) return Response.json({ error: 'Income record not found' }, { status: 404 });
 
-    const body = await req.json();
-    const { description, amount, category, incomeDate } = body;
+    const parsed = incomeUpdateSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) {
+      return Response.json({ error: parsed.error.issues[0]?.path[0] === 'amount' ? 'Amount must be a positive number' : 'Invalid income details' }, { status: 400 });
+    }
+    const { description, amount, category, incomeDate } = parsed.data;
 
     const existing = await db.otherIncome.findFirst({ where: { id, tenantId } });
     if (!existing) return Response.json({ error: 'Income record not found' }, { status: 404 });
 
     // The amount is optional on edit: leaving it out keeps the old one.
-    const parsedAmount = amount === undefined || amount === null || amount === '' ? existing.amount : parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      return Response.json({ error: 'Amount must be a positive number' }, { status: 400 });
-    }
     const day = entryDay(incomeDate, existing.incomeDate);
     if ('error' in day) return Response.json({ error: day.error }, { status: 400 });
 
@@ -26,7 +26,7 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
       where: { id },
       data: {
         description: description || existing.description,
-        amount: parsedAmount,
+        amount: amount ?? existing.amount,
         category: category || existing.category,
         incomeDate: day.date,
       },
@@ -43,7 +43,7 @@ export const PUT = withAuth(async (req, { tenantId }, routeContext) => {
 export const DELETE = withAuth(async (req, { tenantId }, routeContext) => {
   try {
     const id = await getIdFromParams(routeContext, req);
-    if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
+    if (!id || !isObjectId(id)) return Response.json({ error: 'Income record not found' }, { status: 404 });
 
     const existing = await db.otherIncome.findFirst({ where: { id, tenantId } });
     if (!existing) return Response.json({ error: 'Income record not found' }, { status: 404 });

@@ -44,7 +44,9 @@
           "photosPermission": "Farm Manager uses your photos so you can add pictures of your animals.",
           "cameraPermission": "Farm Manager uses the camera so you can take pictures of your animals."
         }
-      ]
+      ],
+      "expo-sqlite",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": false

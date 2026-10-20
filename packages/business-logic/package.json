@@ -7,5 +7,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "fflate": "^0.8.3"
   }
 }
