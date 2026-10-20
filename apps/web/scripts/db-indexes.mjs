@@ -71,6 +71,23 @@ try {
     });
     console.log(`created  ${name} (${seconds}s)`);
   }
+
+  // `prisma db push` makes User.googleId a plain unique index, so a second
+  // user without Google sign-in fails (both have no googleId). Make it a
+  // partial index over string values only. $type 2 = BSON string (the word
+  // form can't pass through $runCommandRaw, see above).
+  const userIndexes = await existingIndexes('User');
+  const googleIdx = userIndexes.find((i) => i.name === 'User_googleId_key');
+  if (googleIdx && googleIdx.partialFilterExpression) {
+    console.log('ok       User_googleId_key (partial)');
+  } else {
+    if (googleIdx) await db.$runCommandRaw({ dropIndexes: 'User', index: 'User_googleId_key' });
+    await db.$runCommandRaw({
+      createIndexes: 'User',
+      indexes: [{ key: { googleId: 1 }, name: 'User_googleId_key', unique: true, partialFilterExpression: { googleId: { $type: 2 } } }],
+    });
+    console.log('created  User_googleId_key (partial, unique)');
+  }
 } finally {
   await db.$disconnect();
 }
